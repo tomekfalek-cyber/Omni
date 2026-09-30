@@ -353,6 +353,7 @@ function show(page){
   if(page === "engines"){ renderEngines(); }
   if(page === "automations"){ loadAutomations(); }
   if(page === "integrations"){ loadIntegrations(); }
+  if(page === "status"){ loadCosts(); }
   if(page === "voice"){ renderVoices(); }
   if(page === "sessions"){ loadSessions(); }
   if(page === "tasks"){ loadTasks(); }
@@ -572,6 +573,34 @@ function afterBotAnswer(text){
     speakText(text);
     if(el("voiceHint")){ el("voiceHint").textContent = "Odpowiedz czytana na glos"; }
   }
+}
+function loadCosts(){
+  return api("/api/costs").then(function(d){ renderCosts(d); }).catch(function(){});
+}
+function renderCosts(d){
+  var page = document.getElementById("page-status");
+  if(!page){ return; }
+  var old = document.getElementById("costsCard");
+  if(old){ old.remove(); }
+  var card = document.createElement("div");
+  card.id = "costsCard";
+  card.className = "card";
+  card.style.marginTop = "14px";
+  var html = "<h2>Koszty - nic nie placisz</h2>";
+  html += "<div class=mut>Aktywny silnik: <b>" + esc(d.provider || "-") + "</b> / <b>" + esc(d.model || "-") + "</b>";
+  html += d.free ? " <span class=badge ok>DARMOWY</span>" : " <span class=badge err>PLATNY</span>";
+  html += "</div>";
+  html += "<div class=mut style='margin-top:6px'>Szacowany koszt miesieczny: <b>0 zl</b> - wszystkie silniki Omni dzialaja na darmowych planach.</div>";
+  html += "<div class=mut style='margin-top:8px'>";
+  var list = d.providers || [];
+  for(var i=0;i<list.length;i++){
+    var p = list[i];
+    html += "<div>" + (p.active ? "<b>" + esc(p.label) + "</b> (uzywany)" : esc(p.label)) + " - " + (p.free ? "darmowy" : "PLATNY") + (p.keyEnvText || "") + "</div>";
+  }
+  html += "</div>";
+  html += "<div class=mut style='margin-top:8px'>Omni nie wysyla niczego do platnych uslug: model (Groq), glos (Edge TTS/Piper), obrazki (Pollinations), szukanie (Wikipedia/Google News/CoinGecko), integracje (Twoje darmowe konta) - wszystko bez oplat.</div>";
+  card.innerHTML = html;
+  page.appendChild(card);
 }
 function startVersionWatch(){
   var check = function(){

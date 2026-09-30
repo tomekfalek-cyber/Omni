@@ -9,7 +9,7 @@ import * as path from 'path';
 import { WEB_UI_HTML } from './web-ui.js';
 import * as fs from 'fs';
 import * as os from 'os';
-import { ConfigStore, KEY_OPENROUTER, MODEL_PRESETS, PROVIDERS } from './config-store.js';
+import { ConfigStore, KEY_OPENROUTER, MODEL_PRESETS, PROVIDERS, providerInfo } from './config-store.js';
 import { VoiceManager } from './voice/voice-manager.js';
 import { LOGIN_PAGE } from './login-page.js';
 import { AutomationScheduler } from './automations/scheduler.js';
@@ -131,6 +131,19 @@ export class OmniGateway {
       res.type('html').send(LOGIN_PAGE);
     });
   }
+  /** Ochrona kosztow: nie pozwala wlaczyc modelu, ktory moze kosztowac. */
+  private costGuard(body: any): string {
+    const provider = typeof body.provider === 'string' ? body.provider : '';
+    if (provider !== 'openrouter') { return ''; }
+    for (const field of ['model', 'modelPro']) {
+      const model = body[field];
+      if (typeof model === 'string' && model && model.indexOf(':free') === -1) {
+        return 'Ochrona kosztow: OpenRouter z modelem bez koncowki ":free" moze kosztowac. Wybierz model darmowy, np. qwen/qwen-2.5-72b-instruct:free.';
+      }
+    }
+    return '';
+  }
+
   private integrationStatus(): any[] {
     const defs = [
       { id: 'github', name: 'GitHub', keys: ['GITHUB_TOKEN'] },
@@ -161,6 +174,26 @@ export class OmniGateway {
     this.app.get('/', (_req, res) => {
       res.setHeader('Cache-Control', 'no-store, must-revalidate');
       res.type('html').send(WEB_UI_HTML);
+    });
+
+    this.app.get('/api/costs', (_req, res) => {
+      const cfg = this.config.get();
+      const info: any = providerInfo(cfg.provider);
+      const providers = PROVIDERS.map((p) => ({
+        id: p.id,
+        label: p.label,
+        free: p.free,
+        active: p.id === cfg.provider,
+        hasKey: p.keyEnv ? !!this.config.secrets.getSecret(p.keyEnv) : true,
+        signup: p.signup,
+      }));
+      res.json({
+        provider: cfg.provider,
+        model: cfg.model,
+        free: info.free,
+        monthlyPln: 0,
+        providers: providers,
+      });
     });
 
     this.app.get('/api/version', (_req, res) => {
@@ -277,6 +310,8 @@ export class OmniGateway {
     this.app.post('/api/config', async (req, res) => {
       try {
         const body = req.body || {};
+        const guard = this.costGuard(body);
+        if (guard) { res.status(400).json({ error: guard }); return; }
         await this.config.save(body, body.apiKeys);
         this.swarm.workspaceCwd = this.config.get().workspaceDir;
         this.swarm.reconfigure();
