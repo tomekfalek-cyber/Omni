@@ -33,7 +33,7 @@ jobs:
         run: pnpm lint
       
       - name: Type check
-        run: pnpm tsc --noEmit
+        run: pnpm typecheck
 
   test:
     name: Test
@@ -145,7 +145,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: yourusername/omni-agent
+          images: tomekfalek-cyber/omni
           tags: |
             type=ref,event=branch
             type=ref,event=pr

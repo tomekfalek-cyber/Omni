@@ -1,0 +1,5 @@
+# pnpm workspace definition (root of the Omni monorepo)
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "tools/*"

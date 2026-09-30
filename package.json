@@ -1,0 +1,30 @@
+{
+  "name": "omni-agent-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Omni — self-hosting, self-improving enterprise AI agent (pnpm + turbo monorepo)",
+  "license": "MIT",
+  "packageManager": "pnpm@8.15.9",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=8"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "test:coverage": "vitest run --coverage",
+    "lint": "turbo run lint",
+    "typecheck": "tsc -b tsconfig.build.json",
+    "format": "prettier --write .",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "prettier": "^3.3.0",
+    "turbo": "^2.0.6",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}

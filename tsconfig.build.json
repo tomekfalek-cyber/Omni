@@ -1,0 +1,42 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/omni-core"
+    },
+    {
+      "path": "packages/omni-memory"
+    },
+    {
+      "path": "packages/omni-providers"
+    },
+    {
+      "path": "packages/omni-tools"
+    },
+    {
+      "path": "packages/omni-swarm"
+    },
+    {
+      "path": "packages/omni-channels"
+    },
+    {
+      "path": "packages/omni-mcp"
+    },
+    {
+      "path": "packages/omni-evolution"
+    },
+    {
+      "path": "packages/omni-observability"
+    },
+    {
+      "path": "packages/omni-voice"
+    },
+    {
+      "path": "packages/omni-gateway"
+    }
+  ],
+  "exclude": [
+    "node_modules",
+    "**/dist"
+  ]
+}

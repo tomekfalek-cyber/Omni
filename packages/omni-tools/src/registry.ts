@@ -40,6 +40,15 @@ export class ToolRegistry {
     this.tools.set(definition.name, { definition, execute: executor });
   }
 
+  /** Public registration used by SwarmManager and external plugins. */
+  public register(tool: any) {
+    const definition: ToolDefinition = tool?.definition ?? tool;
+    const execute = tool?.execute ?? (async () => {
+      throw new Error("Tool " + String(definition?.name) + " has no executor registered.");
+    });
+    this.registerTool(definition, execute);
+  }
+
   public getAllDefinitions(): ToolDefinition[] {
     return Array.from(this.tools.values()).map(t => t.definition);
   }

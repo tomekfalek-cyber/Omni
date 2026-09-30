@@ -1,0 +1,30 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "composite": true,
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules"
+  ],
+  "references": [
+    {
+      "path": "../../packages/omni-core"
+    },
+    {
+      "path": "../../packages/omni-gateway"
+    },
+    {
+      "path": "../../packages/omni-providers"
+    },
+    {
+      "path": "../../packages/omni-swarm"
+    }
+  ]
+}

@@ -1,14 +1,44 @@
 {
   "name": "omni-voice",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    },
+    "./*.js": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -p tsconfig.json --watch",
+    "test": "vitest run",
+    "lint": "tsc -b",
+    "clean": "tsc -b --clean && rm -rf dist"
+  },
   "dependencies": {
-    "fluent-ffmpeg": "^2.1.2",
-    "axios": "^1.6.7",
+    "fluent-ffmpeg": "^2.1.3",
+    "axios": "^1.7.2",
     "form-data": "^4.0.0",
     "omni-core": "workspace:*"
   },
   "devDependencies": {
-    "@types/fluent-ffmpeg": "^2.1.24"
+    "@types/fluent-ffmpeg": "^2.1.24",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
   }
 }

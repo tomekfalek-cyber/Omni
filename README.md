@@ -2,83 +2,76 @@
 
 **Samohostujący się, samodoskonalący się agent AI klasy enterprise**
 
-[![CI/CD](https://github.com/yourusername/omni-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/omni-agent/actions/workflows/ci.yml)
-[![Coverage](https://codecov.io/gh/yourusername/omni-agent/branch/main/graph/badge.svg)](https://codecov.io/gh/yourusername/omni-agent)
+[![CI/CD](https://github.com/tomekfalek-cyber/Omni/actions/workflows/ci.yml/badge.svg)](https://github.com/tomekfalek-cyber/Omni/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+Monorepo (**pnpm workspaces + Turborepo**): pakiety TypeScript w `packages/`, aplikacje w `apps/`.
 
 ## 🌟 Funkcjonalności
 
-### 🧠 Inteligentny Agent
-- **Samodoskonalenie**: Automatyczne tworzenie i optymalizacja skills
-- **Rój agentów**: Planner, Executor, Reviewer, Evolver
-- **Pamięć**: Krótko- i długoterminowa z SQLite + FTS5
-- **Darmowe modele Qwen**: Ollama (lokalnie) lub OpenRouter (cloud)
+- **Samodoskonalenie** — automatyczne tworzenie i optymalizacja skills (`omni-evolution`)
+- **Rój agentów** — Planner, Executor, Reviewer, Evolver (`omni-swarm`)
+- **Pamięć** — krótko- i długoterminowa, SQLite + FTS5 (`omni-memory`)
+- **Darmowe modele** — Ollama (lokalnie) lub Qwen/OpenRouter (`omni-providers`)
+- **Narzędzia** — pliki, shell w sandboxie Dockera, git z approval workflow (`omni-tools`)
+- **MCP** — 8 serwerów integracji: Gmail, GitHub, Postgres, Brave, Notion, Linear, Google Drive, Filesystem
+- **Kanały** — Telegram, Slack, Discord (`omni-channels`)
+- **Głos** — STT Whisper.cpp, TTS XTTS v2 z klonowaniem głosu (`omni-voice`)
+- **Bezpieczeństwo** — rate limiting, SecretManager (AES-256), audit log (`omni-gateway`)
+- **Observability** — Pino, Prometheus, OpenTelemetry/Jaeger (`omni-observability`)
 
-### 🛠️ Narzędzia
-- **Pliki**: Czytanie, pisanie, listowanie z zabezpieczeniami
-- **Shell**: Docker Sandbox z izolacją sieciową
-- **Git**: Status, diff, commit z approval workflow
-- **MCP**: 8 serwerów integracji (Gmail, GitHub, Postgres, Brave, Notion, Linear, Google Drive, Filesystem)
+## 📁 Struktura
 
-### 💬 Kanały Komunikacji
-- **Telegram**: Inline keyboards dla approval
-- **Slack**: Block Kit, Socket Mode
-- **Discord**: Slash commands, message components
-- **Desktop**: Tauri + React z streamingiem
-- **Mobile**: Flutter z nagrywaniem głosu
-
-### 🎤 Głos
-- **STT**: Whisper.cpp (lokalnie) lub OpenAI Whisper
-- **TTS**: XTTS v2 z klonowaniem głosu
-- **Klonowanie**: 6-30 sekund próbki audio
-
-### 🔒 Bezpieczeństwo
-- **Rate limiting**: Per user/tool/model
-- **Szyfrowanie**: SecretManager z AES-256
-- **Audit log**: Pełna historia akcji
-- **Docker Sandbox**: Izolacja sieciowa, limity CPU/RAM
-- **Path traversal protection**: Walidacja ścieżek
-
-### 📊 Observability
-- **Structured logging**: Pino (JSON + pretty)
-- **Prometheus metrics**: Tasks, tools, LLM, sessions
-- **OpenTelemetry tracing**: Pełny tracing z Jaeger
-- **Grafana dashboards**: Wizualizacja metryk
-
-### 🔄 CI/CD
-- **GitHub Actions**: Lint, test, build, security audit
-- **Docker**: Automatyczny build i push
-- **Backup**: Automatyczny co 24h z retencją 10 backupów
+```
+Omni/
+├── apps/
+│   ├── mobile/        # Flutter (Android + iOS)
+│   ├── desktop/       # Tauri + React
+│   └── cli/           # CLI (commander)
+├── packages/
+│   ├── omni-core/         # typy + approval manager
+│   ├── omni-memory/       # SQLite + FTS5
+│   ├── omni-providers/    # abstrakcja Qwen / Ollama / OpenRouter
+│   ├── omni-tools/        # pliki, shell-sandbox, git
+│   ├── omni-swarm/        # Planner / Executor / Reviewer / Evolver
+│   ├── omni-channels/     # Telegram / Slack / Discord
+│   ├── omni-mcp/          # klienci MCP
+│   ├── omni-evolution/    # self-improvement
+│   ├── omni-observability/# logi, metryki, tracing
+│   ├── omni-voice/        # STT / TTS
+│   └── omni-gateway/      # serwer HTTP + WebSocket
+├── .omni/             # runtime agenta: agents, skills, policies, memory
+├── monitoring/        # Prometheus + Grafana
+└── .github/workflows/ # CI/CD
+```
 
 ## 🚀 Quick Start
 
-### Wymagania
-- Node.js 22+
-- pnpm 8+
-- Docker & Docker Compose
-- Ollama (opcjonalnie, dla lokalnego LLM)
-
-### Instalacja
+**Wymagania:** Node.js 22+, pnpm 8+, Docker (opcjonalnie), Ollama (opcjonalnie).
 
 ```bash
-# Klonuj repozytorium
-git clone https://github.com/yourusername/omni-agent.git
-cd omni-agent
+git clone https://github.com/tomekfalek-cyber/Omni.git
+cd Omni
 
-# Zainstaluj zależności
 pnpm install
+cp .env.example .env      # ustaw OMNI_AUTH_TOKEN i OMNI_ENCRYPTION_KEY
 
-# Skopiuj .env
-cp .env.example .env
-
-# Edytuj .env (ustaw OMNI_AUTH_TOKEN, OMNI_ENCRYPTION_KEY)
-nano .env
-
-# Uruchom Ollama i pobierz model Qwen
-ollama pull qwen2.5:7b
-
-# Zbuduj projekt
+ollama pull qwen2.5:7b    # opcjonalnie: lokalny, darmowy LLM
 pnpm build
+pnpm test
+pnpm dev                  # uruchom gateway
+```
 
-# Uruchom gateway
-pnpm dev
+## 🧩 Silniki LLM
+
+| Provider     | Zmienne                              | Koszt                    |
+| ------------ | ------------------------------------ | ------------------------ |
+| `ollama`     | `OLLAMA_BASE_URL`                     | darmowy, lokalnie        |
+| `qwen`       | `QWEN_API_KEY`, `QWEN_BASE_URL`       | DashScope (darmowy tier) |
+| `openrouter` | `OPENROUTER_API_KEY` (modele `:free`) | darmowe modele           |
+
+Wybór przez `OMNI_LLM_PROVIDER` (`ollama` | `qwen` | `openrouter`).
+
+## 📜 Licencja
+
+MIT — patrz [LICENSE](LICENSE).

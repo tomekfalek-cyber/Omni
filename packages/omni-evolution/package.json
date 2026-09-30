@@ -1,5 +1,5 @@
 {
-  "name": "omni-tools",
+  "name": "omni-evolution",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -31,14 +31,13 @@
     "clean": "tsc -b --clean && rm -rf dist"
   },
   "dependencies": {
-    "dockerode": "^4.0.2",
-    "simple-git": "^3.25.0",
-    "zod": "^3.23.8",
-    "omni-core": "workspace:*"
+    "gray-matter": "^4.0.3",
+    "uuid": "^9.0.1",
+    "omni-core": "workspace:*",
+    "omni-memory": "workspace:*"
   },
   "devDependencies": {
-    "@types/dockerode": "^3.3.31",
-    "@types/node": "^20.14.0",
+    "@types/uuid": "^9.0.8",
     "typescript": "^5.4.5",
     "vitest": "^1.6.0"
   }

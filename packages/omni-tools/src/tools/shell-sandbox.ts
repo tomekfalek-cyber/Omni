@@ -41,11 +41,11 @@ export class ShellSandbox {
     await fs.mkdir(hostCwd, { recursive: true });
 
     try {
-      const container = await this.docker.createContainer({
+      const container: any = await this.docker.createContainer({
         Image: this.IMAGE,
         name: containerName,
         Cmd: ['sh', '-c', validated.command],
-        HostConfig: {
+        HostConfig: ({
           AutoRemove: true, // Automatyczne sprzątanie
           Binds: [`${hostCwd}:/workspace`], // Montuj tylko katalog roboczy (read-write)
           WorkingDir: '/workspace',
@@ -54,7 +54,7 @@ export class ShellSandbox {
           NetworkMode: 'none', // BRAK dostępu do sieci (izolacja!)
           ReadonlyRootfs: false,
           SecurityOpt: ['no-new-privileges:true']
-        },
+        } as any),
         AttachStdout: true,
         AttachStderr: true,
         Tty: false
@@ -107,7 +107,7 @@ export class ShellSandbox {
     } finally {
       // 4. Gwarancja sprzątania (gdyby AutoRemove z jakiegoś powodu nie zadziałał)
       try {
-        const container = this.docker.getContainer(containerName);
+        const container: any = this.docker.getContainer(containerName);
         await container.remove({ force: true });
       } catch (e) {
         // Ignoruj, jeśli kontener już nie istnieje

@@ -1,5 +1,5 @@
 {
-  "name": "omni-tools",
+  "name": "omni-memory",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -31,14 +31,11 @@
     "clean": "tsc -b --clean && rm -rf dist"
   },
   "dependencies": {
-    "dockerode": "^4.0.2",
-    "simple-git": "^3.25.0",
-    "zod": "^3.23.8",
+    "better-sqlite3": "^11.1.2",
     "omni-core": "workspace:*"
   },
   "devDependencies": {
-    "@types/dockerode": "^3.3.31",
-    "@types/node": "^20.14.0",
+    "@types/better-sqlite3": "^7.6.11",
     "typescript": "^5.4.5",
     "vitest": "^1.6.0"
   }

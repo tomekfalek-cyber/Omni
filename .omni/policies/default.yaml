@@ -1,0 +1,18 @@
+# Default Omni policy — conservative starting point.
+approval:
+  requiredFor:
+    - file_write
+    - shell_exec
+    - git_commit
+shell:
+  deny:
+    - "rm -rf /"
+    - "mkfs"
+    - "dd if="
+    - "chmod 777 /"
+    - "sudo"
+  timeoutMs: 15000
+sandbox:
+  network: false
+  cpus: 1
+  memoryMb: 512
