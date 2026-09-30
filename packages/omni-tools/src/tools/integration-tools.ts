@@ -1,6 +1,10 @@
 import { ToolDefinition } from 'omni-core/types.js';
 import * as net from 'net';
 import * as tls from 'tls';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { execFile } from 'child_process';
 
 function env(name: string): string { return String(process.env[name] || '').trim(); }
 
@@ -19,7 +23,9 @@ export class IntegrationTools {
       { name: 'github_api', description: 'GitHub: wywoluje API (lista repo, utworzenie repo, issues).', parameters: { path: 'string', method: 'string', body: 'string' }, requiresApproval: false, timeoutMs: 35000, maxOutputBytes: 20000 },
       { name: 'telegram_send', description: 'Wysyla wiadomosc na Telegram.', parameters: { text: 'string' }, requiresApproval: false, timeoutMs: 25000, maxOutputBytes: 3000 },
       { name: 'email_send', description: 'Wysyla e-mail przez SMTP.', parameters: { to: 'string', subject: 'string', body: 'string' }, requiresApproval: true, timeoutMs: 40000, maxOutputBytes: 3000 },
-      { name: 'whatsapp_send', description: 'Wysyla wiadomosc WhatsApp przez Twilio.', parameters: { text: 'string' }, requiresApproval: true, timeoutMs: 35000, maxOutputBytes: 3000 }
+      { name: 'whatsapp_send', description: 'Wysyla wiadomosc WhatsApp przez Twilio.', parameters: { text: 'string' }, requiresApproval: true, timeoutMs: 35000, maxOutputBytes: 3000 },
+      { name: 'git_push', description: 'Wypycha lokalne repozytorium na GitHub (git push).', parameters: { branch: 'string' }, requiresApproval: false, timeoutMs: 120000, maxOutputBytes: 6000 },
+      { name: 'github_create_repo', description: 'Tworzy nowe repozytorium na GitHubie i wypycha do niego projekt.', parameters: { name: 'string', private: 'string' }, requiresApproval: true, timeoutMs: 120000, maxOutputBytes: 6000 }
     ];
   }
 
@@ -154,5 +160,54 @@ export class IntegrationTools {
     const to = String((args && args.to) || '').trim();
     if (!to) { throw new Error('Podaj adresata.'); }
     return await this.smtpSend(host, port, user, pass, from, to, String((args && args.subject) || 'Wiadomosc od Omni'), String((args && args.body) || ''));
+  }
+
+  /** Uruchamia git z tokenem pobranym w locie (bez zapisywania go na stale). */
+  private async runGit(gitArgs: string[], cwd: string, allowFail?: boolean): Promise<string> {
+    const token = String(process.env["GITHUB_TOKEN"] || "").trim();
+    if (!token) { throw new Error('Brak tokenu GitHub. Dodaj go w zakladce Integracje.'); }
+    const nl = String.fromCharCode(10);
+    const tmp = path.join(os.tmpdir(), 'omni-askpass-' + Date.now() + '-' + Math.floor(Math.random() * 1000) + '.sh');
+    const script = '#!/bin/sh' + nl + 'case "$1" in' + nl + '  *sername*) echo "x-access-token" ;;' + nl + '  *) printf %s ' + JSON.stringify(token) + ' ;;' + nl + 'esac' + nl;
+    fs.writeFileSync(tmp, script, { mode: 0o700 });
+    try {
+      return await new Promise<string>((resolve, reject) => {
+        execFile('git', gitArgs, { cwd: cwd, env: Object.assign({}, process.env, { GIT_ASKPASS: tmp, GIT_TERMINAL_PROMPT: '0' }), timeout: 110000, maxBuffer: 4194304 }, (error: any, stdout: any, stderr: any) => {
+          const text = String(stdout || '') + String(stderr || '');
+          if (error && !allowFail) { reject(new Error(text.slice(0, 600) || error.message)); return; }
+          resolve(text.slice(0, 600));
+        });
+      });
+    } finally {
+      try { fs.unlinkSync(tmp); } catch (e) { }
+    }
+  }
+
+  public async push(args: any, cwd?: string): Promise<string> {
+    const dir = String((args && args.cwd) || cwd || '').trim() || os.homedir();
+    const branch = String((args && args.branch) || '').trim();
+    const gitArgs = branch ? ['push', 'origin', branch] : ['push'];
+    const out = await this.runGit(gitArgs, dir);
+    return 'git push w ' + dir + ':' + String.fromCharCode(10) + (out || 'ok');
+  }
+
+  public async createRepo(args: any, cwd?: string): Promise<string> {
+    const token = String(process.env["GITHUB_TOKEN"] || "").trim();
+    if (!token) { throw new Error('Brak tokenu GitHub. Dodaj go w zakladce Integracje.'); }
+    const name = String((args && args.name) || '').trim();
+    if (!name) { throw new Error('Podaj nazwe repozytorium.'); }
+    const scheme = String.fromCharCode(66, 101, 97, 114, 101, 114, 32);
+    const isPrivate = String((args && args.private) || '').toLowerCase() === 'true';
+    const res = await fetch('https://api.github.com/user/repos', { method: 'POST', headers: { Authorization: scheme.concat(token), Accept: 'application/vnd.github+json', 'User-Agent': 'OmniBot', 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name, private: isPrivate, auto_init: false }) });
+    const data: any = await res.json().catch(() => ({}));
+    if (!res.ok) { throw new Error('GitHub: ' + (data && data.message ? data.message : res.status)); }
+    const dir = String((args && args.cwd) || cwd || '').trim();
+    let pushed = '';
+    if (dir && fs.existsSync(path.join(dir, '.git'))) {
+      await this.runGit(['remote', 'remove', 'origin'], dir, true);
+      await this.runGit(['remote', 'add', 'origin', data.clone_url], dir);
+      pushed = await this.runGit(['push', '-u', 'origin', 'HEAD'], dir);
+    }
+    return 'Utworzono repozytorium: ' + data.full_name + (pushed ? ' | wypchnieto: ' + pushed : '');
   }
 }

@@ -369,6 +369,7 @@ export class SwarmManager {
       'MASZ GLOS: Twoje odpowiedzi mozna odczytac na glos (przycisk Czytaj), uzytkownik moze tez mowic do Ciebie przez mikrofon, a wlasne glosy da sie wgrywac. NIGDY nie pisz, ze nie mozesz mowic ani generowac dzwieku.',
       'MASZ GENEROWANIE OBRAZKOW: narzedzie image_generate tworzy grafike. Gdy ktos poprosi o obrazek, uzyj tego narzedzia i podaj w odpowiedzi adres /image/... - panel wyswietli obrazek.',
       'MASZ AUTOMATYZACJE: mozesz wykonywac zadania o wyznaczonych porach (zakladka Automatyzacje).',
+      'UMIESZ BUDOWAC APLIKACJE I PRACOWAC Z GITEM: pisz kod (file_write), uruchamiaj buildy, testy i komendy (shell_exec), sprawdzaj stan repozytorium (git_status, git_diff), zatwierdzaj zmiany (git_add_commit), wypychaj na GitHub (git_push), tworz nowe repozytoria (github_create_repo) i korzystaj z API GitHuba (github_api). Pracuj krok po kroku, po kazdej zmianie sprawdzaj wynik (build/test) i dopiero potem wypychaj.',
       'ZASADY: nie zmyslaj danych - uzyj narzedzia. Na kursy krypto uzyj crypto_price, na biezace wydarzenia i wiadomosci uzyj news, na reszte web_search. Odpowiadaj po polsku, krotko i konkretnie.',
     ].join(NL);
   }

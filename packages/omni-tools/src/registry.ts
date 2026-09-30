@@ -49,10 +49,12 @@ export class ToolRegistry {
     const integrations = new IntegrationTools();
     for (const def of integrations.getDefinitions()) {
       const toolName = def.name;
-      this.registerTool(def, (args) => {
+      this.registerTool(def, (args, cwd) => {
         if (toolName === 'github_api') { return integrations.github(args); }
         if (toolName === 'telegram_send') { return integrations.telegram(args); }
         if (toolName === 'email_send') { return integrations.email(args); }
+        if (toolName === 'git_push') { return integrations.push(args, cwd); }
+        if (toolName === 'github_create_repo') { return integrations.createRepo(args, cwd); }
         return integrations.whatsapp(args);
       });
     }
