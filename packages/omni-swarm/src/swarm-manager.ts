@@ -122,10 +122,18 @@ export class SwarmManager {
         } catch (error2: any) {
           console.log('[Swarm] Natywne narzedzia niedostepne (' + error2.message + '), bezpieczny tryb tekstowy.');
           try {
-            const safeMessages = messages
-              .filter((m: any) => m.role !== 'tool' && !m.tool_calls)
-              .map((m: any) => ({ role: m.role, content: String(m.content || '') }));
-            const content = await provider.getCompletion(safeMessages);
+            const plain: string[] = [];
+            for (const m of messages) {
+              if (m.role === 'system') { continue; }
+              if (m.role === 'tool') { plain.push('Wynik narzedzia: ' + String(m.content || '').slice(0, 4000)); continue; }
+              if (m.tool_calls) { continue; }
+              plain.push(String(m.content || ''));
+            }
+            const fallbackMessages: any[] = [
+              { role: 'system', content: 'Jestes Omni, asystent. Odpowiedz po polsku, krotko i konkretnie, na podstawie podanych informacji. Nie wywoluj zadnych narzedzi.' },
+              { role: 'user', content: plain.join(String.fromCharCode(10) + String.fromCharCode(10)).slice(0, 12000) },
+            ];
+            const content = await provider.getCompletion(fallbackMessages);
             return { content: content, toolCalls: [] };
           } catch (error3: any) {
             throw new Error('Model nie odpowiedzial: ' + error3.message);
