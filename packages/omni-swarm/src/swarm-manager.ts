@@ -1,4 +1,7 @@
 import { QwenProvider } from 'omni-core/providers/qwen-provider.js';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { Task, Message, AgentRole, ToolCall } from 'omni-core/types.js';
 import { OmniMemory } from 'omni-memory/memory.js';
 import { ToolRegistry } from 'omni-tools/registry.js';
@@ -228,7 +231,7 @@ export class SwarmManager {
     console.log('[Swarm] Bot ' + index + ' start');
     if (this.onWorker) { try { this.onWorker({ index: index, state: 'start', task: subtask.slice(0, 110) }); } catch (e) { } }
     const messages: any[] = [
-      { role: 'system', content: this.capabilities(cwd) + nl + 'Jestes jednym z rownoleglych botow Omni (roj). Wykonaj TYLKO swoja czesc zadania i zwroc konkretny wynik (kod, pliki, ustalenia). Nie opisuj pracy innych botow.' },
+      { role: 'system', content: (this.capabilities(cwd) + String.fromCharCode(10) + this.readKnowledge()) + nl + 'Jestes jednym z rownoleglych botow Omni (roj). Wykonaj TYLKO swoja czesc zadania i zwroc konkretny wynik (kod, pliki, ustalenia). Nie opisuj pracy innych botow.' },
       { role: 'user', content: 'Zadanie glowne: ' + prompt + nl + 'Twoja czesc: ' + subtask },
     ];
     const schemas = this.toolSchemas();
@@ -261,6 +264,42 @@ export class SwarmManager {
       if (this.onWorker) { try { this.onWorker({ index: index, state: 'error', task: error.message }); } catch (e) { } }
       return { index: index, ok: false, text: 'Blad: ' + error.message };
     }
+  }
+  /** Czyta nauczone zasady i profil uzytkownika - to jest pamiec dlugoterminowa bota. */
+  private readKnowledge(): string {
+    const nl = String.fromCharCode(10);
+    try {
+      const dir = path.join(os.homedir(), '.omni', 'memory');
+      const parts: string[] = [];
+      const skillsPath = path.join(dir, 'skills.md');
+      if (fs.existsSync(skillsPath)) {
+        const skills = fs.readFileSync(skillsPath, 'utf8').slice(-3000);
+        if (skills.trim().length > 10) { parts.push('NAUCZONE ZASADY (z wlasnych doswiadczen - stosuj je):' + nl + skills); }
+      }
+      const profPath = path.join(dir, 'user-profile.md');
+      if (fs.existsSync(profPath)) {
+        const prof = fs.readFileSync(profPath, 'utf8').slice(-1500);
+        if (prof.trim().length > 10) { parts.push('O UZYTKOWNIKU (pamietaj):' + nl + prof); }
+      }
+      return parts.join(nl);
+    } catch (error) { return ''; }
+  }
+
+  /** Zapisuje nowa zasade do pamieci dlugoterminowej (bez duplikatow). */
+  private saveSkill(rule: string): void {
+    const nl = String.fromCharCode(10);
+    try {
+      const clean = String(rule || '').trim();
+      if (clean.length < 20) { return; }
+      const dir = path.join(os.homedir(), '.omni', 'memory');
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, 'skills.md');
+      const prev = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ('# Nauczone zasady Omni' + nl);
+      const first = clean.split(nl).filter((l) => l.trim().length > 3).slice(0, 3).join(' ');
+      const key = first.slice(0, 60).toLowerCase();
+      if (prev.toLowerCase().indexOf(key) !== -1) { return; }
+      fs.writeFileSync(file, prev + '- [' + new Date().toISOString().slice(0, 10) + '] ' + first.replace(new RegExp('#+ ', 'g'), '') + nl, 'utf8');
+    } catch (error) { }
   }
   async executeTask(sessionId: string, prompt: string, cwd: string): Promise<Task> {
     const taskId = uuidv4();
@@ -297,7 +336,7 @@ export class SwarmManager {
       let isAction = false;
       for (const key of actionKeys) { if (lowerPrompt.indexOf(key) !== -1) { isAction = true; break; } }
       const messages: any[] = [
-        { role: 'system', content: this.capabilities(cwd) + String.fromCharCode(10) + 'WAZNE: gdy pytanie dotyczy faktow, kursow, wiadomosci, pogody, przepisow lub czegokolwiek z internetu - NAJPIERW wywolaj odpowiednie narzedzie. Nie odpowiadaj na takie pytania z pamieci.' },
+        { role: 'system', content: (this.capabilities(cwd) + String.fromCharCode(10) + this.readKnowledge()) + String.fromCharCode(10) + 'WAZNE: gdy pytanie dotyczy faktow, kursow, wiadomosci, pogody, przepisow lub czegokolwiek z internetu - NAJPIERW wywolaj odpowiednie narzedzie. Nie odpowiadaj na takie pytania z pamieci.' },
         { role: 'user', content: 'Zadanie: ' + prompt + '\nPlan:\n' + plan },
       ];
 
@@ -392,7 +431,7 @@ export class SwarmManager {
       if (usedTools || !draftAnswer) {
         this.emit({ kind: 'writing', text: 'Pisze odpowiedz...' });
         const plain: any[] = [
-          { role: 'system', content: this.capabilities(cwd) },
+          { role: 'system', content: (this.capabilities(cwd) + String.fromCharCode(10) + this.readKnowledge()) },
           { role: 'user', content: 'Zadanie: ' + prompt },
         ];
         for (const m of messages) {
@@ -417,6 +456,10 @@ export class SwarmManager {
         }
         const cleaned = this.stripMarkers(streamed);
         if (cleaned) { draftAnswer = cleaned; }
+      }
+
+      if (!draftAnswer || !String(draftAnswer).trim()) {
+        draftAnswer = 'Nie udalo sie uzyskac odpowiedzi - darmowy silnik chwilowo odmowil (limit tokenow). Sprobuj ponownie za minute albo wlacz inny darmowy silnik w zakladce Silniki.';
       }
       // KROK 4: Evolver uczy sie z zadania (opcjonalny - blad nie moze zepsuc odpowiedzi)
       try { await this.runEvolver(prompt, executionResult); } catch (error) { }
@@ -497,5 +540,6 @@ export class SwarmManager {
     ];
     const skill = await this.evolver.getCompletion(messages);
     this.memory.saveFact(`skill_${Date.now()}`, skill);
+    this.saveSkill(skill);
   }
 }
