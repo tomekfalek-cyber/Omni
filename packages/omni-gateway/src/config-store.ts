@@ -124,6 +124,11 @@ export class ConfigStore {
     }
     const activeKey = info.keyEnv ? this.secrets.getSecret(info.keyEnv) : '';
     process.env.OMNI_LLM_API_KEY = (activeKey && activeKey.length > 8) ? activeKey : 'ollama';
+    const integrationKeys = ['GITHUB_TOKEN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM', 'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_WHATSAPP_FROM', 'TWILIO_WHATSAPP_TO'];
+    for (const name of integrationKeys) {
+      const val = this.secrets.getSecret(name);
+      if (val) { process.env[name] = val; }
+    }
   }
 
   public get(): OmniConfig {

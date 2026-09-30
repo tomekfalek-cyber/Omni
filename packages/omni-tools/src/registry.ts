@@ -4,6 +4,7 @@ import { FileTools } from './tools/file-tools.js';
 import { GitTools } from './tools/git-tools.js';
 import { ShellSandbox } from './tools/shell-sandbox.js';
 import { WebTools } from './tools/web-tools.js';
+import { IntegrationTools } from './tools/integration-tools.js';
 
 export class ToolRegistry {
   private tools: Map<string, {
@@ -43,6 +44,18 @@ export class ToolRegistry {
     this.registerTool(webTools.getDefinitions()[2], (args) => webTools.crypto(args));
     this.registerTool(webTools.getDefinitions()[3], (args) => webTools.news(args));
     this.registerTool(webTools.getDefinitions()[4], (args) => webTools.image(args));
+
+    // Integracje: GitHub, Telegram, e-mail, WhatsApp
+    const integrations = new IntegrationTools();
+    for (const def of integrations.getDefinitions()) {
+      const toolName = def.name;
+      this.registerTool(def, (args) => {
+        if (toolName === 'github_api') { return integrations.github(args); }
+        if (toolName === 'telegram_send') { return integrations.telegram(args); }
+        if (toolName === 'email_send') { return integrations.email(args); }
+        return integrations.whatsapp(args);
+      });
+    }
   }
 
   private registerTool(definition: ToolDefinition, executor: (args: any, cwd: string) => Promise<any>) {

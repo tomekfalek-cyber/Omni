@@ -127,6 +127,19 @@ export class OmniGateway {
       res.type('html').send(LOGIN_PAGE);
     });
   }
+  private integrationStatus(): any[] {
+    const defs = [
+      { id: 'github', name: 'GitHub', keys: ['GITHUB_TOKEN'] },
+      { id: 'telegram', name: 'Telegram', keys: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'] },
+      { id: 'email', name: 'E-mail (SMTP)', keys: ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM'] },
+      { id: 'whatsapp', name: 'WhatsApp (Twilio)', keys: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_WHATSAPP_FROM', 'TWILIO_WHATSAPP_TO'] },
+    ];
+    return defs.map((d) => {
+      const missing = d.keys.filter((k) => !String(process.env[k] || '').trim());
+      return { id: d.id, name: d.name, ready: missing.length === 0, missing: missing };
+    });
+  }
+
   private assetsDir(): string {
     const here = path.dirname(new URL(import.meta.url).pathname);
     const candidates = [
@@ -295,6 +308,23 @@ export class OmniGateway {
       try {
         const job = await this.automations.runNow(String((req.body && req.body.id) || ''));
         res.json({ ok: !!job, automation: job, when: job ? this.automations.describe(job) : '' });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.get('/api/integrations', (_req, res) => {
+      res.json({ integrations: this.integrationStatus() });
+    });
+
+    this.app.post('/api/integrations', async (req, res) => {
+      try {
+        const values = (req.body && req.body.values) || {};
+        let saved = 0;
+        for (const key of Object.keys(values)) {
+          const value = String(values[key] || '').trim();
+          if (value) { await this.config.secrets.setSecret(key, value); saved++; }
+        }
+        this.config.applyToEnv();
+        res.json({ ok: true, saved: saved, integrations: this.integrationStatus() });
       } catch (error: any) { res.status(500).json({ error: error.message }); }
     });
 

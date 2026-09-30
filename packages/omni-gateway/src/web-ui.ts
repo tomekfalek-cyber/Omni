@@ -95,6 +95,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       <button class="nav-item" data-page="keys"><span class="ico">K</span>Modele i klucze API</button>
       <button class="nav-item" data-page="engines"><span class="ico">S</span>Silniki</button>
       <button class="nav-item" data-page="voice"><span class="ico">G</span>Glos</button>
+      <button class="nav-item" data-page="integrations"><span class="ico">I</span>Integracje</button>
       <button class="nav-item" data-page="settings"><span class="ico">U</span>Ustawienia</button>
       <div class="nav-group">Praca</div>
       <button class="nav-item" data-page="sessions"><span class="ico">S</span>Sesje</button>
@@ -224,6 +225,45 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       </div>
     </section>
 
+    <section class="page hidden" id="page-integrations">
+      <div class="grid">
+        <div class="card">
+          <h2>GitHub</h2>
+          <p class="mut small">Token z github.com/settings/tokens (zakres repo). Bot moze czytac i tworzyc repozytoria, pliki, issues.</p>
+          <label class="lbl">Token GitHub</label><input type="password" data-integ="GITHUB_TOKEN" placeholder="ghp_..." autocomplete="off" />
+        </div>
+        <div class="card">
+          <h2>Telegram</h2>
+          <p class="mut small">Napisz do @BotFather, utworz bota i wklej token. Chat ID: napisz do swojego bota, potem otworz api.telegram.org/botTOKEN/getUpdates</p>
+          <label class="lbl">Token bota</label><input type="password" data-integ="TELEGRAM_BOT_TOKEN" placeholder="123456789:AA..." autocomplete="off" />
+          <label class="lbl">Chat ID</label><input type="text" data-integ="TELEGRAM_CHAT_ID" placeholder="np. 123456789" />
+        </div>
+        <div class="card">
+          <h2>E-mail (SMTP)</h2>
+          <p class="mut small">Gmail: wlacz weryfikacje dwuetapowa i utworz haslo aplikacji - wklej je jako haslo.</p>
+          <label class="lbl">Serwer SMTP</label><input type="text" data-integ="SMTP_HOST" placeholder="smtp.gmail.com" />
+          <label class="lbl">Port</label><input type="text" data-integ="SMTP_PORT" placeholder="465" />
+          <label class="lbl">Login</label><input type="text" data-integ="SMTP_USER" placeholder="twoj@gmail.com" />
+          <label class="lbl">Haslo aplikacji</label><input type="password" data-integ="SMTP_PASS" autocomplete="off" />
+          <label class="lbl">Adres nadawcy</label><input type="text" data-integ="EMAIL_FROM" placeholder="twoj@gmail.com" />
+        </div>
+        <div class="card">
+          <h2>WhatsApp (Twilio)</h2>
+          <p class="mut small">WhatsApp wymaga operatora - Twilio ma darmowy okres probny.</p>
+          <label class="lbl">Account SID</label><input type="text" data-integ="TWILIO_ACCOUNT_SID" placeholder="AC..." />
+          <label class="lbl">Auth Token</label><input type="password" data-integ="TWILIO_AUTH_TOKEN" autocomplete="off" />
+          <label class="lbl">Numer nadawcy</label><input type="text" data-integ="TWILIO_WHATSAPP_FROM" placeholder="+14155238886" />
+          <label class="lbl">Twoj numer</label><input type="text" data-integ="TWILIO_WHATSAPP_TO" placeholder="+48..." />
+        </div>
+        <div class="card">
+          <h2>Zapisz i sprawdz</h2>
+          <div class="row"><button class="btn primary" id="integSave">Zapisz klucze</button><button class="btn" id="integReload">Odswiez status</button></div>
+          <div id="integStatus" class="mut">sprawdzam...</div>
+          <pre class="out" id="integOut">tu pojawi sie wynik</pre>
+        </div>
+      </div>
+    </section>
+
     <section class="page hidden" id="page-settings">
       <div class="grid">
         <div class="card">
@@ -285,7 +325,7 @@ function api(path, opts){
   });
 }
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>]/g, function(c){ return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; }); }
-var TITLES = { chat:"Czat", keys:"Modele i klucze API", engines:"Silniki", voice:"Glos", sessions:"Sesje", tasks:"Zadania", automations:"Automatyzacje", settings:"Ustawienia", status:"Status i diagnostyka" };
+var TITLES = { chat:"Czat", keys:"Modele i klucze API", engines:"Silniki", voice:"Glos", integrations:"Integracje", sessions:"Sesje", tasks:"Zadania", automations:"Automatyzacje", settings:"Ustawienia", status:"Status i diagnostyka" };
 function show(page){
   var pages = document.querySelectorAll(".page");
   for(var i=0;i<pages.length;i++){ pages[i].className = "page hidden"; }
@@ -296,6 +336,7 @@ function show(page){
   el("pageTitle").textContent = TITLES[page] || page;
   if(page === "engines"){ renderEngines(); }
   if(page === "automations"){ loadAutomations(); }
+  if(page === "integrations"){ loadIntegrations(); }
   if(page === "voice"){ renderVoices(); }
   if(page === "sessions"){ loadSessions(); }
   if(page === "tasks"){ loadTasks(); }
@@ -596,6 +637,33 @@ function connectWs(){
     ws.onclose = function(){ el("connDot").className = "dot"; setTimeout(connectWs, 3000); };
   } catch(e){ el("connDot").className = "dot"; }
 }
+function renderIntegrations(list){
+  var html = "";
+  for(var i=0;i<list.length;i++){
+    var it = list[i];
+    html += "<div>" + esc(it.name) + ": " + (it.ready ? "<span class=badge ok>gotowe</span>" : "<span class=badge err>brakuje: " + esc((it.missing || []).join(", ")) + "</span>") + "</div>";
+  }
+  if(el("integStatus")){ el("integStatus").innerHTML = html; }
+}
+function loadIntegrations(){
+  return api("/api/integrations").then(function(d){ renderIntegrations(d.integrations || []); }).catch(function(e){ if(el("integStatus")){ el("integStatus").textContent = "Blad: " + e.message; } });
+}
+function saveIntegrations(){
+  var inputs = document.querySelectorAll("[data-integ]");
+  var values = {};
+  for(var i=0;i<inputs.length;i++){
+    var v = (inputs[i].value || "").trim();
+    if(v){ values[inputs[i].getAttribute("data-integ")] = v; }
+  }
+  if(el("integOut")){ el("integOut").textContent = "zapisuje..."; }
+  api("/api/integrations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values: values }) })
+    .then(function(d){
+      if(el("integOut")){ el("integOut").textContent = "Zapisano kluczy: " + d.saved; }
+      renderIntegrations(d.integrations || []);
+      toast("Klucze zapisane.", "ok");
+    })
+    .catch(function(e){ if(el("integOut")){ el("integOut").textContent = "Blad: " + e.message; } });
+}
 function loadAutomations(){
   return api("/api/automations").then(function(d){
     var list = d.automations || [];
@@ -750,6 +818,8 @@ function boot(){
   el("voiceTest").addEventListener("click", function(){ speakText("Dzien dobry. Tak brzmi moj glos."); });
   el("voiceUpload").addEventListener("click", uploadVoice);
   el("autoAdd").addEventListener("click", addAutomation);
+  el("integSave").addEventListener("click", saveIntegrations);
+  el("integReload").addEventListener("click", loadIntegrations);
   var radios = document.querySelectorAll("input[name=provider]");
   for(var ri=0; ri<radios.length; ri++){
     radios[ri].addEventListener("change", function(){ applyProviderModels(this.value); });
