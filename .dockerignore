@@ -1,0 +1,9 @@
+node_modules
+**/node_modules
+**/dist
+**/.turbo
+.git
+.github
+coverage
+.omni/memory
+**/*.log
