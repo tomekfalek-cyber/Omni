@@ -52,7 +52,7 @@ export class TelegramAdapter extends ChannelAdapter {
         });
         
         // Edytuj wiadomość, aby usunąć przyciski
-        await this.bot.editMessageReplyMarkup(null, {
+        await this.bot.editMessageReplyMarkup(null as any, {
           chat_id: query.message.chat.id,
           message_id: query.message.message_id
         });
@@ -143,7 +143,7 @@ export class TelegramAdapter extends ChannelAdapter {
 
   private splitMessage(text: string): string[] {
     if (text.length <= this.MAX_MESSAGE_LENGTH) return [text];
-    const chunks = [];
+    const chunks: string[] = [];
     for (let i = 0; i < text.length; i += this.MAX_MESSAGE_LENGTH) {
       chunks.push(text.substring(i, i + this.MAX_MESSAGE_LENGTH));
     }

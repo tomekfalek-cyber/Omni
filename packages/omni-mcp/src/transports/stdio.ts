@@ -19,7 +19,7 @@ export class StdioTransport extends EventEmitter {
     super();
     this.command = command;
     this.args = args;
-    this.env = { ...process.env, ...env };
+    this.env = { ...process.env, ...env } as Record<string, string>;
   }
 
   public async start(): Promise<void> {
@@ -71,6 +71,8 @@ export class StdioTransport extends EventEmitter {
       throw new Error('Proces nie jest uruchomiony');
     }
 
+    const proc = this.process;
+
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(request.id);
@@ -80,7 +82,7 @@ export class StdioTransport extends EventEmitter {
       this.pendingRequests.set(request.id, { resolve, reject, timeout });
 
       const message = JSON.stringify(request) + '\n';
-      this.process.stdin!.write(message, (err) => {
+      proc.stdin!.write(message, (err) => {
         if (err) {
           clearTimeout(timeout);
           this.pendingRequests.delete(request.id);

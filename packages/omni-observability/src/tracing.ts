@@ -30,7 +30,6 @@ export class Tracing {
         getNodeAutoInstrumentations({
           '@opentelemetry/instrumentation-http': { enabled: true },
           '@opentelemetry/instrumentation-express': { enabled: true },
-          '@opentelemetry/instrumentation-ws': { enabled: true },
         })
       ]
     });

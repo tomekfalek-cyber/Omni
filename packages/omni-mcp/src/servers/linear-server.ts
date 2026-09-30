@@ -66,9 +66,9 @@ export class LinearMCPServer {
         identifier: i.identifier,
         title: i.title,
         description: i.description,
-        state: i.state?.name,
+        state: (i.state as any)?.name,
         priority: i.priority,
-        assignee: i.assignee?.name,
+        assignee: (i.assignee as any)?.name,
         url: i.url
       }))
     };
@@ -82,10 +82,10 @@ export class LinearMCPServer {
       identifier: issue.identifier,
       title: issue.title,
       description: issue.description,
-      state: issue.state?.name,
+      state: (issue.state as any)?.name,
       priority: issue.priority,
-      assignee: issue.assignee?.name,
-      team: issue.team?.name,
+      assignee: (issue.assignee as any)?.name,
+      team: (issue.team as any)?.name,
       url: issue.url,
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt
@@ -102,9 +102,9 @@ export class LinearMCPServer {
     });
 
     return {
-      issueId: issue._issue?.id,
-      identifier: issue._issue?.identifier,
-      url: issue._issue?.url
+      issueId: (issue as any)._issue?.id,
+      identifier: (issue as any)._issue?.identifier,
+      url: (issue as any)._issue?.url
     };
   }
 

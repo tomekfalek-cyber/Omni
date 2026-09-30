@@ -1,4 +1,4 @@
-import simpleGit, { SimpleGit } from 'simple-git';
+import { simpleGit, SimpleGit } from 'simple-git';
 import { ToolDefinition } from 'omni-core/types.js';
 import { z } from 'zod';
 import * as path from 'path';

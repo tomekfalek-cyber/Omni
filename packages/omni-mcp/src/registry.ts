@@ -1,5 +1,5 @@
-import { MCPClient, MCPClientConfig } from './client.js';
-import { MCPTool } from './types.js';
+import { MCPClient } from './client.js';
+import { MCPClientConfig, MCPTool } from './types.js';
 
 export class MCPRegistry {
   private clients: Map<string, MCPClient> = new Map();

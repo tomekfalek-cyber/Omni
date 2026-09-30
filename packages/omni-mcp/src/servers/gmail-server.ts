@@ -91,7 +91,7 @@ export class GmailMCPServer {
     });
 
     const messages = response.data.messages || [];
-    const emails = [];
+    const emails: Array<{ id: any; from: any; subject: any; date: any; snippet: any }> = [];
 
     for (const msg of messages) {
       const detail = await this.gmail.users.messages.get({

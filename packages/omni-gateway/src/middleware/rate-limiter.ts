@@ -15,7 +15,7 @@ export class RateLimiter {
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req: Request) => {
-      return req.ip || req.headers['x-forwarded-for'] || 'unknown';
+      return String(req.ip || req.headers['x-forwarded-for'] || 'unknown');
     }
   });
 

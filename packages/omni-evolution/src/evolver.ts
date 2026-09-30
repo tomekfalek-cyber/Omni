@@ -12,6 +12,8 @@ export interface TaskAnalysis {
   toolsUsed: string[];
   iterations: number;
   error?: string;
+  /** Optional metadata attached by the caller (e.g. the skill that produced it). */
+  metadata?: Record<string, any>;
 }
 
 export interface EvolutionConfig {

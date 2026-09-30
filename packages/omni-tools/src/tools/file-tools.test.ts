@@ -5,7 +5,8 @@ import * as path from 'path';
 
 describe('FileTools', () => {
   let fileTools: FileTools;
-  const testDir = '.omni/test-files';
+  // Absolute so that the sandbox cwd and the requested path line up.
+  const testDir = path.resolve(process.cwd(), '.omni/test-files');
 
   beforeEach(async () => {
     fileTools = new FileTools();

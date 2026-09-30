@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import { MCPTool } from '../types.js';
 import { z } from 'zod';
 import * as fs from 'fs/promises';
+import { createWriteStream, createReadStream } from 'node:fs';
 
 export class GoogleDriveMCPServer {
   private drive: any;
@@ -96,10 +97,10 @@ export class GoogleDriveMCPServer {
     );
 
     await new Promise((resolve, reject) => {
-      const dest = fs.createWriteStream(args.outputPath);
+      const dest = createWriteStream(args.outputPath);
       response.data.on('error', reject).pipe(dest);
       dest.on('error', reject);
-      dest.on('finish', resolve);
+      dest.on('finish', () => resolve(undefined));
     });
 
     return { outputPath: args.outputPath };
@@ -116,7 +117,7 @@ export class GoogleDriveMCPServer {
 
     const media = {
       mimeType: args.mimeType || 'application/octet-stream',
-      body: fs.createReadStream(args.filePath)
+      body: createReadStream(args.filePath)
     };
 
     const response = await this.drive.files.create({

@@ -25,6 +25,9 @@
     },
     {
       "path": "../../packages/omni-swarm"
+    },
+    {
+      "path": "../../packages/omni-tools"
     }
   ]
 }

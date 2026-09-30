@@ -116,7 +116,7 @@ export class BackupManager {
       const files = await fs.readdir(this.backupDir);
       const zipFiles = files.filter(f => f.endsWith('.zip'));
 
-      const backups = [];
+      const backups: Array<{ name: string; path: string; size: number; createdAt: number }> = [];
       for (const file of zipFiles) {
         const filePath = path.join(this.backupDir, file);
         const stats = await fs.stat(filePath);
