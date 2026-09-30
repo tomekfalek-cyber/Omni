@@ -481,10 +481,10 @@ function sendMessage(){
   state.pending = true;
   var ws = state.ws;
   if(ws && ws.readyState === 1){
-    ws.send(JSON.stringify({ type: "task.create", prompt: text }));
+    ws.send(JSON.stringify({ type: "task.create", prompt: text, clientId: state.clientId }));
     addMsg("sys", "mysle...");
   } else {
-    api("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: text }) })
+    api("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: text, clientId: state.clientId }) })
       .then(function(t){ var ans = t.result || "(brak tresci)"; addMsg("bot", ans); state.pending = false; afterBotAnswer(ans); })
       .catch(function(e){ addMsg("sys", "Blad: " + e.message); state.pending = false; });
   }
@@ -622,6 +622,17 @@ function connectWs(){
         el("chatLog").scrollTop = el("chatLog").scrollHeight;
         return;
       }
+      if(m.type === "chat.message"){
+        var cm = m.message || {};
+        if(cm.clientId && cm.clientId === state.clientId){ return; }
+        var sbx = document.getElementById("streamBubble");
+        if(sbx){ sbx.remove(); }
+        if(cm.role === "user"){ addMsg("user", cm.text); return; }
+        state.pending = false;
+        addMsg("bot", cm.text);
+        afterBotAnswer(cm.text);
+        return;
+      }
       if(m.type === "agent.event"){ showAgentStatus(m.event); return; }
       if(m.type === "task.started"){ return; }
       if(m.type === "task.finished"){
@@ -631,11 +642,37 @@ function connectWs(){
         var logs = document.querySelectorAll("#chatLog .msg.sys");
         if(logs.length){ logs[logs.length-1].remove(); }
         if(m.error){ addMsg("sys", "Blad: " + m.error); }
-        else { var ans = m.result || "(brak tresci)"; addMsg("bot", ans); afterBotAnswer(ans); }
+        else { state.pending = false; }
       }
     };
     ws.onclose = function(){ el("connDot").className = "dot"; setTimeout(connectWs, 3000); };
   } catch(e){ el("connDot").className = "dot"; }
+}
+function setupInstallBar(){
+  var bar = document.getElementById("installBar");
+  if(!bar){ return; }
+  if(window.matchMedia("(display-mode: standalone)").matches){ return; }
+  var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if(isMobile){
+    var txt = document.getElementById("installText");
+    if(txt){ txt.textContent = "Dodaj Omni do ekranu glownego: menu przegladarki, potem Dodaj do ekranu glownego"; }
+    bar.classList.remove("hidden");
+  }
+  document.getElementById("installBarBtn").addEventListener("click", function(){
+    if(window.__omniPrompt){ window.__omniPrompt.prompt(); window.__omniPrompt = null; bar.classList.add("hidden"); }
+    else { toast("W Chrome: menu (3 kropki) i wybierz Zainstaluj aplikacje.", "ok"); }
+  });
+  document.getElementById("installBarClose").addEventListener("click", function(){ bar.classList.add("hidden"); });
+}
+function loadChatHistory(){
+  return api("/api/chat").then(function(d){
+    var list = d.messages || [];
+    el("chatLog").innerHTML = "";
+    for(var i=0;i<list.length;i++){
+      var m = list[i];
+      addMsg(m.role === "user" ? "user" : "bot", m.text);
+    }
+  }).catch(function(){});
 }
 function renderIntegrations(list){
   var html = "";
@@ -825,6 +862,9 @@ function boot(){
     radios[ri].addEventListener("change", function(){ applyProviderModels(this.value); });
   }
   if("serviceWorker" in navigator){ navigator.serviceWorker.register("/sw.js").catch(function(){}); }
+  state.clientId = Math.random().toString(36).slice(2);
+  loadChatHistory();
+  setupInstallBar();
   initMic();
   el("micBtn").addEventListener("click", toggleMic);
   if(el("installBtn")){
@@ -839,7 +879,12 @@ function boot(){
   connectWs();
   addMsg("bot", "Czesc! Jestem Omni. Ustaw klucz API w zakladce Modele i klucze API, zebym odpowiadal szybko.");
 }
-window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); window.__omniPrompt = e; });
+window.addEventListener("beforeinstallprompt", function(e){
+  e.preventDefault();
+  window.__omniPrompt = e;
+  var bar = document.getElementById("installBar");
+  if(bar){ bar.classList.remove("hidden"); }
+});
 document.addEventListener("DOMContentLoaded", boot);
 </script>
 </body>

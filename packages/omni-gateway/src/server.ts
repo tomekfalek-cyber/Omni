@@ -32,6 +32,7 @@ export class OmniGateway {
   private recentTasks: any[] = [];
   private oauthStates: Map<string, { verifier: string, createdAt: number }> = new Map();
   private startedAt: number = Date.now();
+  private chatLog: any[] = [];
   private voice: VoiceManager;
   private automations: AutomationScheduler;
 
@@ -51,6 +52,7 @@ export class OmniGateway {
       return String((task as any).result || (task as any).error || '');
     });
     this.automations.start();
+    this.loadChat();
     this.swarm.onEvent = (event: any) => { this.broadcast({ type: 'agent.event', event: event }); };
     this.swarm.onToken = (chunk: string) => { this.broadcast({ type: 'task.token', chunk: chunk }); };
     this.wireApprovals();
@@ -408,6 +410,10 @@ export class OmniGateway {
       res.json({ sessions: sessions });
     });
 
+    this.app.get('/api/chat', (_req, res) => {
+      res.json({ messages: this.chatLog.slice(-120) });
+    });
+
     this.app.get('/api/tasks', (_req, res) => {
       res.json({ tasks: this.recentTasks.slice(-25).reverse() });
     });
@@ -416,6 +422,7 @@ export class OmniGateway {
       const { sessionId, prompt, cwd } = req.body || {};
       if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
 
+      this.pushChat('user', prompt, (req.body && req.body.clientId) || '');
       const activeSessionId = sessionId || uuidv4();
       const safeCwd = cwd || this.config.get().workspaceDir;
 
@@ -429,7 +436,29 @@ export class OmniGateway {
     });
   }
 
+  private loadChat(): void {
+    try {
+      const file = path.join(this.config.dataDir(), 'chat.json');
+      if (fs.existsSync(file)) { this.chatLog = JSON.parse(fs.readFileSync(file, 'utf8')); }
+    } catch (error) { this.chatLog = []; }
+  }
+
+  private saveChat(): void {
+    try {
+      this.chatLog = this.chatLog.slice(-200);
+      fs.writeFileSync(path.join(this.config.dataDir(), 'chat.json'), JSON.stringify(this.chatLog), 'utf8');
+    } catch (error) { }
+  }
+
+  private pushChat(role: string, text: string, clientId?: string): void {
+    const entry = { role: role, text: String(text || '').slice(0, 8000), ts: Date.now(), clientId: clientId || '' };
+    this.chatLog.push(entry);
+    this.saveChat();
+    this.broadcast({ type: 'chat.message', message: entry });
+  }
+
   private recordTask(task: any) {
+    this.pushChat('bot', (task && task.result) ? task.result : ((task && task.error) || ''), '');
     this.recentTasks.push({
       id: task && task.id,
       status: task && task.status,
@@ -518,6 +547,7 @@ export class OmniGateway {
 
     switch (data.type) {
       case 'task.create':
+        this.pushChat('user', data.prompt, data.clientId);
         ws.send(JSON.stringify({ type: 'task.started', taskId: 'temp_' + Date.now(), sessionId }));
         try {
           const task = await this.swarm.executeTask(sessionId, data.prompt, session.cwd);
