@@ -567,9 +567,25 @@ function connectWs(){
     ws.onmessage = function(ev){
       var m = {};
       try { m = JSON.parse(ev.data); } catch(e){ return; }
+      if(m.type === "task.token"){
+        var sb = document.getElementById("streamBubble");
+        if(!sb){
+          sb = document.createElement("div");
+          sb.id = "streamBubble";
+          sb.className = "msg bot";
+          el("chatLog").appendChild(sb);
+          state.streamText = "";
+        }
+        state.streamText = (state.streamText || "") + (m.chunk || "");
+        sb.innerHTML = md(state.streamText);
+        el("chatLog").scrollTop = el("chatLog").scrollHeight;
+        return;
+      }
       if(m.type === "agent.event"){ showAgentStatus(m.event); return; }
       if(m.type === "task.started"){ return; }
       if(m.type === "task.finished"){
+        var sbOld = document.getElementById("streamBubble");
+        if(sbOld){ sbOld.remove(); }
         state.pending = false;
         var logs = document.querySelectorAll("#chatLog .msg.sys");
         if(logs.length){ logs[logs.length-1].remove(); }

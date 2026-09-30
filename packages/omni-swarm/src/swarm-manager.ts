@@ -145,6 +145,7 @@ export class SwarmManager {
     return { content: content, toolCalls: [] };
   }
   public onEvent: ((event: any) => void) | null = null;
+  public onToken: ((chunk: string) => void) | null = null;
 
   private emit(event: any): void {
     if (!this.onEvent) { return; }
@@ -230,6 +231,33 @@ export class SwarmManager {
 
       for (let i = 0; i < task.maxIterations; i++) {
         task.iterations = i + 1;
+        if (i === 0 && !needsSearch) {
+          this.emit({ kind: 'writing', text: 'Pisze odpowiedz...' });
+          const plainFast: any[] = [
+            { role: 'system', content: 'Jestes Omni, polski asystent. Odpowiedz krotko i konkretnie po polsku. Nie wywoluj zadnych narzedzi.' },
+            { role: 'user', content: String(prompt) },
+          ];
+          let streamedFast = '';
+          try {
+            const prov: any = this.executor;
+            if (this.onToken && typeof prov.streamCompletion === 'function') {
+              console.log('[Swarm] Strumieniowanie odpowiedzi...');
+              for await (const chunk of prov.streamCompletion(plainFast)) {
+                streamedFast += chunk;
+                this.onToken(chunk);
+              }
+            } else {
+              streamedFast = await prov.getCompletion(plainFast);
+            }
+          } catch (error: any) {
+            console.log('[Swarm] Strumien nieudany (' + error.message + ')');
+            try { streamedFast = await (this.executor as any).getCompletion(plainFast); } catch (error2: any) { streamedFast = ''; }
+          }
+          const cleanedFast = this.stripMarkers(streamedFast);
+          if (cleanedFast) { draftAnswer = cleanedFast; }
+          break;
+        }
+
         const response = await this.executorTurn(messages, toolSchemas, (i === 0 && needsSearch) ? 'required' : 'auto');
         const toolCalls = response.toolCalls || [];
         console.log('[Swarm] Iteracja ' + (i + 1) + ': narzedzia=' + (toolCalls.length ? toolCalls.map((c: any) => c.function.name).join(',') : 'brak'));
@@ -276,32 +304,34 @@ export class SwarmManager {
         }
       }
 
-      if (usedTools) {
+      if (usedTools || !draftAnswer) {
         this.emit({ kind: 'writing', text: 'Pisze odpowiedz...' });
-        for (let attempt = 0; attempt < 3; attempt++) {
-          messages.push({ role: 'user', content: attempt === 0 ? 'Na podstawie wynikow narzedzi napisz teraz konkretna odpowiedz dla uzytkownika po polsku.' : 'Napisz teraz sama odpowiedz dla uzytkownika po polsku.' });
-          const finalResponse = await this.executorTurn(messages, toolSchemas);
-          const finalCalls = finalResponse.toolCalls || [];
-          if (!finalCalls.length) {
-            const cleanedFinal = this.stripMarkers(finalResponse.content);
-            if (cleanedFinal) { draftAnswer = cleanedFinal; }
-            break;
-          }
-          messages.push({ role: 'assistant', content: finalResponse.content || null, tool_calls: finalCalls });
-          for (const call of finalCalls) {
-            const name = call.function && call.function.name;
-            let args: any = {};
-            try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (error) { args = {}; }
-            try {
-              const output = await this.tools.executeTool(name, args, cwd);
-              const text = typeof output === 'string' ? output : JSON.stringify(output);
-              executionResult += text;
-              messages.push({ role: 'tool', tool_call_id: call.id, content: text.slice(0, 8000) });
-            } catch (error: any) {
-              messages.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + error.message });
-            }
-          }
+        const plain: any[] = [
+          { role: 'system', content: this.capabilities(cwd) },
+          { role: 'user', content: 'Zadanie: ' + prompt },
+        ];
+        for (const m of messages) {
+          if (m.role === 'tool') { plain.push({ role: 'user', content: 'Wynik narzedzia: ' + String(m.content || '').slice(0, 6000) }); }
         }
+        plain.push({ role: 'user', content: 'Napisz teraz konkretna odpowiedz dla uzytkownika po polsku. Nie wywoluj narzedzi.' });
+        let streamed = '';
+        try {
+          const provider: any = this.executor;
+          if (this.onToken && typeof provider.streamCompletion === 'function') {
+            console.log('[Swarm] Strumieniowanie odpowiedzi...');
+            for await (const chunk of provider.streamCompletion(plain)) {
+              streamed += chunk;
+              this.onToken(chunk);
+            }
+          } else {
+            streamed = await provider.getCompletion(plain);
+          }
+        } catch (error: any) {
+          console.log('[Swarm] Strumien nieudany (' + error.message + '), zwykla odpowiedz.');
+          try { streamed = await (this.executor as any).getCompletion(plain); } catch (error2: any) { streamed = ''; }
+        }
+        const cleaned = this.stripMarkers(streamed);
+        if (cleaned) { draftAnswer = cleaned; }
       }
       // KROK 4: Evolver uczy sie z zadania (opcjonalny - blad nie moze zepsuc odpowiedzi)
       try { await this.runEvolver(prompt, executionResult); } catch (error) { }

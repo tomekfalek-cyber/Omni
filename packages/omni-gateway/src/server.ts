@@ -52,6 +52,7 @@ export class OmniGateway {
     });
     this.automations.start();
     this.swarm.onEvent = (event: any) => { this.broadcast({ type: 'agent.event', event: event }); };
+    this.swarm.onToken = (chunk: string) => { this.broadcast({ type: 'task.token', chunk: chunk }); };
     this.wireApprovals();
 
     this.setupAuth();
