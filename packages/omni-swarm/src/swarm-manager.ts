@@ -193,6 +193,75 @@ export class SwarmManager {
     this.tools.register(tool);
   }
 
+  public onWorker: ((event: any) => void) | null = null;
+
+  /** Czy zadanie jest na tyle zlozone, by uruchomic roj rownoleglych botow. */
+  private shouldUseSwarm(prompt: string, plan: string): boolean {
+    if (String(process.env.OMNI_SWARM || '').trim() === 'off') { return false; }
+    const lower = String(prompt || '').toLowerCase();
+    const keys = ['zbuduj', 'aplikacj', 'projekt', 'refaktor', 'przygotuj', 'kilka plikow', 'wiele plikow', 'zaimplementuj', 'stworz aplikacje', 'napisz aplikacje'];
+    let hit = false;
+    for (const k of keys) { if (lower.indexOf(k) !== -1) { hit = true; break; } }
+    if (!hit) { return false; }
+    if (String(prompt || '').trim().length < 30) { return false; }
+    return true;
+  }
+
+  /** Dzieli plan na N niezaleznych czesci. */
+  private splitPlan(plan: string, max: number): string[] {
+    const nl = String.fromCharCode(10);
+    const lines: string[] = String(plan || '').split(nl).map((l) => l.trim()).filter((l) => l.length > 3);
+    if (!lines.length) { return []; }
+    if (lines.length === 1) { lines.push('Skoncz i sprawdz wynik'); }
+    const parts = Math.min(Math.max(2, max), Math.max(2, Math.ceil(lines.length / 2)));
+    const out: string[] = [];
+    for (let i = 0; i < parts; i++) {
+      const slice = lines.filter((l, idx) => idx % parts === i);
+      if (slice.length) { out.push(slice.join(' | ')); }
+    }
+    return out;
+  }
+
+  /** Jeden robot roju: wykonuje tylko swoja czesc zadania. */
+  private async runWorker(index: number, subtask: string, prompt: string, cwd: string): Promise<{ index: number, ok: boolean, text: string }> {
+    const nl = String.fromCharCode(10);
+    console.log('[Swarm] Bot ' + index + ' start');
+    if (this.onWorker) { try { this.onWorker({ index: index, state: 'start', task: subtask.slice(0, 110) }); } catch (e) { } }
+    const messages: any[] = [
+      { role: 'system', content: this.capabilities(cwd) + nl + 'Jestes jednym z rownoleglych botow Omni (roj). Wykonaj TYLKO swoja czesc zadania i zwroc konkretny wynik (kod, pliki, ustalenia). Nie opisuj pracy innych botow.' },
+      { role: 'user', content: 'Zadanie glowne: ' + prompt + nl + 'Twoja czesc: ' + subtask },
+    ];
+    const schemas = this.toolSchemas();
+    try {
+      for (let i = 0; i < 3; i++) {
+        const res = await this.executorTurn(messages, schemas, 'auto');
+        const calls = res.toolCalls || [];
+        if (!calls.length) {
+          if (this.onWorker) { try { this.onWorker({ index: index, state: 'done', task: '' }); } catch (e) { } }
+          return { index: index, ok: true, text: this.stripMarkers(res.content) };
+        }
+        messages.push({ role: 'assistant', content: res.content || null, tool_calls: calls });
+        for (const call of calls) {
+          const name = call.function && call.function.name;
+          let args: any = {};
+          try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { args = {}; }
+          try {
+            const output = await this.tools.executeTool(name, args, cwd);
+            const text = typeof output === 'string' ? output : JSON.stringify(output);
+            messages.push({ role: 'tool', tool_call_id: call.id, content: text.slice(0, 8000) });
+          } catch (e: any) {
+            messages.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + e.message });
+          }
+        }
+      }
+      const last = await this.executorTurn(messages, schemas, 'auto');
+      if (this.onWorker) { try { this.onWorker({ index: index, state: 'done', task: '' }); } catch (e) { } }
+      return { index: index, ok: true, text: this.stripMarkers(last.content) };
+    } catch (error: any) {
+      if (this.onWorker) { try { this.onWorker({ index: index, state: 'error', task: error.message }); } catch (e) { } }
+      return { index: index, ok: false, text: 'Blad: ' + error.message };
+    }
+  }
   async executeTask(sessionId: string, prompt: string, cwd: string): Promise<Task> {
     const taskId = uuidv4();
     const task: Task = {
@@ -224,14 +293,30 @@ export class SwarmManager {
       const searchKeys = ['kurs', 'cena', 'ile kosztuje', 'walut', 'bitcoin', 'ethereum', 'krypto', 'wiadomosc', 'wydarzen', 'co sie dzieje', 'najnowsz', 'pogod', 'przepis', 'ugotowac', 'znajdz', 'sprawdz', 'wyszukaj', 'aktualn', 'kto ', 'gdzie ', 'kiedy ', 'jaki jest', 'jaka jest', 'ile '];
       let needsSearch = false;
       for (const key of searchKeys) { if (lowerPrompt.indexOf(key) !== -1) { needsSearch = true; break; } }
+      const actionKeys = ['zbuduj', 'stworz', 'napisz plik', 'aplikacj', 'projekt', 'refaktor', 'zaimplementuj', 'przygotuj', 'zapisz plik', 'edytuj plik', 'wypchnij', 'commit'];
+      let isAction = false;
+      for (const key of actionKeys) { if (lowerPrompt.indexOf(key) !== -1) { isAction = true; break; } }
       const messages: any[] = [
         { role: 'system', content: this.capabilities(cwd) + String.fromCharCode(10) + 'WAZNE: gdy pytanie dotyczy faktow, kursow, wiadomosci, pogody, przepisow lub czegokolwiek z internetu - NAJPIERW wywolaj odpowiednie narzedzie. Nie odpowiadaj na takie pytania z pamieci.' },
         { role: 'user', content: 'Zadanie: ' + prompt + '\nPlan:\n' + plan },
       ];
 
       for (let i = 0; i < task.maxIterations; i++) {
-        task.iterations = i + 1;
-        if (i === 0 && !needsSearch) {
+        if (i === 0 && this.shouldUseSwarm(prompt, plan)) {
+          const parts = this.splitPlan(plan, Number(String(process.env.OMNI_SWARM_WORKERS || '3')));
+          if (parts.length >= 2) {
+            this.emit({ kind: 'writing', text: 'Roj botow: ' + parts.length + ' pracuje rownolegle...' });
+            console.log('[Swarm] ROJ: ' + parts.length + ' botow rownolegle');
+            const results = await Promise.all(parts.map((part: string, idx: number) => this.runWorker(idx + 1, part, prompt, cwd)));
+            const merged = results.map((r: any) => '### Bot ' + r.index + String.fromCharCode(10) + r.text).join(String.fromCharCode(10) + String.fromCharCode(10));
+            executionResult += merged;
+            usedTools = true;
+            this.memory.appendTranscript(sessionId, 'swarm', 'Roj: ' + parts.length + ' botow rownolegle');
+            break;
+          }
+        }
+
+        task.iterations = i + 1;        if (i === 0 && !needsSearch && !isAction) {
           this.emit({ kind: 'writing', text: 'Pisze odpowiedz...' });
           const plainFast: any[] = [
             { role: 'system', content: 'Jestes Omni, polski asystent. Odpowiedz krotko i konkretnie po polsku. Nie wywoluj zadnych narzedzi.' },

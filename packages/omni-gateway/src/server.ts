@@ -57,6 +57,7 @@ export class OmniGateway {
     this.appVersion = crypto.createHash('sha256').update(WEB_UI_HTML).digest('hex').slice(0, 12);
     this.swarm.onEvent = (event: any) => { this.broadcast({ type: 'agent.event', event: event }); };
     this.swarm.onToken = (chunk: string) => { this.broadcast({ type: 'task.token', chunk: chunk }); };
+    this.swarm.onWorker = (event: any) => { this.broadcast({ type: 'agent.event', event: { kind: 'worker', index: event.index, state: event.state, text: event.task } }); };
     this.wireApprovals();
 
     this.setupAuth();

@@ -632,6 +632,7 @@ function showAgentStatus(ev){
   if(ev.kind === "tool"){ text = "Uzywam narzedzia: " + ev.text; }
   if(ev.kind === "writing"){ text = "Pisze odpowiedz..."; }
   if(ev.kind === "done"){ text = ""; }
+  if(ev.kind === "worker"){ text = "\ud83d\udc1d Bot " + ev.index + (ev.state === "start" ? " pracuje: " + ev.text : (ev.state === "done" ? " skonczyl" : " blad: " + ev.text)); }
   d.textContent = text;
   el("chatLog").scrollTop = el("chatLog").scrollHeight;
   if(ev.kind === "done"){ setTimeout(function(){ var x = document.getElementById("agentStatus"); if(x){ x.remove(); } }, 700); }
