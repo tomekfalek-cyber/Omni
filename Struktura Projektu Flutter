@@ -1,0 +1,3 @@
+cd apps/mobile
+flutter create omni_mobile --org com.omni.agent --platforms=android,ios
+cd omni_mobile
