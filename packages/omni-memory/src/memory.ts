@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -103,21 +103,22 @@ function toMatchQuery(query: string): string {
 }
 
 /**
- * SQLite + FTS5 backed memory store. Synchronous and safe to share within a process.
+ * SQLite + FTS5 memory store built on Node's bundled `node:sqlite` module.
+ * No native addon required — works on any Node 22+ install without a C toolchain.
  */
 export class MemoryStore {
-  protected readonly db: Database.Database;
+  protected readonly db: DatabaseSync;
 
   constructor(options: MemoryStoreOptions | string = {}) {
     const path = typeof options === 'string' ? options : options.path ?? ':memory:';
     if (path !== ':memory:') {
       mkdirSync(dirname(path), { recursive: true });
     }
-    this.db = new Database(path);
+    this.db = new DatabaseSync(path);
     if (path !== ':memory:') {
-      this.db.pragma('journal_mode = WAL');
+      this.db.exec('PRAGMA journal_mode = WAL;');
     }
-    this.db.pragma('foreign_keys = ON');
+    this.db.exec('PRAGMA foreign_keys = ON;');
     this.db.exec(SCHEMA);
   }
 
@@ -125,16 +126,15 @@ export class MemoryStore {
   add(record: MemoryRecord): number {
     const info = this.db
       .prepare(
-        `INSERT INTO memories (session_id, role, content, metadata, created_at)
-         VALUES (@sessionId, @role, @content, @metadata, @createdAt)`
+        'INSERT INTO memories (session_id, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?)'
       )
-      .run({
-        sessionId: record.sessionId,
-        role: record.role,
-        content: record.content,
-        metadata: record.metadata ? JSON.stringify(record.metadata) : null,
-        createdAt: record.createdAt ?? Date.now(),
-      });
+      .run(
+        record.sessionId,
+        record.role,
+        record.content,
+        record.metadata ? JSON.stringify(record.metadata) : null,
+        record.createdAt ?? Date.now()
+      );
     return Number(info.lastInsertRowid);
   }
 
@@ -142,7 +142,7 @@ export class MemoryStore {
   recent(sessionId: string, limit = 20): MemoryRecord[] {
     const rows = this.db
       .prepare('SELECT * FROM memories WHERE session_id = ? ORDER BY created_at DESC, id DESC LIMIT ?')
-      .all(sessionId, limit) as Row[];
+      .all(sessionId, limit) as unknown as Row[];
     return rows.reverse().map(toRecord);
   }
 
@@ -168,7 +168,7 @@ export class MemoryStore {
              WHERE memories_fts MATCH ?
              ORDER BY score LIMIT ?`
           )
-          .all(match, limit)) as Row[];
+          .all(match, limit)) as unknown as Row[];
     return rows.map((row) => ({ ...toRecord(row), score: row.score ?? 0 }));
   }
 
@@ -176,13 +176,14 @@ export class MemoryStore {
   count(sessionId?: string): number {
     const row = (sessionId
       ? this.db.prepare('SELECT COUNT(*) AS n FROM memories WHERE session_id = ?').get(sessionId)
-      : this.db.prepare('SELECT COUNT(*) AS n FROM memories').get()) as { n: number };
+      : this.db.prepare('SELECT COUNT(*) AS n FROM memories').get()) as unknown as { n: number };
     return row.n;
   }
 
   /** Delete every record for a session. Returns the number removed. */
   clear(sessionId: string): number {
-    return this.db.prepare('DELETE FROM memories WHERE session_id = ?').run(sessionId).changes;
+    const info = this.db.prepare('DELETE FROM memories WHERE session_id = ?').run(sessionId);
+    return Number(info.changes);
   }
 
   close(): void {
@@ -217,8 +218,7 @@ export class OmniMemory extends MemoryStore {
   /** Read a fact, or undefined when it was never stored. */
   getFact(key: string): string | undefined {
     const row = this.db.prepare('SELECT value FROM facts WHERE key = ?').get(key) as
-      | { value: string }
-      | undefined;
+      | unknown as { value: string } | undefined;
     return row?.value;
   }
 
@@ -226,7 +226,7 @@ export class OmniMemory extends MemoryStore {
   listFacts(): Array<{ key: string; value: string; updatedAt: number }> {
     const rows = this.db
       .prepare('SELECT key, value, updated_at FROM facts ORDER BY key')
-      .all() as Array<{ key: string; value: string; updated_at: number }>;
+      .all() as unknown as Array<{ key: string; value: string; updated_at: number }>;
     return rows.map((r) => ({ key: r.key, value: r.value, updatedAt: r.updated_at }));
   }
 }

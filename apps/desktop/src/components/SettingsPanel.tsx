@@ -34,6 +34,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onConnect }) => {
     <div className="p-6 max-w-lg space-y-4">
       <h2 className="text-lg font-semibold">⚙️ Ustawienia</h2>
 
+      <p className="text-sm text-gray-400">
+        Podaj adres i hasło bota Omni. Jeśli nie wiesz, co wpisać — zostaw domyślne
+        wartości i upewnij się, że bot działa na tym komputerze.
+      </p>
+
       <label className="block">
         <span className="text-sm text-gray-400">Adres Gateway (WebSocket)</span>
         <input

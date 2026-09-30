@@ -31,13 +31,12 @@
     "clean": "tsc -b --clean && rm -rf dist"
   },
   "dependencies": {
-    "better-sqlite3": "^11.1.2",
     "omni-core": "workspace:*"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.11",
     "typescript": "^5.4.5",
     "vitest": "^1.6.0",
-    "@types/node": "^20.14.0"
-  }
+    "@types/node": "^22.5.0"
+  },
+  "description": "Pamięć agenta Omni — SQLite + FTS5 na wbudowanym node:sqlite"
 }

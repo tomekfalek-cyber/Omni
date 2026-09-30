@@ -13,7 +13,7 @@ class SessionsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sesje'),
+        title: const Text('Historia rozmów'),
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
@@ -55,7 +55,7 @@ class SessionsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Utwórz nową sesję, aby rozpocząć',
+            'Zacznij nową rozmowę przyciskiem plus w prawym górnym rogu',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey.shade500,

@@ -66,7 +66,7 @@ function App() {
                 : 'text-gray-400 hover:bg-gray-800'
             }`}
           >
-            💬 Czat
+            💬 Rozmowa
           </button>
           <button
             onClick={() => setCurrentView('sessions')}
@@ -76,7 +76,7 @@ function App() {
                 : 'text-gray-400 hover:bg-gray-800'
             }`}
           >
-            📋 Sesje
+            🗂️ Historia
           </button>
           <button
             onClick={() => setCurrentView('settings')}

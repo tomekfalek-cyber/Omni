@@ -27,6 +27,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final connectionState = ref.watch(webSocketProvider);
+    final connected = connectionState is Connected;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -44,11 +45,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(width: 10),
             const Text(
-              'Omni Agent',
+              'Omni',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
           ],
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Row(
+              children: [
+                Icon(
+                  connected ? Icons.cloud_done : Icons.cloud_off,
+                  size: 18,
+                  color: connected ? Colors.green : Colors.orange,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  connected ? 'Połączono' : 'Niepołączono',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -58,9 +78,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
         child: SafeArea(
-          child: IndexedStack(
-            index: _currentIndex,
-            children: _screens,
+          child: Column(
+            children: [
+              if (!connected) _offlineHint(context),
+              Expanded(
+                child: IndexedStack(
+                  index: _currentIndex,
+                  children: _screens,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -71,58 +98,54 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.chat_outlined),
-            selectedIcon: Icon(Icons.chat),
-            label: 'Czat',
+            icon: Icon(Icons.chat_bubble_outline),
+            selectedIcon: Icon(Icons.chat_bubble),
+            label: 'Rozmowa',
+            tooltip: 'Napisz do agenta Omni',
           ),
           NavigationDestination(
-            icon: Icon(Icons.list_outlined),
-            selectedIcon: Icon(Icons.list),
-            label: 'Sesje',
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'Historia',
+            tooltip: 'Twoje wcześniejsze rozmowy',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
             label: 'Ustawienia',
+            tooltip: 'Połączenie i konfiguracja',
           ),
         ],
       ),
-      floatingActionButton: _buildConnectionIndicator(connectionState),
     );
   }
 
-  Widget? _buildConnectionIndicator(ConnectionState state) {
-    if (state is Connected) return null;
-
-    Color color;
-    IconData icon;
-    String tooltip;
-
-    switch (state) {
-      case Connecting():
-        color = Colors.orange;
-        icon = Icons.sync;
-        tooltip = 'Łączenie...';
-        break;
-      case ConnectionError():
-        color = Colors.red;
-        icon = Icons.error;
-        tooltip = 'Błąd połączenia';
-        break;
-      default:
-        color = OmniColors.accent;
-        icon = Icons.cloud_off;
-        tooltip = 'Rozłączono';
-    }
-
-    return FloatingActionButton.small(
-      backgroundColor: color,
-      onPressed: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(tooltip)),
-        );
-      },
-      child: Icon(icon, color: Colors.white),
+  /// Plain-language hint for non-technical users when the bot is unreachable.
+  Widget _offlineHint(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, color: Colors.orange, size: 20),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Bot nie jest jeszcze połączony. Wejdź w „Ustawienia", aby go uruchomić i połączyć.',
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
+          TextButton(
+            onPressed: () => setState(() => _currentIndex = 2),
+            child: const Text('Ustawienia'),
+          ),
+        ],
+      ),
     );
   }
 }

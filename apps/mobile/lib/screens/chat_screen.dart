@@ -50,7 +50,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Omni Agent'),
+        title: const Text('Rozmowa'),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_outline),
