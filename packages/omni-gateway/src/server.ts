@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { SwarmManager } from 'omni-swarm/swarm-manager.js';
 import { v4 as uuidv4 } from 'uuid';
 import cors from 'cors';
+import { WEB_UI_HTML } from './web-ui.js';
 
 export class OmniGateway {
   private app: express.Application;
@@ -20,12 +21,20 @@ export class OmniGateway {
     this.wss = new WebSocketServer({ server: this.httpServer, path: '/ws' });
     this.swarm = new SwarmManager();
 
+    this.setupWebUI();
     this.setupREST();
     this.setupWebSocket();
     
     this.httpServer.listen(port, host, () => {
       console.log(`[Gateway] Omni Gateway uruchomiony na ${host}:${port}`);
       console.log(`[Gateway] Dostępne endpointy: /health, /api/tasks`);
+    });
+  }
+
+  /** Serwuje prosty czat w przeglądarce (po polsku) pod adresem /. */
+  private setupWebUI() {
+    this.app.get('/', (_req, res) => {
+      res.type('html').send(WEB_UI_HTML);
     });
   }
 
