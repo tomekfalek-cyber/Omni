@@ -389,7 +389,7 @@ function renderStatus(){
     "<div>Model</div><div class=mono>" + esc(s.model) + "</div>" +
     "<div>Klucz OpenRouter</div><div>" + (s.hasOpenRouterKey ? "tak" : "nie") + "</div>" +
     "<div>Sesje WebSocket</div><div>" + esc(s.sessions) + "</div>" +
-    "<div>Adres dla telefonu</div><div class=mono>" + ((state.tunnel && state.tunnel.url) ? "<a href=\"" + esc(state.tunnel.url) + "\" target=\"_blank\">" + esc(state.tunnel.url) + "</a>" : "tunel nieaktywny") + "</div>" +
+    "<div>Adres dla telefonu</div><div class=mono>" + ((state.tunnel && state.tunnel.url) ? esc(state.tunnel.url) : "tunel nieaktywny") + "</div>" +
     "<div>Kod dostepu</div><div>" + (s.accessCode ? "ustawiony" : "nie ustawiono (panel otwarty lokalnie)") + "</div>" +
     "<div>Zapisane klucze</div><div class=mono>" + esc((s.keyNames || []).join(", ") || "brak") + "</div>";
 }
