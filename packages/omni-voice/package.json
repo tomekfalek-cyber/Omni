@@ -1,0 +1,14 @@
+{
+  "name": "omni-voice",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "fluent-ffmpeg": "^2.1.2",
+    "axios": "^1.6.7",
+    "form-data": "^4.0.0",
+    "omni-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/fluent-ffmpeg": "^2.1.24"
+  }
+}
