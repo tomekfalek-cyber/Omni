@@ -52,6 +52,43 @@ export class SwarmManager {
     return this.executor.getCompletion(messages);
   }
 
+  public getApprovalManager(): any {
+    return this.tools.approvalManager;
+  }
+
+  public listTools(): any[] {
+    return this.tools.getAllDefinitions();
+  }
+
+  private stripMarkers(text: string): string {
+    return text
+      .split('[[DONE]]').join('')
+      .split('[[APPROVED]]').join('')
+      .split('[[REJECTED]]').join('')
+      .split('[REJECTED BY REVIEWER]').join('')
+      .trim();
+  }
+
+  private parseToolCalls(text: string): Array<{ name: string, args: any }> {
+    const calls: Array<{ name: string, args: any }> = [];
+    const marker = '[[CALL_TOOL:';
+    let idx = text.indexOf(marker);
+    while (idx !== -1) {
+      const end = text.indexOf(']]', idx);
+      if (end === -1) break;
+      const inner = text.slice(idx + marker.length, end);
+      const sep = inner.indexOf('|');
+      const name = (sep === -1 ? inner : inner.slice(0, sep)).trim();
+      let args: any = {};
+      if (sep !== -1) {
+        const raw = inner.slice(sep + 1).trim();
+        try { args = JSON.parse(raw); } catch (error) { args = { input: raw }; }
+      }
+      if (name) calls.push({ name: name, args: args });
+      idx = text.indexOf(marker, end);
+    }
+    return calls;
+  }
   public registerTool(tool: any) {
     this.tools.register(tool);
   }
@@ -80,31 +117,46 @@ export class SwarmManager {
       // KROK 2: Executor wykonuje kroki
       let executionResult = '';
       let draftAnswer = '';
+      let usedTools = false;
+
       for (let i = 0; i < task.maxIterations; i++) {
         task.iterations = i + 1;
-        const action = await this.runExecutor(plan, executionResult, cwd);
-        
-        const cleanedAction = action.replace(/\[\[(DONE|APPROVED|REJECTED)\]\]/g, '').trim();
-        if (cleanedAction) draftAnswer = cleanedAction;
+        const action = await this.runExecutor(plan, executionResult, cwd, false);
 
-        if (action.includes('[[DONE]]')) {
+        const calls = this.parseToolCalls(action);
+        const cleanedAction = this.stripMarkers(action);
+
+        if (calls.length === 0) {
+          if (cleanedAction) draftAnswer = cleanedAction;
           break;
         }
 
-        // Brak wywołań narzędzi = to jest odpowiedź końcowa (szybka ścieżka dla pytań).
-        if (!action.includes('[[CALL_TOOL')) {
-          break;
+        for (const call of calls) {
+          usedTools = true;
+          try {
+            const output = await this.tools.executeTool(call.name, call.args, cwd);
+            const text = typeof output === 'string' ? output : JSON.stringify(output);
+            executionResult += '\n[WYNIK NARZEDZIA ' + call.name + ']\n' + text + '\n';
+            this.memory.appendTranscript(sessionId, 'tool', call.name + ': ' + text.slice(0, 400));
+          } catch (error: any) {
+            executionResult += '\n[BLAD NARZEDZIA ' + call.name + '] ' + error.message + '\n';
+            this.memory.appendTranscript(sessionId, 'tool', 'BLAD ' + call.name + ': ' + error.message);
+          }
         }
 
-        // KROK 3: Reviewer weryfikuje
-        const review = await this.runReviewer(prompt, plan, action, cwd);
-        if (review.includes('[[APPROVED]]')) {
-          break;
-        } else {
-          executionResult += '\n[REJECTED BY REVIEWER]: ' + review + '\nSpróbuj ponownie.';
+        const review = await this.runReviewer(prompt, plan, executionResult || action, cwd);
+        if (!review.includes('[[APPROVED]]')) {
+          executionResult += '\n[UWAGA REVIEWERA] ' + this.stripMarkers(review) + '\n';
         }
       }
 
+      if (usedTools) {
+        const finalAnswer = await this.runExecutor(plan, executionResult, cwd, true);
+        const cleanedFinal = this.stripMarkers(finalAnswer);
+        if (cleanedFinal) draftAnswer = cleanedFinal;
+        const toolsUsed = this.parseToolCalls(executionResult).map(function (c) { return c.name; }).join(', ');
+        this.memory.appendTranscript(sessionId, 'system', 'Uzyte narzedzia: ' + (toolsUsed || 'brak'));
+      }
       // KROK 4: Evolver uczy się z zadania
       await this.runEvolver(prompt, executionResult);
 
@@ -130,14 +182,17 @@ export class SwarmManager {
     return await this.planner.getCompletion(messages);
   }
 
-  private async runExecutor(plan: string, previousContext: string, cwd: string): Promise<string> {
+  private async runExecutor(plan: string, previousContext: string, cwd: string, finalOnly: boolean = false): Promise<string> {
+    const tools = this.tools.getAllDefinitions().map((t: any) => '- ' + t.name + ': ' + t.description).join('\n');
+    const system = finalOnly
+      ? 'Jestes Executorem. Nie wolno Ci wywolywac narzedzi. Na podstawie wynikow narzedzi napisz konkretna odpowiedz po polsku dla uzytkownika.'
+      : 'Jestes Executorem i masz realne mozliwosci: czytanie i zapisywanie plikow, git oraz uruchamianie polecen. Katalog roboczy: ' + cwd + '. Dostepne narzedzia:\n' + tools + '\nAby wywolac narzedzie, napisz DOKLADNIE w osobnej linii: [[CALL_TOOL:nazwa|{\"argument\":\"wartosc\"}]] i nic wiecej. Jesli masz juz wynik, napisz gotowa odpowiedz po polsku, bez wywolywania narzedzi.';
     const messages = [
-      { role: 'system' as const, content: `Jesteś Executorem. Masz dostęp do plików w: ${cwd}. Wykonaj następny krok z planu. Użyj składni [[CALL_TOOL:nazwa|{"arg":"wartosc"}]] aby wywołać narzędzie. Jeśli zadanie jest zakończone, napisz [[DONE]].` },
-      { role: 'user' as const, content: `Plan:\n${plan}\n\nPoprzedni kontekst:\n${previousContext}` }
+      { role: 'system' as const, content: system },
+      { role: 'user' as const, content: 'Plan:\n' + plan + '\n\nWyniki dotychczas:\n' + previousContext }
     ];
     return await this.executor.getCompletion(messages);
   }
-
   private async runReviewer(originalPrompt: string, plan: string, action: string, cwd: string): Promise<string> {
     const messages = [
       { role: 'system' as const, content: 'Jesteś Reviewerem. Oceniasz odpowiedź W KONTEKŚCIE zadania użytkownika. Proste odpowiedzi na pytania ZATWIERDZAJ. Jeśli naprawdę trzeba coś poprawić, odpowiedz [[REJECTED]] i podaj konkretny powód. Przy braku zastrzeżeń odpowiedz dokładnie [[APPROVED]].' },

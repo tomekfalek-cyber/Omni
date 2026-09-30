@@ -13,6 +13,31 @@ export class ShellSandbox {
     this.docker = new Docker({ socketPath: process.env.DOCKER_HOST || '/var/run/docker.sock' });
   }
 
+  private async dockerAvailable(): Promise<boolean> {
+    try {
+      await Promise.race([
+        this.docker.ping() as any,
+        new Promise((_ok, reject) => setTimeout(() => reject(new Error('timeout')), 1500)) as any,
+      ]);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  private async executeLocal(command: string, cwd: string): Promise<string> {
+    const { exec: nodeExec } = await import('child_process');
+    return await new Promise<string>((resolve, reject) => {
+      nodeExec(command, { cwd: cwd, timeout: 30000, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+        const out = String(stdout || '') + String(stderr || '');
+        if (error && !out) {
+          reject(new Error('Polecenie nie powiodlo sie: ' + error.message));
+          return;
+        }
+        resolve(out.slice(0, this.MAX_OUTPUT_BYTES));
+      });
+    });
+  }
   public getDefinitions(): ToolDefinition[] {
     return [
       {
@@ -31,7 +56,12 @@ export class ShellSandbox {
     const validated = schema.parse(args);
 
     // 1. Walidacja blacklisty (głęboka obrona, mimo sandboxa)
-    this.validateCommand(validated.command);
+    const localMode = !(await this.dockerAvailable());
+    this.validateCommand(validated.command, localMode);
+
+    if (localMode) {
+      return await this.executeLocal(validated.command, cwd);
+    }
 
     // 2. Przygotowanie kontenera
     const containerName = `omni-sandbox-${Date.now()}`;
@@ -115,7 +145,8 @@ export class ShellSandbox {
     }
   }
 
-  private validateCommand(cmd: string): void {
+  private validateCommand(cmd: string, allowNetwork: boolean = false): void {
+    const networkPattern = /wget|curl/i;
     const dangerousPatterns = [
       /rm\s+-rf\s+\//i,
       /mkfs/i,
@@ -126,6 +157,7 @@ export class ShellSandbox {
     ];
 
     for (const pattern of dangerousPatterns) {
+      if (pattern === networkPattern && allowNetwork) { continue; }
       if (pattern.test(cmd)) {
         throw new Error(`Zablokowano niebezpieczne polecenie: dopasowanie do wzorca ${pattern}`);
       }

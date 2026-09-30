@@ -3,6 +3,12 @@ import { ChatCompletionMessageParam, ChatCompletionChunk } from 'openai/resource
 import { AgentConfig } from '../types.js';
 import { EventEmitter } from 'events';
 
+/** Dostawcy zgodni z OpenAI (darmowe zrodla). */
+const COMPATIBLE: Record<string, { baseUrl: string, keyEnv: string }> = {
+  groq: { baseUrl: 'https://api.groq.com/openai/v1', keyEnv: 'GROQ_API_KEY' },
+  gemini: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/', keyEnv: 'GEMINI_API_KEY' },
+};
+
 export class QwenProvider extends EventEmitter {
   private client: OpenAI;
   private config: AgentConfig;
@@ -10,23 +16,33 @@ export class QwenProvider extends EventEmitter {
   constructor(config: AgentConfig) {
     super();
     this.config = config;
+    const provider = String(config.provider);
 
-    if (config.provider === 'ollama') {
+    if (provider === 'ollama') {
       this.client = new OpenAI({
         baseURL: config.baseUrl || process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1',
         apiKey: process.env.OLLAMA_API_KEY || 'ollama',
       });
-    } else if (config.provider === 'openrouter') {
+    } else if (provider === 'openrouter') {
       this.client = new OpenAI({
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKey: config.apiKey || process.env.OPENROUTER_API_KEY || '',
+        baseURL: process.env.OMNI_LLM_BASE_URL || 'https://openrouter.ai/api/v1',
+        apiKey: process.env.OPENROUTER_API_KEY || process.env.OMNI_LLM_API_KEY || '',
         defaultHeaders: {
           'HTTP-Referer': 'https://omni-agent.local',
           'X-Title': 'Omni Agent Self-Hosted',
         },
       });
+    } else if (COMPATIBLE[provider]) {
+      const info = COMPATIBLE[provider];
+      this.client = new OpenAI({
+        baseURL: process.env.OMNI_LLM_BASE_URL || info.baseUrl,
+        apiKey: process.env[info.keyEnv] || process.env.OMNI_LLM_API_KEY || '',
+      });
     } else {
-      throw new Error('Nieobsługiwany dostawca. Dozwolone tylko: ollama, openrouter (darmowe Qwen).');
+      this.client = new OpenAI({
+        baseURL: process.env.OMNI_LLM_BASE_URL || 'http://localhost:11434/v1',
+        apiKey: process.env.OMNI_LLM_API_KEY || 'ollama',
+      });
     }
   }
 
@@ -47,7 +63,7 @@ export class QwenProvider extends EventEmitter {
         }
       }
     } catch (error: any) {
-      this.emit('error', new Error(`Błąd Qwen Provider: ${error.message}`));
+      this.emit('error', new Error('Blad Qwen Provider: ' + error.message));
       throw error;
     }
   }
@@ -63,7 +79,7 @@ export class QwenProvider extends EventEmitter {
       });
       return response.choices[0]?.message?.content || '';
     } catch (error: any) {
-      this.emit('error', new Error(`Błąd Qwen Provider: ${error.message}`));
+      this.emit('error', new Error('Blad Qwen Provider: ' + error.message));
       throw error;
     }
   }

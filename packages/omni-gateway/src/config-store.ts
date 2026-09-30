@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { SecretManager } from './security/secret-manager.js';
 
-export type OmniProviderId = 'ollama' | 'openrouter';
+export type OmniProviderId = 'ollama' | 'openrouter' | 'gemini' | 'groq';
 
 export interface OmniConfig {
   provider: OmniProviderId;
@@ -12,7 +12,26 @@ export interface OmniConfig {
   ollamaBaseUrl: string;
   botName: string;
   language: string;
+  autoApproveTools: boolean;
 }
+
+export interface ProviderInfo {
+  id: OmniProviderId;
+  label: string;
+  keyEnv: string;
+  baseUrl: string;
+  free: boolean;
+  signup: string;
+}
+
+export const PROVIDERS: ProviderInfo[] = [
+  { id: 'openrouter', label: 'OpenRouter (darmowe modele)', keyEnv: 'OPENROUTER_API_KEY', baseUrl: 'https://openrouter.ai/api/v1', free: true, signup: 'https://openrouter.ai/keys' },
+  { id: 'gemini', label: 'Google AI Studio (Gemini, darmowy)', keyEnv: 'GEMINI_API_KEY', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/', free: true, signup: 'https://aistudio.google.com/apikey' },
+  { id: 'groq', label: 'Groq (darmowy i bardzo szybki)', keyEnv: 'GROQ_API_KEY', baseUrl: 'https://api.groq.com/openai/v1', free: true, signup: 'https://console.groq.com/keys' },
+  { id: 'ollama', label: 'Lokalnie (Ollama, bez klucza)', keyEnv: '', baseUrl: 'http://127.0.0.1:11434/v1', free: true, signup: '' },
+];
+
+export const KEY_OPENROUTER = 'OPENROUTER_API_KEY';
 
 export interface ModelPreset {
   provider: OmniProviderId;
@@ -21,15 +40,16 @@ export interface ModelPreset {
   note: string;
 }
 
-export const KEY_OPENROUTER = 'OPENROUTER_API_KEY';
-
 export const MODEL_PRESETS: ModelPreset[] = [
-  { provider: 'openrouter', id: 'qwen/qwen-2.5-72b-instruct:free', label: 'Qwen 2.5 72B - darmowy', note: 'Bardzo mocny, darmowy w OpenRouter' },
-  { provider: 'openrouter', id: 'deepseek/deepseek-chat-v3.1:free', label: 'DeepSeek V3.1 - darmowy', note: 'Swietny do rozmowy i kodu' },
-  { provider: 'openrouter', id: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B - darmowy', note: 'Uniwersalny, darmowy' },
-  { provider: 'openrouter', id: 'qwen/qwen-2.5-coder-32b-instruct:free', label: 'Qwen 2.5 Coder 32B - darmowy', note: 'Do kodu' },
-  { provider: 'ollama', id: 'qwen2.5:1.5b', label: 'Qwen 2.5 1.5B - lokalny', note: 'Lekki, dziala offline' },
-  { provider: 'ollama', id: 'qwen2.5:7b', label: 'Qwen 2.5 7B - lokalny', note: 'Lepszy, wymaga ok. 5 GB RAM' },
+  { provider: 'openrouter', id: 'qwen/qwen-2.5-72b-instruct:free', label: 'Qwen 2.5 72B - darmowy', note: 'Bardzo mocny' },
+  { provider: 'openrouter', id: 'deepseek/deepseek-chat-v3.1:free', label: 'DeepSeek V3.1 - darmowy', note: 'Rozmowa i kod' },
+  { provider: 'openrouter', id: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B - darmowy', note: 'Uniwersalny' },
+  { provider: 'gemini', id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash - darmowy', note: 'Szybki, darmowy limit' },
+  { provider: 'gemini', id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite', note: 'Najszybszy' },
+  { provider: 'groq', id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (Groq)', note: 'Bardzo szybki' },
+  { provider: 'groq', id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (Groq)', note: 'Blyskawiczny' },
+  { provider: 'ollama', id: 'qwen2.5:1.5b', label: 'Qwen 2.5 1.5B - lokalny', note: 'Offline, slabszy' },
+  { provider: 'ollama', id: 'qwen2.5:7b', label: 'Qwen 2.5 7B - lokalny', note: 'Wymaga ok. 5 GB RAM' },
 ];
 
 const DEFAULTS: OmniConfig = {
@@ -39,7 +59,13 @@ const DEFAULTS: OmniConfig = {
   ollamaBaseUrl: 'http://127.0.0.1:11434/v1',
   botName: 'Omni',
   language: 'pl',
+  autoApproveTools: true,
 };
+
+export function providerInfo(id: string): ProviderInfo {
+  for (const p of PROVIDERS) { if (p.id === id) return p; }
+  return PROVIDERS[PROVIDERS.length - 1];
+}
 
 export class ConfigStore {
   private readonly dir: string;
@@ -70,57 +96,78 @@ export class ConfigStore {
   }
 
   public applyToEnv(): void {
+    const info = providerInfo(this.config.provider);
     process.env.OMNI_LLM_PROVIDER = this.config.provider;
     process.env.OMNI_LLM_MODEL = this.config.model;
     process.env.OMNI_LLM_MODEL_PRO = this.config.modelPro;
     process.env.OLLAMA_BASE_URL = this.config.ollamaBaseUrl;
-    const key = this.secrets.getSecret(KEY_OPENROUTER);
-    if (key && key.length > 8) {
-      process.env.OPENROUTER_API_KEY = key;
+    process.env.OMNI_LLM_BASE_URL = info.baseUrl;
+    for (const p of PROVIDERS) {
+      if (!p.keyEnv) continue;
+      const value = this.secrets.getSecret(p.keyEnv);
+      if (value && value.length > 8) {
+        process.env[p.keyEnv] = value;
+      }
     }
+    const activeKey = info.keyEnv ? this.secrets.getSecret(info.keyEnv) : '';
+    process.env.OMNI_LLM_API_KEY = (activeKey && activeKey.length > 8) ? activeKey : 'ollama';
   }
 
   public get(): OmniConfig {
     return Object.assign({}, this.config);
   }
 
-  public hasOpenRouterKey(): boolean {
-    const key = this.secrets.getSecret(KEY_OPENROUTER);
+  public hasKeyFor(id: string): boolean {
+    const info = providerInfo(id);
+    if (!info.keyEnv) return true;
+    const key = this.secrets.getSecret(info.keyEnv);
     return !!key && key.length > 8;
+  }
+
+  public hasOpenRouterKey(): boolean {
+    return this.hasKeyFor('openrouter');
   }
 
   public keyNames(): string[] {
     try { return this.secrets.listSecrets(); } catch (error) { return []; }
   }
 
-  public snapshot(): OmniConfig {
-    return this.get();
-  }
-
   public async save(patch: any, apiKeys?: Record<string, string>): Promise<OmniConfig> {
     const next: OmniConfig = Object.assign({}, this.config);
-    if (patch.provider === 'ollama' || patch.provider === 'openrouter') next.provider = patch.provider;
+    if (patch.provider && providerInfo(patch.provider).id === patch.provider) next.provider = patch.provider;
     if (typeof patch.model === 'string' && patch.model.trim()) next.model = patch.model.trim();
     if (typeof patch.modelPro === 'string' && patch.modelPro.trim()) next.modelPro = patch.modelPro.trim();
     if (typeof patch.ollamaBaseUrl === 'string' && patch.ollamaBaseUrl.trim()) next.ollamaBaseUrl = patch.ollamaBaseUrl.trim();
     if (typeof patch.botName === 'string' && patch.botName.trim()) next.botName = patch.botName.trim();
     if (typeof patch.language === 'string' && patch.language.trim()) next.language = patch.language.trim();
-    if (next.provider === 'openrouter' && next.model.indexOf(':free') === -1 && next.model.indexOf('/') === -1) {
-      next.model = 'qwen/qwen-2.5-72b-instruct:free';
-    }
-    this.config = next;
-    try {
-      fs.mkdirSync(this.dir, { recursive: true });
-      fs.writeFileSync(this.file, JSON.stringify(this.config, null, 2), 'utf8');
-    } catch (error) {
-      throw new Error('Nie udalo sie zapisac konfiguracji: ' + String(error));
-    }
+    if (typeof patch.autoApproveTools === 'boolean') next.autoApproveTools = patch.autoApproveTools;
+
     const incoming = apiKeys || {};
     for (const name of Object.keys(incoming)) {
       const value = String(incoming[name] || '').trim();
       if (value.length < 8) continue;
       if (value.indexOf('...') !== -1) continue;
       await this.secrets.setSecret(name, value);
+    }
+
+    const chosen = providerInfo(next.provider);
+    if (chosen.keyEnv && !this.hasKeyFor(next.provider)) {
+      // brak klucza dla wybranego dostawcy - zostan lokalnie, zeby bot dalej dzialal
+      next.provider = 'ollama';
+      next.model = 'qwen2.5:1.5b';
+      next.modelPro = 'qwen2.5:1.5b';
+    }
+    if (next.provider !== 'ollama' && next.model.indexOf('/') === -1 && next.model.indexOf('gemini') === -1 && next.model.indexOf('llama') === -1) {
+      const first = MODEL_PRESETS.filter((m) => m.provider === next.provider)[0];
+      if (first) { next.model = first.id; next.modelPro = first.id; }
+    }
+
+    this.config = next;
+    try {
+      fs.mkdirSync(this.dir, { recursive: true });
+      fs.writeFileSync(this.file, JSON.stringify(this.config, null, 2), 'utf8');
+    } catch (error) {
+      throw new Error('Nie udalo sie zapisac konfiguracji: ' + String(error));
     }
     this.applyToEnv();
     this.clock = Date.now();
@@ -129,7 +176,8 @@ export class ConfigStore {
 
   public async removeKey(name: string): Promise<void> {
     await this.secrets.deleteSecret(name);
-    if (name === KEY_OPENROUTER) delete process.env.OPENROUTER_API_KEY;
+    delete process.env[name];
+    this.applyToEnv();
   }
 
   public lastSavedAt(): number { return this.clock; }

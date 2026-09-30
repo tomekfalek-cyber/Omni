@@ -7,7 +7,7 @@ import cors from 'cors';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import { WEB_UI_HTML } from './web-ui.js';
-import { ConfigStore, KEY_OPENROUTER, MODEL_PRESETS } from './config-store.js';
+import { ConfigStore, KEY_OPENROUTER, MODEL_PRESETS, PROVIDERS } from './config-store.js';
 
 const OPENROUTER_AUTH_URL = 'https://openrouter.ai/auth';
 const OPENROUTER_KEYS_URL = 'https://openrouter.ai/api/v1/auth/keys';
@@ -36,6 +36,7 @@ export class OmniGateway {
     this.httpServer = createServer(this.app);
     this.wss = new WebSocketServer({ server: this.httpServer, path: '/ws' });
     this.swarm = new SwarmManager();
+    this.wireApprovals();
 
     this.setupWebUI();
     this.setupREST();
@@ -45,6 +46,30 @@ export class OmniGateway {
     this.httpServer.listen(port, host, () => {
       console.log('[Gateway] Omni Gateway uruchomiony na ' + host + ':' + port);
       console.log('[Gateway] Panel, klucze API i OAuth gotowe.');
+    });
+  }
+
+  private wireApprovals() {
+    try {
+      const approvals: any = this.swarm.getApprovalManager();
+      approvals.on('approval_required', (req: any) => {
+        const cfg = this.config.get();
+        if (cfg.autoApproveTools) {
+          console.log('[Gateway] Auto-zatwierdzono narzedzie: ' + req.toolName);
+          approvals.respondToApproval(req.callId, true);
+        } else {
+          this.broadcast({ type: 'approval.required', callId: req.callId, toolName: req.toolName, args: req.args });
+        }
+      });
+    } catch (error) {
+      console.log('[Gateway] Nie udalo sie podlaczyc zatwierdzen: ' + String(error));
+    }
+  }
+
+  private broadcast(payload: any) {
+    const text = JSON.stringify(payload);
+    this.sessions.forEach((s) => {
+      try { if (s.ws.readyState === 1) s.ws.send(text); } catch (error) { }
     });
   }
 
@@ -93,6 +118,9 @@ export class OmniGateway {
       keyNames: this.config.keyNames(),
       sessions: this.sessions.size,
       presets: MODEL_PRESETS,
+      providers: PROVIDERS,
+      autoApproveTools: cfg.autoApproveTools,
+      tools: this.swarm.listTools(),
       node: process.version,
     };
   }
