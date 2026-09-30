@@ -1,0 +1,31 @@
+[package]
+name = "omni-desktop"
+version = "1.0.0"
+description = "Omni AI Agent - Desktop Application"
+authors = ["Omni Team"]
+license = "MIT"
+repository = ""
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.5", features = [
+  "shell-open",
+  "system-tray",
+  "window-all",
+  "notification-all"
+] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+tokio-tungstenite = "0.20"
+futures-util = "0.3"
+reqwest = { version = "0.11", features = ["json", "stream"] }
+hound = "3.5" # Do nagrywania audio WAV
+cpal = "0.15" # Do przechwytywania mikrofonu
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
