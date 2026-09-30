@@ -29,6 +29,29 @@ export class SwarmManager {
     this.tools = new ToolRegistry();
   }
 
+  /** Przebudowuje silniki po zmianie klucza, dostawcy lub modelu w panelu. */
+  public reconfigure(): void {
+    const provider = (process.env.OMNI_LLM_PROVIDER as any) || 'ollama';
+    const defaultFlash = provider === 'ollama' ? 'qwen2.5:1.5b' : 'qwen/qwen-2.5-7b-instruct:free';
+    const defaultPro = provider === 'ollama' ? 'qwen2.5:1.5b' : 'qwen/qwen-2.5-coder-32b-instruct:free';
+    const modelFlash = process.env.OMNI_LLM_MODEL || defaultFlash;
+    const modelPro = process.env.OMNI_LLM_MODEL_PRO || modelFlash;
+
+    this.planner = new QwenProvider({ provider, model: modelFlash, temperature: 0.7, maxTokens: 2000 });
+    this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 4000 });
+    this.reviewer = new QwenProvider({ provider, model: modelPro, temperature: 0.1, maxTokens: 2000 });
+    this.evolver = new QwenProvider({ provider, model: modelFlash, temperature: 0.8, maxTokens: 3000 });
+  }
+
+  /** Krotkie zapytanie testowe do aktualnie ustawionego silnika. */
+  public async ping(prompt: string): Promise<string> {
+    const messages: any = [
+      { role: 'system', content: 'Odpowiadaj krotko i po polsku.' },
+      { role: 'user', content: prompt },
+    ];
+    return this.executor.getCompletion(messages);
+  }
+
   public registerTool(tool: any) {
     this.tools.register(tool);
   }
