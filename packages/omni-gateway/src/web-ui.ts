@@ -200,6 +200,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
           <label class="lbl">Nazwa bota</label><input type="text" id="botName" />
           <label class="lbl">Jezyk</label><select id="lang"><option value="pl">Polski</option><option value="en">English</option></select>
           <label class="lbl">Motyw</label><select id="theme"><option value="dark">Ciemny</option><option value="light">Jasny</option></select>
+          <label class="lbl">Katalog roboczy bota (do niego ma dostep)</label><input type="text" id="workspaceDir" placeholder="/home/openclaw" />
           <label class="lbl">Narzedzia</label>
           <label class="opt"><input type="checkbox" id="autoApprove" /><div><b>Automatycznie zatwierdzaj narzedzia</b><span>Bot sam wykonuje komendy, czyta i zapisuje pliki oraz robi commity.</span></div></label>
           <div class="row"><button class="btn primary" id="saveSettings">Zapisz ustawienia</button></div>
@@ -273,6 +274,7 @@ function fillConfig(c){
   el("modelPro").value = c.modelPro;
   el("ollamaUrl").value = c.ollamaBaseUrl;
   el("botName").value = c.botName || "Omni";
+  if(el("workspaceDir")){ el("workspaceDir").value = c.workspaceDir || "/home/openclaw"; }
   el("lang").value = c.language || "pl";
   if(el("autoApprove")){ el("autoApprove").checked = c.autoApproveTools !== false; }
   el("userName").textContent = "Wlasciciel";
@@ -484,6 +486,7 @@ function collect(){
     }
   }
   if(el("autoApprove")){ body.autoApproveTools = !!el("autoApprove").checked; }
+  if(el("workspaceDir")){ body.workspaceDir = (el("workspaceDir").value || "").trim(); }
   return body;
 }
 function saveConfig(){

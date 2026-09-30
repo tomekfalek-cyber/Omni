@@ -40,6 +40,7 @@ export class OmniGateway {
     this.wss = new WebSocketServer({ server: this.httpServer, path: '/ws' });
     this.swarm = new SwarmManager();
     this.voice = new VoiceManager();
+    this.swarm.workspaceCwd = this.config.get().workspaceDir;
     this.wireApprovals();
 
     this.setupWebUI();
@@ -125,6 +126,7 @@ export class OmniGateway {
       providers: PROVIDERS,
       autoApproveTools: cfg.autoApproveTools,
       tools: this.swarm.listTools(),
+      workspaceDir: cfg.workspaceDir,
       voice: cfg.voice,
       voiceRate: cfg.voiceRate,
       voiceAutoRead: cfg.voiceAutoRead,
@@ -155,6 +157,7 @@ export class OmniGateway {
       try {
         const body = req.body || {};
         await this.config.save(body, body.apiKeys);
+        this.swarm.workspaceCwd = this.config.get().workspaceDir;
         this.swarm.reconfigure();
         res.json({ ok: true, config: this.config.get() });
       } catch (error: any) {
@@ -238,7 +241,7 @@ export class OmniGateway {
       if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
 
       const activeSessionId = sessionId || uuidv4();
-      const safeCwd = cwd || process.cwd();
+      const safeCwd = cwd || this.config.get().workspaceDir;
 
       try {
         const task = await this.swarm.executeTask(activeSessionId, prompt, safeCwd);
@@ -311,7 +314,7 @@ export class OmniGateway {
   private setupWebSocket() {
     this.wss.on('connection', (ws: WebSocket) => {
       const sessionId = uuidv4();
-      this.sessions.set(sessionId, { ws, cwd: process.cwd(), startedAt: Date.now() });
+      this.sessions.set(sessionId, { ws, cwd: this.config.get().workspaceDir, startedAt: Date.now() });
       console.log('[Gateway] Nowa sesja WebSocket: ' + sessionId);
 
       ws.send(JSON.stringify({ type: 'auth.ok', sessionId }));

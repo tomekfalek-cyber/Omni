@@ -10,6 +10,7 @@ export class SwarmManager {
   private reviewer: QwenProvider;
   private evolver: QwenProvider;
   private memory: OmniMemory;
+  public workspaceCwd: string = process.cwd();
   private tools: ToolRegistry;
 
   constructor() {
@@ -184,7 +185,7 @@ export class SwarmManager {
       let usedTools = false;
       const toolSchemas = this.toolSchemas();
       const messages: any[] = [
-        { role: 'system', content: 'Jestes Executorem z realnymi narzedziami. Katalog roboczy: ' + cwd + '. Uzywaj narzedzi, gdy potrzebujesz danych z komputera lub z internetu. Nigdy nie zmyslaj wynikow. Gdy masz juz dane, odpowiedz po polsku.' },
+        { role: 'system', content: this.capabilities(cwd) },
         { role: 'user', content: 'Zadanie: ' + prompt + '\nPlan:\n' + plan },
       ];
 
@@ -258,9 +259,26 @@ export class SwarmManager {
     return task;
   }
 
+  /** Realne mozliwosci bota - wstrzykiwane do promptow, zeby nie zmyslal ograniczen. */
+  private capabilities(cwd: string): string {
+    const NL = String.fromCharCode(10);
+    const tools = this.tools.getAllDefinitions().map((t: any) => '- ' + t.name + ': ' + t.description).join(NL);
+    const now = new Date().toISOString().slice(0, 10);
+    return [
+      'Jestes Omni - osobisty asystent AI dzialajacy na komputerze uzytkownika. Dzisiejsza data: ' + now + '.',
+      'Katalog roboczy: ' + cwd + '.',
+      'MASZ NARZEDZIA - uzywaj ich zamiast mowic, ze czegos nie potrafisz:',
+      tools,
+      'MASZ DOSTEP DO INTERNETU (web_search, web_fetch). Mozesz sprawdzac biezace informacje, wiadomosci i strony. NIE twierdz, ze nie wiesz co sie dzialo po 2024 roku - po prostu wyszukaj.',
+      'MASZ PAMIEC TRWALA (memory_save, memory_search) - zapisuj wazne ustalenia i preferencje uzytkownika.',
+      'MASZ DOSTEP DO PLIKOW i POWLOKI na tym komputerze.',
+      'ZASADY: nigdy nie zmyslaj danych. Gdy brakuje informacji - uzyj narzedzia. Gdy narzedzie zawiedzie - powiedz wprost co sie stalo. Odpowiadaj po polsku, konkretnie, bez zbednych zastrzezen i bez wyliczania wlasnych ograniczen.',
+    ].join(NL);
+  }
   private async runPlanner(prompt: string): Promise<string> {
+    const cwd = this.workspaceCwd;
     const messages = [
-      { role: 'system' as const, content: 'Jesteś Plannerem. Twoim zadaniem jest rozbić złożone polecenie użytkownika na maksymalnie 5 prostych, wykonywalnych kroków. Zwróć tylko listę kroków w formacie Markdown.' },
+      { role: 'system' as const, content: this.capabilities(this.workspaceCwd) + String.fromCharCode(10) + 'Jestes Plannerem: rozbij zadanie uzytkownika na maksymalnie 5 prostych, wykonywalnych krokow. Zwroc tylko liste krokow w formacie Markdown.' },
       { role: 'user' as const, content: prompt }
     ];
     return await this.planner.getCompletion(messages);

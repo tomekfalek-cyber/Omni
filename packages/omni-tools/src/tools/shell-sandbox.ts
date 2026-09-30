@@ -42,7 +42,7 @@ export class ShellSandbox {
     return [
       {
         name: 'shell_exec',
-        description: 'Wykonuje polecenie powłoki w bezpiecznym, odizolowanym kontenerze Docker. WYMAGA zatwierdzenia.',
+        description: 'Wykonuje polecenie powloki na komputerze uzytkownika (w katalogu roboczym). WYMAGA zatwierdzenia.',
         parameters: { command: 'string' },
         requiresApproval: true,
         timeoutMs: 30000,
