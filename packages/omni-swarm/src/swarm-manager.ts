@@ -43,7 +43,7 @@ export class SwarmManager {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       iterations: 0,
-      maxIterations: 10,
+      maxIterations: Number(process.env.OMNI_MAX_ITERATIONS ?? 5),
       currentAgent: 'planner',
     };
 
@@ -56,19 +56,27 @@ export class SwarmManager {
 
       // KROK 2: Executor wykonuje kroki
       let executionResult = '';
+      let draftAnswer = '';
       for (let i = 0; i < task.maxIterations; i++) {
         task.iterations = i + 1;
         const action = await this.runExecutor(plan, executionResult, cwd);
         
+        const cleanedAction = action.replace(/\[\[(DONE|APPROVED|REJECTED)\]\]/g, '').trim();
+        if (cleanedAction) draftAnswer = cleanedAction;
+
         if (action.includes('[[DONE]]')) {
-          executionResult = action;
+          break;
+        }
+
+        // Brak wywołań narzędzi = to jest odpowiedź końcowa (szybka ścieżka dla pytań).
+        if (!action.includes('[[CALL_TOOL')) {
           break;
         }
 
         // KROK 3: Reviewer weryfikuje
-        const review = await this.runReviewer(action, cwd);
+        const review = await this.runReviewer(prompt, plan, action, cwd);
         if (review.includes('[[APPROVED]]')) {
-          executionResult += '\n' + action;
+          break;
         } else {
           executionResult += '\n[REJECTED BY REVIEWER]: ' + review + '\nSpróbuj ponownie.';
         }
@@ -78,7 +86,8 @@ export class SwarmManager {
       await this.runEvolver(prompt, executionResult);
 
       task.status = 'completed';
-      task.result = executionResult;
+      // Odpowiedź wykonawcy jest ważniejsza niż marudzenie reviewera.
+      task.result = draftAnswer || executionResult;
       this.memory.appendTranscript(sessionId, 'system', `Task completed: ${taskId}`);
     } catch (error: any) {
       task.status = 'failed';
@@ -106,10 +115,10 @@ export class SwarmManager {
     return await this.executor.getCompletion(messages);
   }
 
-  private async runReviewer(action: string, cwd: string): Promise<string> {
+  private async runReviewer(originalPrompt: string, plan: string, action: string, cwd: string): Promise<string> {
     const messages = [
-      { role: 'system' as const, content: 'Jesteś Reviewerem. Sprawdź, czy akcja jest bezpieczna i poprawna. Jeśli tak, odpowiedz [[APPROVED]]. Jeśli nie, odpowiedz [[REJECTED]] i podaj powód.' },
-      { role: 'user' as const, content: `Akcja do weryfikacji:\n${action}` }
+      { role: 'system' as const, content: 'Jesteś Reviewerem. Oceniasz odpowiedź W KONTEKŚCIE zadania użytkownika. Proste odpowiedzi na pytania ZATWIERDZAJ. Jeśli naprawdę trzeba coś poprawić, odpowiedz [[REJECTED]] i podaj konkretny powód. Przy braku zastrzeżeń odpowiedz dokładnie [[APPROVED]].' },
+      { role: 'user' as const, content: `Zadanie użytkownika:\n${originalPrompt}\n\nPlan:\n${plan}\n\nDo oceny:\n${action}\n\nKatalog roboczy: ${cwd}` }
     ];
     return await this.reviewer.getCompletion(messages);
   }
