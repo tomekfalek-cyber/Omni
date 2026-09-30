@@ -112,6 +112,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       <button class="nav-item" data-page="engines"><span class="ico">S</span>Silniki</button>
       <button class="nav-item" data-page="voice"><span class="ico">G</span>Glos</button>
       <button class="nav-item" data-page="integrations"><span class="ico">I</span>Integracje</button>
+      <button class="nav-item" data-page="costs"><span class="ico">$</span>Koszty</button>
       <button class="nav-item" data-page="settings"><span class="ico">U</span>Ustawienia</button>
       <div class="nav-group">Praca</div>
       <button class="nav-item" data-page="sessions"><span class="ico">S</span>Sesje</button>
@@ -280,6 +281,15 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       </div>
     </section>
 
+    <section class="page hidden" id="page-costs">
+      <div class="grid">
+        <div class="card" id="costsCard">
+          <h2>Koszty</h2>
+          <div class="mut">sprawdzam...</div>
+        </div>
+      </div>
+    </section>
+
     <section class="page hidden" id="page-settings">
       <div class="grid">
         <div class="card">
@@ -341,7 +351,7 @@ function api(path, opts){
   });
 }
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>]/g, function(c){ return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; }); }
-var TITLES = { chat:"Czat", keys:"Modele i klucze API", engines:"Silniki", voice:"Glos", integrations:"Integracje", sessions:"Sesje", tasks:"Zadania", automations:"Automatyzacje", settings:"Ustawienia", status:"Status i diagnostyka" };
+var TITLES = { chat:"Czat", keys:"Modele i klucze API", engines:"Silniki", voice:"Glos", integrations:"Integracje", costs:"Koszty", sessions:"Sesje", tasks:"Zadania", automations:"Automatyzacje", settings:"Ustawienia", status:"Status i diagnostyka" };
 function show(page){
   var pages = document.querySelectorAll(".page");
   for(var i=0;i<pages.length;i++){ pages[i].className = "page hidden"; }
@@ -353,7 +363,7 @@ function show(page){
   if(page === "engines"){ renderEngines(); }
   if(page === "automations"){ loadAutomations(); }
   if(page === "integrations"){ loadIntegrations(); }
-  if(page === "status"){ loadCosts(); }
+  if(page === "costs"){ loadCosts(); }
   if(page === "voice"){ renderVoices(); }
   if(page === "sessions"){ loadSessions(); }
   if(page === "tasks"){ loadTasks(); }
@@ -578,14 +588,8 @@ function loadCosts(){
   return api("/api/costs").then(function(d){ renderCosts(d); }).catch(function(){});
 }
 function renderCosts(d){
-  var page = document.getElementById("page-status");
-  if(!page){ return; }
-  var old = document.getElementById("costsCard");
-  if(old){ old.remove(); }
-  var card = document.createElement("div");
-  card.id = "costsCard";
-  card.className = "card";
-  card.style.marginTop = "14px";
+  var card = document.getElementById("costsCard");
+  if(!card){ return; }
   var html = "<h2>Koszty - nic nie placisz</h2>";
   html += "<div class=mut>Aktywny silnik: <b>" + esc(d.provider || "-") + "</b> / <b>" + esc(d.model || "-") + "</b>";
   html += d.free ? " <span class=badge ok>DARMOWY</span>" : " <span class=badge err>PLATNY</span>";
@@ -600,7 +604,6 @@ function renderCosts(d){
   html += "</div>";
   html += "<div class=mut style='margin-top:8px'>Omni nie wysyla niczego do platnych uslug: model (Groq), glos (Edge TTS/Piper), obrazki (Pollinations), szukanie (Wikipedia/Google News/CoinGecko), integracje (Twoje darmowe konta) - wszystko bez oplat.</div>";
   card.innerHTML = html;
-  page.appendChild(card);
 }
 function startVersionWatch(){
   var check = function(){
