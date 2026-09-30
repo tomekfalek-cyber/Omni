@@ -12,7 +12,7 @@ export class OmniGateway {
   private swarm: SwarmManager;
   private sessions: Map<string, { ws: WebSocket, cwd: string }> = new Map();
 
-  constructor(port: number = 7800) {
+  constructor(port: number = 7800, host: string = '127.0.0.1') {
     this.app = express();
     this.app.use(cors());
     this.app.use(express.json());
@@ -23,8 +23,8 @@ export class OmniGateway {
     this.setupREST();
     this.setupWebSocket();
     
-    this.httpServer.listen(port, () => {
-      console.log(`[Gateway] Omni Gateway uruchomiony na porcie ${port}`);
+    this.httpServer.listen(port, host, () => {
+      console.log(`[Gateway] Omni Gateway uruchomiony na ${host}:${port}`);
       console.log(`[Gateway] Dostępne endpointy: /health, /api/tasks`);
     });
   }

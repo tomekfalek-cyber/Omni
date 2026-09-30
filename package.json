@@ -17,7 +17,9 @@
     "lint": "turbo run lint",
     "typecheck": "tsc -b tsconfig.build.json",
     "format": "prettier --write .",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "start": "node --env-file=.env packages/omni-gateway/dist/main.js",
+    "start:gateway": "node --env-file=.env packages/omni-gateway/dist/main.js"
   },
   "devDependencies": {
     "@types/node": "^22.5.0",
