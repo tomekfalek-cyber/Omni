@@ -459,8 +459,9 @@ export class SwarmManager {
       }
 
 
-      const denialWords = ['nie mam dostepu', 'nie posiadam', 'sprawdz na stron', 'sprawdz sam', 'nie mam wiedzy', 'nie moge sprawdzic', 'nie jestem w stanie sprawdzic', 'nie mam informacji', 'moja wiedza konczy', 'poszukaj na'];
-      const lowerAnswer = String(draftAnswer || '').toLowerCase();
+      const norm = (s: string) => String(s).toLowerCase().split(String.fromCharCode(261)).join("a").split(String.fromCharCode(263)).join("c").split(String.fromCharCode(281)).join("e").split(String.fromCharCode(322)).join("l").split(String.fromCharCode(324)).join("n").split(String.fromCharCode(243)).join("o").split(String.fromCharCode(347)).join("s").split(String.fromCharCode(378)).join("z").split(String.fromCharCode(380)).join("z");
+      const denialWords = ['nie mam dostepu', 'nie posiadam', 'nie mam wiedzy', 'nie moge podac aktualnej', 'nie moge sprawdzic', 'nie moge udzielic', 'nie jestem w stanie sprawdzic', 'nie mam informacji', 'moja wiedza konczy', 'sprawdz na stron', 'sprawdz sam', 'otworz jedna z', 'poszukaj na', 'skorzystaj z serwis'];
+      const lowerAnswer = norm(draftAnswer);
       let denied = false;
       for (const dw of denialWords) { if (lowerAnswer.indexOf(dw) !== -1) { denied = true; break; } }
       if (denied) {
