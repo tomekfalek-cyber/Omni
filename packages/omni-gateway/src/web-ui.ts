@@ -63,8 +63,6 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
 /* Widok na telefonie: menu poziomo, czat na caly ekran */
 @media (max-width: 860px){
   html,body{height:auto}
-  .t WEB_UI_HTML = `
-<!doctype html>
   #app{flex-direction:column !important;height:100dvh}
   .sidebar{width:100% !important;flex:0 0 auto !important;border-right:0;border-bottom:1px solid #1e2a3a;padding:8px}
   .nav{flex:0 0 auto !important;flex-direction:row !important;overflow-x:auto;overflow-y:hidden;gap:6px;padding-bottom:4px}
