@@ -14,8 +14,11 @@ export class SwarmManager {
 
   constructor() {
     const provider = (process.env.OMNI_LLM_PROVIDER as any) || 'ollama';
-    const modelFlash = provider === 'ollama' ? 'qwen2.5:7b' : 'qwen/qwen-2.5-7b-instruct:free';
-    const modelPro = provider === 'ollama' ? 'qwen2.5:14b' : 'qwen/qwen-2.5-coder-32b-instruct:free';
+    // Konfigurowalne przez .env — domyślnie model mieszczący się na słabym sprzęcie.
+    const defaultFlash = provider === 'ollama' ? 'qwen2.5:1.5b' : 'qwen/qwen-2.5-7b-instruct:free';
+    const defaultPro = provider === 'ollama' ? 'qwen2.5:1.5b' : 'qwen/qwen-2.5-coder-32b-instruct:free';
+    const modelFlash = process.env.OMNI_LLM_MODEL || defaultFlash;
+    const modelPro = process.env.OMNI_LLM_MODEL_PRO || modelFlash;
 
     this.planner = new QwenProvider({ provider, model: modelFlash, temperature: 0.7, maxTokens: 2000 });
     this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 4000 });

@@ -53,7 +53,8 @@ export class Evolver {
     };
 
     const provider = (process.env.OMNI_LLM_PROVIDER as any) || 'ollama';
-    const model = provider === 'ollama' ? 'qwen2.5:7b' : 'qwen/qwen-2.5-7b-instruct:free';
+    const model = process.env.OMNI_LLM_MODEL
+      || (provider === 'ollama' ? 'qwen2.5:1.5b' : 'qwen/qwen-2.5-7b-instruct:free');
     
     this.analyzer = new QwenProvider({
       provider,
