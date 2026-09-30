@@ -119,8 +119,10 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
         <div class="chat-log" id="chatLog"></div>
         <div class="composer">
           <textarea id="chatInput" rows="2" placeholder="Napisz wiadomosc i nacisnij Enter (Shift+Enter = nowa linia)"></textarea>
+          <button class="btn" id="micBtn" title="Rozmowa glosowa">MOW</button>
           <button class="btn primary" id="sendBtn">Wyslij</button>
         </div>
+        <div class="chat-hint" id="voiceHint">Rozmowa glosowa: kliknij MOW i mow</div>
       </div>
     </section>
 
@@ -177,6 +179,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
           <label class="lbl">Wybierz glos</label><select id="voiceSelect"></select>
           <label class="lbl">Tempo mowy</label><select id="voiceRate"><option value="-20%">Wolniej (-20%)</option><option value="+0%">Normalnie</option><option value="+20%">Szybciej (+20%)</option></select>
           <label class="opt"><input type="checkbox" id="voiceAuto" /><div><b>Czytaj odpowiedzi na glos</b><span>Bot odczyta kazda odpowiedz.</span></div></label>
+          <label class="opt"><input type="checkbox" id="voiceHandsFree" /><div><b>Tryb rozmowy (hands-free)</b><span>Po odpowiedzi bot znowu slucha - rozmawiasz jak przez telefon.</span></div></label>
           <div class="row"><button class="btn primary" id="voiceSave">Zapisz glos</button><button class="btn" id="voiceTest">Posluchaj</button></div>
           <audio id="voicePlayer" controls style="width:100%;margin-top:12px"></audio>
         </div>
@@ -363,6 +366,7 @@ function renderVoices(){
   sel.value = (state.config && state.config.voice) || "pl-PL-MarekNeural";
   if(el("voiceRate")){ el("voiceRate").value = (state.config && state.config.voiceRate) || "+0%"; }
   if(el("voiceAuto")){ el("voiceAuto").checked = !!(state.config && state.config.voiceAutoRead); }
+  if(el("voiceHandsFree")){ el("voiceHandsFree").checked = !!(state.config && state.config.voiceHandsFree); }
   var eng = (state.status && state.status.voiceEngines) || {};
   el("voiceEngines").innerHTML = "Edge TTS: " + (eng.edge ? "<span class=badge ok>dziala</span>" : "<span class=badge err>brak</span>") + " &middot; Piper (wlasne glosy): " + (eng.piper ? "<span class=badge ok>dziala</span>" : "<span class=badge err>brak</span>");
 }
@@ -372,7 +376,7 @@ function speakText(text){
     .catch(function(e){ toast("Blad glosu: " + e.message, "err"); });
 }
 function saveVoice(){
-  var body = { voice: el("voiceSelect").value, voiceRate: el("voiceRate").value, voiceAutoRead: !!el("voiceAuto").checked };
+  var body = { voice: el("voiceSelect").value, voiceRate: el("voiceRate").value, voiceAutoRead: !!el("voiceAuto").checked, voiceHandsFree: !!el("voiceHandsFree").checked };
   api("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
     .then(function(){ toast("Glos zapisany.", "ok"); return loadStatus(); })
     .then(function(){ return loadConfig(); })
@@ -440,7 +444,7 @@ function sendMessage(){
     addMsg("sys", "mysle...");
   } else {
     api("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: text }) })
-      .then(function(t){ addMsg("bot", t.result || "(brak tresci)"); state.pending = false; })
+      .then(function(t){ var ans = t.result || "(brak tresci)"; addMsg("bot", ans); state.pending = false; afterBotAnswer(ans); })
       .catch(function(e){ addMsg("sys", "Blad: " + e.message); state.pending = false; });
   }
 }
@@ -462,6 +466,53 @@ function md(text){
     out += seg;
   }
   return out;
+}
+function initMic(){
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    el("micBtn").disabled = true;
+    el("micBtn").title = "Ta przegladarka nie obsluguje mikrofonu - uzyj Chrome";
+    if(el("voiceHint")){ el("voiceHint").textContent = "Rozmowa glosowa: uzyj Chrome"; }
+    return;
+  }
+  var r = new SR();
+  r.lang = "pl-PL";
+  r.continuous = false;
+  r.interimResults = true;
+  r.onresult = function(ev){
+    var text = "";
+    for(var i = ev.resultIndex; i < ev.results.length; i++){ text += ev.results[i][0].transcript; }
+    el("chatInput").value = text;
+    if(ev.results[ev.results.length - 1].isFinal){
+      state.listening = false;
+      el("micBtn").textContent = "MOW";
+      sendMessage();
+    }
+  };
+  r.onend = function(){ state.listening = false; el("micBtn").textContent = "MOW"; };
+  r.onerror = function(e){ state.listening = false; el("micBtn").textContent = "MOW"; toast("Mikrofon: " + e.error, "err"); };
+  state.recog = r;
+}
+function toggleMic(){
+  if(!state.recog){ initMic(); }
+  if(!state.recog){ return; }
+  if(state.listening){ try { state.recog.stop(); } catch(e){} return; }
+  state.listening = true;
+  el("micBtn").textContent = "STOP";
+  if(el("voiceHint")){ el("voiceHint").textContent = "Slucham... mow teraz"; }
+  try { state.recog.start(); } catch(e){ state.listening = false; el("micBtn").textContent = "MOW"; }
+}
+function afterBotAnswer(text){
+  var cfg = state.config || {};
+  if(cfg.voiceHandsFree){
+    speakText(text);
+    var wait = 3500 + String(text || "").length * 70;
+    setTimeout(function(){ if(state.config && state.config.voiceHandsFree && !state.pending){ toggleMic(); } }, wait);
+    if(el("voiceHint")){ el("voiceHint").textContent = "Tryb rozmowy wlaczony - mow"; }
+  } else if(cfg.voiceAutoRead){
+    speakText(text);
+    if(el("voiceHint")){ el("voiceHint").textContent = "Odpowiedz czytana na glos"; }
+  }
 }
 function showAgentStatus(ev){
   if(!ev){ return; }
@@ -508,7 +559,7 @@ function connectWs(){
         var logs = document.querySelectorAll("#chatLog .msg.sys");
         if(logs.length){ logs[logs.length-1].remove(); }
         if(m.error){ addMsg("sys", "Blad: " + m.error); }
-        else { addMsg("bot", m.result || "(brak tresci)"); }
+        else { var ans = m.result || "(brak tresci)"; addMsg("bot", ans); afterBotAnswer(ans); }
       }
     };
     ws.onclose = function(){ el("connDot").className = "dot"; setTimeout(connectWs, 3000); };
@@ -673,6 +724,8 @@ function boot(){
     radios[ri].addEventListener("change", function(){ applyProviderModels(this.value); });
   }
   if("serviceWorker" in navigator){ navigator.serviceWorker.register("/sw.js").catch(function(){}); }
+  initMic();
+  el("micBtn").addEventListener("click", toggleMic);
   if(el("installBtn")){
     el("installBtn").addEventListener("click", function(){
       if(window.__omniPrompt){ window.__omniPrompt.prompt(); window.__omniPrompt = null; }

@@ -16,6 +16,7 @@ export interface OmniConfig {
   voice: string;
   voiceRate: string;
   voiceAutoRead: boolean;
+  voiceHandsFree: boolean;
   workspaceDir: string;
   accessCode: string;
 }
@@ -69,6 +70,7 @@ const DEFAULTS: OmniConfig = {
   voice: 'pl-PL-MarekNeural',
   voiceRate: '+0%',
   voiceAutoRead: false,
+  voiceHandsFree: false,
   workspaceDir: '/home/openclaw',
   accessCode: '',
 };
@@ -157,6 +159,7 @@ export class ConfigStore {
     if (typeof patch.voice === 'string' && patch.voice.trim()) next.voice = patch.voice.trim();
     if (typeof patch.voiceRate === 'string' && patch.voiceRate.trim()) next.voiceRate = patch.voiceRate.trim();
     if (typeof patch.voiceAutoRead === 'boolean') next.voiceAutoRead = patch.voiceAutoRead;
+    if (typeof patch.voiceHandsFree === 'boolean') next.voiceHandsFree = patch.voiceHandsFree;
     if (typeof patch.workspaceDir === 'string' && patch.workspaceDir.trim()) next.workspaceDir = patch.workspaceDir.trim();
     if (typeof patch.accessCode === 'string') next.accessCode = patch.accessCode.trim();
 
