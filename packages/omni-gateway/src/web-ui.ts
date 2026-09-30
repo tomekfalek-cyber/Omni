@@ -60,6 +60,24 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .lbl{display:block;font-size:11.5px;color:#8ba0b8;margin-top:10px}
 .chat-wrap{display:flex;flex-direction:column;height:100%;max-width:900px;margin:0 auto}
+/* Widok na telefonie: menu poziomo, czat na caly ekran */
+@media (max-width: 860px){
+  html,body{height:auto}
+  .t WEB_UI_HTML = `
+<!doctype html>
+  #app{flex-direction:column !important;height:100dvh}
+  .sidebar{width:100% !important;flex:0 0 auto !important;border-right:0;border-bottom:1px solid #1e2a3a;padding:8px}
+  .nav{flex:0 0 auto !important;flex-direction:row !important;overflow-x:auto;overflow-y:hidden;gap:6px;padding-bottom:4px}
+  .nav-group{display:none}
+  .nav-item{width:auto !important;flex:0 0 auto;white-space:nowrap;padding:8px 12px;font-size:13px}
+  .main{flex:1 1 auto;min-height:0}
+  .chat-wrap{height:100%;min-height:0}
+  .chat-log{min-height:0;flex:1 1 auto}
+  .topbar{padding:10px 14px}
+  .topbar h1{font-size:15px}
+  .page{padding:12px}
+  .grid{grid-template-columns:1fr}
+}
 .chat-log{flex:1;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:8px 4px}
 .msg{max-width:78%;padding:11px 14px;border-radius:14px;font-size:14px;line-height:1.55;white-space:pre-wrap}
 .msg.user{align-self:flex-end;background:#2563eb;color:#fff;border-bottom-right-radius:4px}

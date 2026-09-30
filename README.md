@@ -75,3 +75,32 @@ Wybór przez `OMNI_LLM_PROVIDER` (`ollama` | `qwen` | `openrouter`).
 ## 📜 Licencja
 
 MIT — patrz [LICENSE](LICENSE).
+
+## Instalacja na komputerze i telefonie (jeden link)
+
+**Jeden uniwersalny link instalacyjny:**
+
+https://tomekfalek-cyber.github.io/Omni/
+
+Strona zawiera przycisk **Otwórz Omni**, **kod QR** oraz instrukcje krok po kroku.
+
+### Komputer (Windows / macOS / Linux)
+1. Otwórz link w **Chrome**.
+2. Menu **⋮** -> **Zainstaluj aplikację**.
+3. Ikona **Omni** pojawi się na pulpicie i w menu Start; otwiera się w osobnym oknie (bez paska przeglądarki).
+
+### Telefon (Android / iPhone)
+1. Otwórz link **w przeglądarce** (Chrome na Androidzie, Safari na iPhone) - nie w aplikacji GitHub/WhatsApp.
+2. Kliknij **Otwórz Omni** i wpisz **kod dostępu** (Ustawienia -> Kod dostępu w panelu).
+3. **Android:** menu **⋮** -> *Zainstaluj aplikację* lub *Dodaj do ekranu głównego*.**iPhone:** *Udostępnij* -> *Dodaj do ekranu głównego*.
+4. Ikona Omni działa jak zwykła aplikacja (pełny ekran, bez paska adresu).
+
+> Uwaga: strona nie może zainstalować się samodzielnie - przeglądarka wymaga jednego dotknięcia (zabezpieczenie).
+
+### Telefon i komputer = jedna wspólna rozmowa
+Oba urządzenia łączą się z tym samym serwerem Omni, więc historia czatu jest wspólna i synchronizuje się na żywo.
+Aktualny adres serwera znajdziesz w panelu: **Status -> Adres dla telefonu**.
+
+### Kod dostępu
+Panel jest chroniony kodem (chroni przed dostępem z internetu). Ustawiasz go w **Ustawienia -> Kod dostępu**.
+Telefon zapamiętuje kod na 30 dni.
