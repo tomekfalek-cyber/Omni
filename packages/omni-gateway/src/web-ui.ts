@@ -235,6 +235,7 @@ function fillConfig(c){
   var presets = (state.status && state.status.presets) || [];
   for(var i=0;i<presets.length;i++){
     var p = presets[i];
+    if(p.provider !== c.provider){ continue; }
     var o = document.createElement("option");
     o.value = p.id; o.textContent = p.label + " (" + p.provider + ")";
     el("modelSelect").appendChild(o);
@@ -243,7 +244,7 @@ function fillConfig(c){
   cur.value = c.model; cur.textContent = "obecny: " + c.model;
   el("modelSelect").appendChild(cur);
   el("modelSelect").value = c.model;
-  el("modelCustom").value = c.model;
+  el("modelCustom").value = "";
   el("modelPro").value = c.modelPro;
   el("ollamaUrl").value = c.ollamaBaseUrl;
   el("botName").value = c.botName || "Omni";
@@ -392,6 +393,22 @@ function runTest(){
     .then(function(d){ el("testOut").textContent = d.answer || "(brak odpowiedzi)"; })
     .catch(function(e){ el("testOut").textContent = "Blad: " + e.message; });
 }
+function applyProviderModels(providerId){
+  var presets = (state.status && state.status.presets) || [];
+  el("modelSelect").innerHTML = "";
+  for(var i=0;i<presets.length;i++){
+    var p = presets[i];
+    if(p.provider !== providerId){ continue; }
+    var o = document.createElement("option");
+    o.value = p.id;
+    o.textContent = p.label;
+    el("modelSelect").appendChild(o);
+  }
+  if(el("modelSelect").options.length > 0){
+    el("modelSelect").selectedIndex = 0;
+    el("modelCustom").placeholder = "wybrany: " + el("modelSelect").value;
+  }
+}
 function boot(){
   var items = document.querySelectorAll(".nav-item");
   for(var i=0;i<items.length;i++){
@@ -414,6 +431,10 @@ function boot(){
     saveConfig();
   });
   el("reloadEngine").addEventListener("click", function(){ saveConfig(); });
+  var radios = document.querySelectorAll("input[name=provider]");
+  for(var ri=0; ri<radios.length; ri++){
+    radios[ri].addEventListener("change", function(){ applyProviderModels(this.value); });
+  }
   var hash = (location.hash || "#chat").replace("#", "");
   show(hash);
   loadStatus().then(loadConfig).catch(function(e){ addMsg("sys", "Nie moge wczytac konfiguracji: " + e.message); });

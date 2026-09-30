@@ -124,6 +124,7 @@ export class SwarmManager {
         const action = await this.runExecutor(plan, executionResult, cwd, false);
 
         const calls = this.parseToolCalls(action);
+        console.log('[Swarm] Iteracja ' + (i + 1) + ': narzedzia=' + (calls.length ? calls.map((c) => c.name).join(',') : 'brak') + ' dlugosc=' + action.length);
         const cleanedAction = this.stripMarkers(action);
 
         if (calls.length === 0) {
@@ -134,6 +135,7 @@ export class SwarmManager {
         for (const call of calls) {
           usedTools = true;
           try {
+            console.log('[Swarm] Wykonuje narzedzie: ' + call.name);
             const output = await this.tools.executeTool(call.name, call.args, cwd);
             const text = typeof output === 'string' ? output : JSON.stringify(output);
             executionResult += '\n[WYNIK NARZEDZIA ' + call.name + ']\n' + text + '\n';
@@ -186,7 +188,7 @@ export class SwarmManager {
     const tools = this.tools.getAllDefinitions().map((t: any) => '- ' + t.name + ': ' + t.description).join('\n');
     const system = finalOnly
       ? 'Jestes Executorem. Nie wolno Ci wywolywac narzedzi. Na podstawie wynikow narzedzi napisz konkretna odpowiedz po polsku dla uzytkownika.'
-      : 'Jestes Executorem i masz realne mozliwosci: czytanie i zapisywanie plikow, git oraz uruchamianie polecen. Katalog roboczy: ' + cwd + '. Dostepne narzedzia:\n' + tools + '\nAby wywolac narzedzie, napisz DOKLADNIE w osobnej linii: [[CALL_TOOL:nazwa|{\"argument\":\"wartosc\"}]] i nic wiecej. Jesli masz juz wynik, napisz gotowa odpowiedz po polsku, bez wywolywania narzedzi.';
+      : 'Jestes Executorem i masz realne narzedzia. Katalog roboczy: ' + cwd + '. ZASADY: jesli potrzebujesz danych z komputera, odpowiedz WYLACZNIE jednym wierszem w formacie [[CALL_TOOL:nazwa|{"argument":"wartosc"}]] i niczym wiecej. Przyklady: [[CALL_TOOL:file_list|{"path":"packages"}]] , [[CALL_TOOL:shell_exec|{"command":"ls packages"}]] , [[CALL_TOOL:file_read|{"path":"package.json"}]]. Dostepne narzedzia:\n' + tools + '\nAby wywolac narzedzie, napisz DOKLADNIE w osobnej linii: [[CALL_TOOL:nazwa|{\"argument\":\"wartosc\"}]] i nic wiecej. Jesli masz juz wynik, napisz gotowa odpowiedz po polsku, bez wywolywania narzedzi.';
     const messages = [
       { role: 'system' as const, content: system },
       { role: 'user' as const, content: 'Plan:\n' + plan + '\n\nWyniki dotychczas:\n' + previousContext }

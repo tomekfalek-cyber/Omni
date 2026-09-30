@@ -46,8 +46,9 @@ export const MODEL_PRESETS: ModelPreset[] = [
   { provider: 'openrouter', id: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B - darmowy', note: 'Uniwersalny' },
   { provider: 'gemini', id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash - darmowy', note: 'Szybki, darmowy limit' },
   { provider: 'gemini', id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite', note: 'Najszybszy' },
-  { provider: 'groq', id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (Groq)', note: 'Bardzo szybki' },
-  { provider: 'groq', id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (Groq)', note: 'Blyskawiczny' },
+  { provider: 'groq', id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B (Groq)', note: 'Najmocniejszy na Groq' },
+  { provider: 'groq', id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B (Groq)', note: 'Szybki i madry' },
+  { provider: 'groq', id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B (Groq)', note: 'Blyskawiczny' },
   { provider: 'ollama', id: 'qwen2.5:1.5b', label: 'Qwen 2.5 1.5B - lokalny', note: 'Offline, slabszy' },
   { provider: 'ollama', id: 'qwen2.5:7b', label: 'Qwen 2.5 7B - lokalny', note: 'Wymaga ok. 5 GB RAM' },
 ];
@@ -150,6 +151,7 @@ export class ConfigStore {
       await this.secrets.setSecret(name, value);
     }
 
+    const providerChanged = next.provider !== this.config.provider;
     const chosen = providerInfo(next.provider);
     if (chosen.keyEnv && !this.hasKeyFor(next.provider)) {
       // brak klucza dla wybranego dostawcy - zostan lokalnie, zeby bot dalej dzialal
@@ -157,9 +159,12 @@ export class ConfigStore {
       next.model = 'qwen2.5:1.5b';
       next.modelPro = 'qwen2.5:1.5b';
     }
-    if (next.provider !== 'ollama' && next.model.indexOf('/') === -1 && next.model.indexOf('gemini') === -1 && next.model.indexOf('llama') === -1) {
-      const first = MODEL_PRESETS.filter((m) => m.provider === next.provider)[0];
-      if (first) { next.model = first.id; next.modelPro = first.id; }
+    const allowed = MODEL_PRESETS.filter((m) => m.provider === next.provider).map((m) => m.id);
+    const postedModel = typeof patch.model === 'string' ? patch.model.trim() : '';
+    const belongsElsewhere = MODEL_PRESETS.some((m) => m.provider !== next.provider && m.id === postedModel);
+    if (next.provider !== 'ollama' && allowed.length > 0 && (belongsElsewhere || !postedModel)) {
+      next.model = allowed[0];
+      next.modelPro = allowed[0];
     }
 
     this.config = next;
