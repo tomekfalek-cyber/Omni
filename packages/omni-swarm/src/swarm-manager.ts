@@ -1,0 +1,123 @@
+import { QwenProvider } from 'omni-core/providers/qwen-provider.js';
+import { Task, Message, AgentRole, ToolCall } from 'omni-core/types.js';
+import { OmniMemory } from 'omni-memory/memory.js';
+import { ToolRegistry } from 'omni-tools/registry.js';
+import { v4 as uuidv4 } from 'uuid';
+
+export class SwarmManager {
+  private planner: QwenProvider;
+  private executor: QwenProvider;
+  private reviewer: QwenProvider;
+  private evolver: QwenProvider;
+  private memory: OmniMemory;
+  private tools: ToolRegistry;
+
+  constructor() {
+    const provider = (process.env.OMNI_LLM_PROVIDER as any) || 'ollama';
+    const modelFlash = provider === 'ollama' ? 'qwen2.5:7b' : 'qwen/qwen-2.5-7b-instruct:free';
+    const modelPro = provider === 'ollama' ? 'qwen2.5:14b' : 'qwen/qwen-2.5-coder-32b-instruct:free';
+
+    this.planner = new QwenProvider({ provider, model: modelFlash, temperature: 0.7, maxTokens: 2000 });
+    this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 4000 });
+    this.reviewer = new QwenProvider({ provider, model: modelPro, temperature: 0.1, maxTokens: 2000 });
+    this.evolver = new QwenProvider({ provider, model: modelFlash, temperature: 0.8, maxTokens: 3000 });
+    
+    this.memory = new OmniMemory();
+    this.tools = new ToolRegistry();
+  }
+
+  public registerTool(tool: any) {
+    this.tools.register(tool);
+  }
+
+  async executeTask(sessionId: string, prompt: string, cwd: string): Promise<Task> {
+    const taskId = uuidv4();
+    const task: Task = {
+      id: taskId,
+      sessionId,
+      prompt,
+      status: 'running',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      iterations: 0,
+      maxIterations: 10,
+      currentAgent: 'planner',
+    };
+
+    this.memory.appendTranscript(sessionId, 'system', `Task started: ${prompt}`);
+
+    try {
+      // KROK 1: Planner dekomponuje zadanie
+      const plan = await this.runPlanner(prompt);
+      this.memory.appendTranscript(sessionId, 'planner', `Plan: ${plan}`);
+
+      // KROK 2: Executor wykonuje kroki
+      let executionResult = '';
+      for (let i = 0; i < task.maxIterations; i++) {
+        task.iterations = i + 1;
+        const action = await this.runExecutor(plan, executionResult, cwd);
+        
+        if (action.includes('[[DONE]]')) {
+          executionResult = action;
+          break;
+        }
+
+        // KROK 3: Reviewer weryfikuje
+        const review = await this.runReviewer(action, cwd);
+        if (review.includes('[[APPROVED]]')) {
+          executionResult += '\n' + action;
+        } else {
+          executionResult += '\n[REJECTED BY REVIEWER]: ' + review + '\nSpróbuj ponownie.';
+        }
+      }
+
+      // KROK 4: Evolver uczy się z zadania
+      await this.runEvolver(prompt, executionResult);
+
+      task.status = 'completed';
+      task.result = executionResult;
+      this.memory.appendTranscript(sessionId, 'system', `Task completed: ${taskId}`);
+    } catch (error: any) {
+      task.status = 'failed';
+      task.error = error.message;
+      this.memory.appendTranscript(sessionId, 'system', `Task failed: ${error.message}`);
+    }
+
+    task.updatedAt = Date.now();
+    return task;
+  }
+
+  private async runPlanner(prompt: string): Promise<string> {
+    const messages = [
+      { role: 'system' as const, content: 'Jesteś Plannerem. Twoim zadaniem jest rozbić złożone polecenie użytkownika na maksymalnie 5 prostych, wykonywalnych kroków. Zwróć tylko listę kroków w formacie Markdown.' },
+      { role: 'user' as const, content: prompt }
+    ];
+    return await this.planner.getCompletion(messages);
+  }
+
+  private async runExecutor(plan: string, previousContext: string, cwd: string): Promise<string> {
+    const messages = [
+      { role: 'system' as const, content: `Jesteś Executorem. Masz dostęp do plików w: ${cwd}. Wykonaj następny krok z planu. Użyj składni [[CALL_TOOL:nazwa|{"arg":"wartosc"}]] aby wywołać narzędzie. Jeśli zadanie jest zakończone, napisz [[DONE]].` },
+      { role: 'user' as const, content: `Plan:\n${plan}\n\nPoprzedni kontekst:\n${previousContext}` }
+    ];
+    return await this.executor.getCompletion(messages);
+  }
+
+  private async runReviewer(action: string, cwd: string): Promise<string> {
+    const messages = [
+      { role: 'system' as const, content: 'Jesteś Reviewerem. Sprawdź, czy akcja jest bezpieczna i poprawna. Jeśli tak, odpowiedz [[APPROVED]]. Jeśli nie, odpowiedz [[REJECTED]] i podaj powód.' },
+      { role: 'user' as const, content: `Akcja do weryfikacji:\n${action}` }
+    ];
+    return await this.reviewer.getCompletion(messages);
+  }
+
+  private async runEvolver(originalPrompt: string, result: string): Promise<void> {
+    // W pełnej implementacji: analizuje result i generuje plik .omni/skills/new_skill.md
+    const messages = [
+      { role: 'system' as const, content: 'Jesteś Evolverem. Na podstawie wykonanego zadania, stwórz krótką notatkę w formacie Markdown, która może być przydatna w przyszłości jako "skill".' },
+      { role: 'user' as const, content: `Zadanie: ${originalPrompt}\nWynik: ${result}` }
+    ];
+    const skill = await this.evolver.getCompletion(messages);
+    this.memory.saveFact(`skill_${Date.now()}`, skill);
+  }
+}
