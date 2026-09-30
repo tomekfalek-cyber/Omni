@@ -29,6 +29,7 @@ export class SwarmManager {
     this.memory = new OmniMemory();
     this.tools = new ToolRegistry();
     this.registerMemoryTools();
+    this.reconfigure();
   }
 
   /** Przebudowuje silniki po zmianie klucza, dostawcy lub modelu w panelu. */
@@ -39,10 +40,14 @@ export class SwarmManager {
     const modelFlash = process.env.OMNI_LLM_MODEL || defaultFlash;
     const modelPro = process.env.OMNI_LLM_MODEL_PRO || modelFlash;
 
-    this.planner = new QwenProvider({ provider, model: modelFlash, temperature: 0.7, maxTokens: 2000 });
-    this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 4000 });
-    this.reviewer = new QwenProvider({ provider, model: modelPro, temperature: 0.1, maxTokens: 2000 });
-    this.evolver = new QwenProvider({ provider, model: modelFlash, temperature: 0.8, maxTokens: 3000 });
+    // Model pomocniczy (planer, reviewer, evolver) - mniejszy, zeby nie zjadac limitu tokenow.
+    const defaultMini = provider === 'groq' ? 'openai/gpt-oss-20b' : modelFlash;
+    const modelMini = process.env.OMNI_LLM_MODEL_MINI || defaultMini;
+
+    this.planner = new QwenProvider({ provider, model: modelMini, temperature: 0.7, maxTokens: 700 });
+    this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 1400 });
+    this.reviewer = new QwenProvider({ provider, model: modelMini, temperature: 0.1, maxTokens: 400 });
+    this.evolver = new QwenProvider({ provider, model: modelMini, temperature: 0.8, maxTokens: 500 });
   }
 
   /** Krotkie zapytanie testowe do aktualnie ustawionego silnika. */
@@ -105,18 +110,39 @@ export class SwarmManager {
     }));
   }
 
-  private async executorTurn(messages: any[], tools: any[]): Promise<{ content: string, toolCalls: any[] }> {
+  private async executorTurn(messages: any[], tools: any[], toolChoice?: string): Promise<{ content: string, toolCalls: any[] }> {
     const provider: any = this.executor;
     if (typeof provider.getCompletionWithTools === 'function') {
       try {
-        return await provider.getCompletionWithTools(messages, tools);
+        return await provider.getCompletionWithTools(messages, tools, toolChoice);
       } catch (error: any) {
-        console.log('[Swarm] Natywne narzedzia niedostepne (' + error.message + '), uzywam trybu tekstowego.');
+        console.log('[Swarm] Proba z tool_choice=' + String(toolChoice) + ' nieudana (' + error.message + ')');
+        try {
+          return await provider.getCompletionWithTools(messages, tools);
+        } catch (error2: any) {
+          console.log('[Swarm] Natywne narzedzia niedostepne (' + error2.message + '), bezpieczny tryb tekstowy.');
+          try {
+            const safeMessages = messages
+              .filter((m: any) => m.role !== 'tool' && !m.tool_calls)
+              .map((m: any) => ({ role: m.role, content: String(m.content || '') }));
+            const content = await provider.getCompletion(safeMessages);
+            return { content: content, toolCalls: [] };
+          } catch (error3: any) {
+            throw new Error('Model nie odpowiedzial: ' + error3.message);
+          }
+        }
       }
     }
     const content = await provider.getCompletion(messages);
     return { content: content, toolCalls: [] };
   }
+  public onEvent: ((event: any) => void) | null = null;
+
+  private emit(event: any): void {
+    if (!this.onEvent) { return; }
+    try { this.onEvent(event); } catch (error) { }
+  }
+
   public getApprovalManager(): any {
     return this.tools.approvalManager;
   }
@@ -176,6 +202,7 @@ export class SwarmManager {
 
     try {
       // KROK 1: Planner dekomponuje zadanie
+      this.emit({ kind: 'thinking', text: 'Analizuje zadanie...' });
       const plan = await this.runPlanner(prompt);
       this.memory.appendTranscript(sessionId, 'planner', `Plan: ${plan}`);
 
@@ -184,14 +211,18 @@ export class SwarmManager {
       let draftAnswer = '';
       let usedTools = false;
       const toolSchemas = this.toolSchemas();
+      const lowerPrompt = String(prompt).toLowerCase();
+      const searchKeys = ['kurs', 'cena', 'ile kosztuje', 'walut', 'bitcoin', 'ethereum', 'krypto', 'wiadomosc', 'wydarzen', 'co sie dzieje', 'najnowsz', 'pogod', 'przepis', 'ugotowac', 'znajdz', 'sprawdz', 'wyszukaj', 'aktualn', 'kto ', 'gdzie ', 'kiedy ', 'jaki jest', 'jaka jest', 'ile '];
+      let needsSearch = false;
+      for (const key of searchKeys) { if (lowerPrompt.indexOf(key) !== -1) { needsSearch = true; break; } }
       const messages: any[] = [
-        { role: 'system', content: this.capabilities(cwd) },
+        { role: 'system', content: this.capabilities(cwd) + String.fromCharCode(10) + 'WAZNE: gdy pytanie dotyczy faktow, kursow, wiadomosci, pogody, przepisow lub czegokolwiek z internetu - NAJPIERW wywolaj odpowiednie narzedzie. Nie odpowiadaj na takie pytania z pamieci.' },
         { role: 'user', content: 'Zadanie: ' + prompt + '\nPlan:\n' + plan },
       ];
 
       for (let i = 0; i < task.maxIterations; i++) {
         task.iterations = i + 1;
-        const response = await this.executorTurn(messages, toolSchemas);
+        const response = await this.executorTurn(messages, toolSchemas, (i === 0 && needsSearch) ? 'required' : 'auto');
         const toolCalls = response.toolCalls || [];
         console.log('[Swarm] Iteracja ' + (i + 1) + ': narzedzia=' + (toolCalls.length ? toolCalls.map((c: any) => c.function.name).join(',') : 'brak'));
 
@@ -225,6 +256,7 @@ export class SwarmManager {
           try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (error) { args = {}; }
           try {
             console.log('[Swarm] Wykonuje narzedzie: ' + name);
+            this.emit({ kind: 'tool', text: name });
             const output = await this.tools.executeTool(name, args, cwd);
             const text = typeof output === 'string' ? output : JSON.stringify(output);
             executionResult += text;
@@ -237,13 +269,34 @@ export class SwarmManager {
       }
 
       if (usedTools) {
-        messages.push({ role: 'user', content: 'Na podstawie wynikow narzedzi napisz teraz konkretna odpowiedz dla uzytkownika po polsku. Bez wywolywania narzedzi.' });
-        const finalResponse = await this.executorTurn(messages, []);
-        const cleanedFinal = this.stripMarkers(finalResponse.content);
-        if (cleanedFinal) { draftAnswer = cleanedFinal; }
+        this.emit({ kind: 'writing', text: 'Pisze odpowiedz...' });
+        for (let attempt = 0; attempt < 3; attempt++) {
+          messages.push({ role: 'user', content: attempt === 0 ? 'Na podstawie wynikow narzedzi napisz teraz konkretna odpowiedz dla uzytkownika po polsku.' : 'Napisz teraz sama odpowiedz dla uzytkownika po polsku.' });
+          const finalResponse = await this.executorTurn(messages, toolSchemas);
+          const finalCalls = finalResponse.toolCalls || [];
+          if (!finalCalls.length) {
+            const cleanedFinal = this.stripMarkers(finalResponse.content);
+            if (cleanedFinal) { draftAnswer = cleanedFinal; }
+            break;
+          }
+          messages.push({ role: 'assistant', content: finalResponse.content || null, tool_calls: finalCalls });
+          for (const call of finalCalls) {
+            const name = call.function && call.function.name;
+            let args: any = {};
+            try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (error) { args = {}; }
+            try {
+              const output = await this.tools.executeTool(name, args, cwd);
+              const text = typeof output === 'string' ? output : JSON.stringify(output);
+              executionResult += text;
+              messages.push({ role: 'tool', tool_call_id: call.id, content: text.slice(0, 8000) });
+            } catch (error: any) {
+              messages.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + error.message });
+            }
+          }
+        }
       }
-      // KROK 4: Evolver uczy się z zadania
-      await this.runEvolver(prompt, executionResult);
+      // KROK 4: Evolver uczy sie z zadania (opcjonalny - blad nie moze zepsuc odpowiedzi)
+      try { await this.runEvolver(prompt, executionResult); } catch (error) { }
 
       task.status = 'completed';
       // Odpowiedź wykonawcy jest ważniejsza niż marudzenie reviewera.
@@ -256,6 +309,7 @@ export class SwarmManager {
     }
 
     task.updatedAt = Date.now();
+    this.emit({ kind: 'done', text: '' });
     return task;
   }
 
@@ -272,18 +326,21 @@ export class SwarmManager {
       'MASZ DOSTEP DO INTERNETU (web_search, web_fetch). Mozesz sprawdzac biezace informacje, wiadomosci i strony. NIE twierdz, ze nie wiesz co sie dzialo po 2024 roku - po prostu wyszukaj.',
       'MASZ PAMIEC TRWALA (memory_save, memory_search) - zapisuj wazne ustalenia i preferencje uzytkownika.',
       'MASZ DOSTEP DO PLIKOW i POWLOKI na tym komputerze.',
-      'ZASADY: nigdy nie zmyslaj danych. Gdy brakuje informacji - uzyj narzedzia. Gdy narzedzie zawiedzie - powiedz wprost co sie stalo. Odpowiadaj po polsku, konkretnie, bez zbednych zastrzezen i bez wyliczania wlasnych ograniczen.',
+      'ZASADY: nie zmyslaj danych - uzyj narzedzia. Na kursy krypto uzyj crypto_price, na biezace wydarzenia i wiadomosci uzyj news, na reszte web_search. Odpowiadaj po polsku, krotko i konkretnie.',
     ].join(NL);
   }
   private async runPlanner(prompt: string): Promise<string> {
     const cwd = this.workspaceCwd;
     const messages = [
-      { role: 'system' as const, content: this.capabilities(this.workspaceCwd) + String.fromCharCode(10) + 'Jestes Plannerem: rozbij zadanie uzytkownika na maksymalnie 5 prostych, wykonywalnych krokow. Zwroc tylko liste krokow w formacie Markdown.' },
+      { role: 'system' as const, content: 'Jestes Plannerem. Rozbij zadanie uzytkownika na maksymalnie 4 proste kroki. Odpowiedz zwyklym tekstem. Nie wywoluj zadnych narzedzi. Katalog roboczy: ' + cwd + '.' },
       { role: 'user' as const, content: prompt }
     ];
-    return await this.planner.getCompletion(messages);
+    try {
+      return await this.planner.getCompletion(messages);
+    } catch (error) {
+      return prompt;
+    }
   }
-
   private async runExecutor(plan: string, previousContext: string, cwd: string, finalOnly: boolean = false): Promise<string> {
     const tools = this.tools.getAllDefinitions().map((t: any) => '- ' + t.name + ': ' + t.description).join('\n');
     const system = finalOnly

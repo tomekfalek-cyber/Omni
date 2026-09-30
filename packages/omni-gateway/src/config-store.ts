@@ -135,6 +135,8 @@ export class ConfigStore {
     return !!key && key.length > 8;
   }
 
+  public dataDir(): string { return this.dir; }
+
   public hasOpenRouterKey(): boolean {
     return this.hasKeyFor('openrouter');
   }

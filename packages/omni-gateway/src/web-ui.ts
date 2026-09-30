@@ -99,6 +99,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       <div class="nav-group">Praca</div>
       <button class="nav-item" data-page="sessions"><span class="ico">S</span>Sesje</button>
       <button class="nav-item" data-page="tasks"><span class="ico">Z</span>Zadania</button>
+      <button class="nav-item" data-page="automations"><span class="ico">A</span>Automatyzacje</button>
       <div class="nav-group">System</div>
       <button class="nav-item" data-page="status"><span class="ico">D</span>Status i diagnostyka</button>
     </nav>
@@ -200,6 +201,26 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       <div class="card"><h2>Ostatnie zadania</h2><div class="list" id="tasksList"></div></div>
     </section>
 
+    <section class="page hidden" id="page-automations">
+      <div class="grid">
+        <div class="card">
+          <h2>Nowa automatyzacja</h2>
+          <label class="lbl">Nazwa</label><input type="text" id="autoName" placeholder="np. Poranny przeglad" />
+          <label class="lbl">Co ma zrobic</label><textarea id="autoPrompt" rows="3" placeholder="np. Sprawdz w internecie najwazniejsze wiadomosci o AI i podsumuj w 5 punktach"></textarea>
+          <label class="lbl">Kiedy uruchamiac</label>
+          <select id="autoKind"><option value="interval">Co ile minut</option><option value="daily">Codziennie o godzinie</option></select>
+          <label class="lbl">Co ile minut (dla trybu powtarzania)</label><input type="text" id="autoMinutes" placeholder="60" />
+          <label class="lbl">Godzina (dla trybu codziennego)</label><input type="text" id="autoTime" placeholder="08:00" />
+          <div class="row"><button class="btn primary" id="autoAdd">Dodaj automatyzacje</button></div>
+          <pre class="out" id="autoOut">tu pojawi sie wynik</pre>
+        </div>
+        <div class="card">
+          <h2>Twoje automatyzacje</h2>
+          <div class="list" id="autoList"></div>
+        </div>
+      </div>
+    </section>
+
     <section class="page hidden" id="page-settings">
       <div class="grid">
         <div class="card">
@@ -261,7 +282,7 @@ function api(path, opts){
   });
 }
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>]/g, function(c){ return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; }); }
-var TITLES = { chat:"Czat", keys:"Modele i klucze API", engines:"Silniki", voice:"Glos", sessions:"Sesje", tasks:"Zadania", settings:"Ustawienia", status:"Status i diagnostyka" };
+var TITLES = { chat:"Czat", keys:"Modele i klucze API", engines:"Silniki", voice:"Glos", sessions:"Sesje", tasks:"Zadania", automations:"Automatyzacje", settings:"Ustawienia", status:"Status i diagnostyka" };
 function show(page){
   var pages = document.querySelectorAll(".page");
   for(var i=0;i<pages.length;i++){ pages[i].className = "page hidden"; }
@@ -271,6 +292,7 @@ function show(page){
   for(var k=0;k<items.length;k++){ items[k].className = "nav-item" + (items[k].getAttribute("data-page") === page ? " active" : ""); }
   el("pageTitle").textContent = TITLES[page] || page;
   if(page === "engines"){ renderEngines(); }
+  if(page === "automations"){ loadAutomations(); }
   if(page === "voice"){ renderVoices(); }
   if(page === "sessions"){ loadSessions(); }
   if(page === "tasks"){ loadTasks(); }
@@ -441,6 +463,19 @@ function md(text){
   }
   return out;
 }
+function showAgentStatus(ev){
+  if(!ev){ return; }
+  var d = document.getElementById("agentStatus");
+  if(!d){ d = document.createElement("div"); d.id = "agentStatus"; d.className = "msg sys"; el("chatLog").appendChild(d); }
+  var text = ev.text || "";
+  if(ev.kind === "thinking"){ text = "Analizuje zadanie..."; }
+  if(ev.kind === "tool"){ text = "Uzywam narzedzia: " + ev.text; }
+  if(ev.kind === "writing"){ text = "Pisze odpowiedz..."; }
+  if(ev.kind === "done"){ text = ""; }
+  d.textContent = text;
+  el("chatLog").scrollTop = el("chatLog").scrollHeight;
+  if(ev.kind === "done"){ setTimeout(function(){ var x = document.getElementById("agentStatus"); if(x){ x.remove(); } }, 700); }
+}
 function addMsg(kind, text){
   var d = document.createElement("div");
   d.className = "msg " + kind;
@@ -466,6 +501,7 @@ function connectWs(){
     ws.onmessage = function(ev){
       var m = {};
       try { m = JSON.parse(ev.data); } catch(e){ return; }
+      if(m.type === "agent.event"){ showAgentStatus(m.event); return; }
       if(m.type === "task.started"){ return; }
       if(m.type === "task.finished"){
         state.pending = false;
@@ -477,6 +513,64 @@ function connectWs(){
     };
     ws.onclose = function(){ el("connDot").className = "dot"; setTimeout(connectWs, 3000); };
   } catch(e){ el("connDot").className = "dot"; }
+}
+function loadAutomations(){
+  return api("/api/automations").then(function(d){
+    var list = d.automations || [];
+    if(!list.length){ el("autoList").innerHTML = "<div class=mut>Brak automatyzacji. Dodaj pierwsza po lewej.</div>"; return; }
+    var html = "";
+    for(var i=0;i<list.length;i++){
+      var a = list[i];
+      var last = a.lastRunAt ? new Date(a.lastRunAt).toLocaleString() : "jeszcze nie uruchamiane";
+      var st = a.lastStatus === "ok" ? "<span class=badge ok>ok</span>" : (a.lastStatus ? "<span class=badge err>" + esc(a.lastStatus) + "</span>" : "");
+      html += "<div class=item><b>" + esc(a.name) + "</b> " + st;
+      html += "<div class=mut>" + esc(a.when || "") + " &middot; " + (a.enabled ? "wlaczone" : "wylaczone") + " &middot; ostatnio: " + esc(last) + "</div>";
+      html += "<div class=mut>" + esc(String(a.lastResult || "").slice(0, 260)) + "</div>";
+      html += "<div class=row><button class='btn' data-run='" + esc(a.id) + "'>Uruchom teraz</button>";
+      html += "<button class='btn' data-toggle='" + esc(a.id) + "' data-on='" + (a.enabled ? "1" : "0") + "'>" + (a.enabled ? "Wylacz" : "Wlacz") + "</button>";
+      html += "<button class='btn' data-del='" + esc(a.id) + "'>Usun</button></div></div>";
+    }
+    el("autoList").innerHTML = html;
+    bindAutoButtons();
+  }).catch(function(e){ el("autoList").innerHTML = "<div class=mut>Blad: " + esc(e.message) + "</div>"; });
+}
+function bindAutoButtons(){
+  var runs = el("autoList").querySelectorAll("[data-run]");
+  for(var i=0;i<runs.length;i++){
+    runs[i].addEventListener("click", function(){ runAutomation(this.getAttribute("data-run")); });
+  }
+  var toggles = el("autoList").querySelectorAll("[data-toggle]");
+  for(var j=0;j<toggles.length;j++){
+    toggles[j].addEventListener("click", function(){
+      api("/api/automations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: this.getAttribute("data-toggle"), enabled: this.getAttribute("data-on") !== "1" }) })
+        .then(function(){ toast("Zmieniono.", "ok"); return loadAutomations(); })
+        .catch(function(e){ toast("Blad: " + e.message, "err"); });
+    });
+  }
+  var dels = el("autoList").querySelectorAll("[data-del]");
+  for(var k=0;k<dels.length;k++){
+    dels[k].addEventListener("click", function(){
+      api("/api/automations/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: this.getAttribute("data-del") }) })
+        .then(function(){ toast("Usunieto.", "ok"); return loadAutomations(); })
+        .catch(function(e){ toast("Blad: " + e.message, "err"); });
+    });
+  }
+}
+function addAutomation(){
+  var name = (el("autoName").value || "").trim();
+  var prompt = (el("autoPrompt").value || "").trim();
+  if(!name || !prompt){ toast("Podaj nazwe i polecenie.", "err"); return; }
+  var body = { name: name, prompt: prompt, kind: el("autoKind").value, minutes: Number(el("autoMinutes").value || 60), time: (el("autoTime").value || "09:00").trim() };
+  el("autoOut").textContent = "zapisuje...";
+  api("/api/automations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    .then(function(d){ el("autoOut").textContent = "Dodano: " + d.automation.name + " (" + d.when + ")"; el("autoName").value = ""; el("autoPrompt").value = ""; return loadAutomations(); })
+    .catch(function(e){ el("autoOut").textContent = "Blad: " + e.message; });
+}
+function runAutomation(id){
+  el("autoOut").textContent = "uruchamiam...";
+  api("/api/automations/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id }) })
+    .then(function(d){ el("autoOut").textContent = "Wynik: " + String((d.automation && d.automation.lastResult) || "").slice(0, 900); return loadAutomations(); })
+    .catch(function(e){ el("autoOut").textContent = "Blad: " + e.message; });
 }
 function loadTunnel(){
   return api("/api/tunnel").then(function(t){ state.tunnel = t; }).catch(function(){});
@@ -573,6 +667,7 @@ function boot(){
   el("voiceSave").addEventListener("click", saveVoice);
   el("voiceTest").addEventListener("click", function(){ speakText("Dzien dobry. Tak brzmi moj glos."); });
   el("voiceUpload").addEventListener("click", uploadVoice);
+  el("autoAdd").addEventListener("click", addAutomation);
   var radios = document.querySelectorAll("input[name=provider]");
   for(var ri=0; ri<radios.length; ri++){
     radios[ri].addEventListener("change", function(){ applyProviderModels(this.value); });

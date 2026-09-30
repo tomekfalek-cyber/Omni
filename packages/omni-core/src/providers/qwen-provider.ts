@@ -68,7 +68,20 @@ export class QwenProvider extends EventEmitter {
     }
   }
 
-  async getCompletionWithTools(messages: ChatCompletionMessageParam[], tools: any[]): Promise<{ content: string, toolCalls: any[] }> {
+  private async withRetry<T>(fn: () => Promise<T>): Promise<T> {
+    let lastError: any = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try { return await fn(); } catch (error: any) {
+        lastError = error;
+        const msg = String(error && error.message ? error.message : error);
+        if (msg.indexOf('429') === -1 && msg.indexOf('Rate limit') === -1 && msg.indexOf('rate limit') === -1) { throw error; }
+        await new Promise((resolve) => setTimeout(resolve, 3000 + attempt * 3000));
+      }
+    }
+    throw lastError;
+  }
+
+  async getCompletionWithTools(messages: ChatCompletionMessageParam[], tools: any[], toolChoice?: string): Promise<{ content: string, toolCalls: any[] }> {
     const payload: any = {
       model: this.config.model,
       messages: messages,
@@ -77,7 +90,8 @@ export class QwenProvider extends EventEmitter {
       max_tokens: this.config.maxTokens,
     };
     if (tools && tools.length) { payload.tools = tools; }
-    const response: any = await this.client.chat.completions.create(payload);
+    if (toolChoice) { payload.tool_choice = toolChoice; }
+    const response: any = await this.withRetry(async () => await this.client.chat.completions.create(payload) as any);
     const message: any = (response.choices && response.choices[0] && response.choices[0].message) || {};
     return { content: message.content || '', toolCalls: message.tool_calls || [] };
   }

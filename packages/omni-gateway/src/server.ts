@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import { ConfigStore, KEY_OPENROUTER, MODEL_PRESETS, PROVIDERS } from './config-store.js';
 import { VoiceManager } from './voice/voice-manager.js';
 import { LOGIN_PAGE } from './login-page.js';
+import { AutomationScheduler } from './automations/scheduler.js';
 
 const OPENROUTER_AUTH_URL = 'https://openrouter.ai/auth';
 const OPENROUTER_KEYS_URL = 'https://openrouter.ai/api/v1/auth/keys';
@@ -31,6 +32,7 @@ export class OmniGateway {
   private oauthStates: Map<string, { verifier: string, createdAt: number }> = new Map();
   private startedAt: number = Date.now();
   private voice: VoiceManager;
+  private automations: AutomationScheduler;
 
   constructor(port: number = 7800, host: string = '127.0.0.1', config?: ConfigStore) {
     this.config = config || new ConfigStore();
@@ -42,6 +44,13 @@ export class OmniGateway {
     this.swarm = new SwarmManager();
     this.voice = new VoiceManager();
     this.swarm.workspaceCwd = this.config.get().workspaceDir;
+    this.automations = new AutomationScheduler(this.config.dataDir(), async (prompt: string, name: string) => {
+      const task = await this.swarm.executeTask('auto_' + name, prompt, this.config.get().workspaceDir);
+      this.recordTask(task);
+      return String((task as any).result || (task as any).error || '');
+    });
+    this.automations.start();
+    this.swarm.onEvent = (event: any) => { this.broadcast({ type: 'agent.event', event: event }); };
     this.wireApprovals();
 
     this.setupAuth();
@@ -263,6 +272,30 @@ export class OmniGateway {
       }
     });
 
+    this.app.get('/api/automations', (_req, res) => {
+      const list = this.automations.list().map((j: any) => Object.assign({}, j, { when: this.automations.describe(j) }));
+      res.json({ automations: list });
+    });
+
+    this.app.post('/api/automations', (req, res) => {
+      try {
+        const job = this.automations.upsert(req.body || {});
+        res.json({ ok: true, automation: job, when: this.automations.describe(job) });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.post('/api/automations/delete', (req, res) => {
+      this.automations.remove(String((req.body && req.body.id) || ''));
+      res.json({ ok: true });
+    });
+
+    this.app.post('/api/automations/run', async (req, res) => {
+      try {
+        const job = await this.automations.runNow(String((req.body && req.body.id) || ''));
+        res.json({ ok: !!job, automation: job, when: job ? this.automations.describe(job) : '' });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
+
     this.app.get('/api/tunnel', (_req, res) => {
       try {
         const logPath = path.join(process.cwd(), 'tunnel.log');
@@ -364,6 +397,7 @@ export class OmniGateway {
       createdAt: (task && task.createdAt) || Date.now(),
       prompt: task && task.prompt,
       result: task && task.result,
+      error: task && task.error,
     });
     if (this.recentTasks.length > 100) this.recentTasks.shift();
   }
