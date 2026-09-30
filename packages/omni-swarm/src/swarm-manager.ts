@@ -329,7 +329,7 @@ export class SwarmManager {
       let usedTools = false;
       const toolSchemas = this.toolSchemas();
       const lowerPrompt = String(prompt).toLowerCase();
-      const searchKeys = ['kurs', 'cena', 'ile kosztuje', 'walut', 'bitcoin', 'ethereum', 'krypto', 'wiadomosc', 'wydarzen', 'co sie dzieje', 'najnowsz', 'pogod', 'przepis', 'ugotowac', 'znajdz', 'sprawdz', 'wyszukaj', 'aktualn', 'kto ', 'gdzie ', 'kiedy ', 'jaki jest', 'jaka jest', 'ile '];
+      const searchKeys = ['cen', 'kurs', 'koszt', 'ile kosztuje', 'bitcoin', 'btc', 'ethereum', 'krypto', 'walut', 'wymian', 'wiadomosc', 'wydarzen', 'aktualn', 'dzisiaj', 'dzisiejsz', 'pogod', 'prognoz', 'wynik', 'notowan'];
       let needsSearch = false;
       for (const key of searchKeys) { if (lowerPrompt.indexOf(key) !== -1) { needsSearch = true; break; } }
       const actionKeys = ['zbuduj', 'stworz', 'napisz plik', 'aplikacj', 'projekt', 'refaktor', 'zaimplementuj', 'przygotuj', 'zapisz plik', 'edytuj plik', 'wypchnij', 'commit'];
@@ -458,6 +458,43 @@ export class SwarmManager {
         if (cleaned) { draftAnswer = cleaned; }
       }
 
+
+      const denialWords = ['nie mam dostepu', 'nie posiadam', 'sprawdz na stron', 'sprawdz sam', 'nie mam wiedzy', 'nie moge sprawdzic', 'nie jestem w stanie sprawdzic', 'nie mam informacji', 'moja wiedza konczy', 'poszukaj na'];
+      const lowerAnswer = String(draftAnswer || '').toLowerCase();
+      let denied = false;
+      for (const dw of denialWords) { if (lowerAnswer.indexOf(dw) !== -1) { denied = true; break; } }
+      if (denied) {
+        console.log('[Swarm] Wykryto odmowe - wymuszam sprawdzenie w zrodlach');
+        this.emit({ kind: 'writing', text: 'Sprawdzam w zrodlach...' });
+        try {
+          const nl2 = String.fromCharCode(10);
+          const forced: any[] = [
+            { role: 'system', content: this.capabilities(cwd) + nl2 + this.readKnowledge() + nl2 + 'NIE WOLNO Ci odmawiac ani odsylac uzytkownika do stron. Uzyj narzedzi (crypto_price, news, web_search) i podaj konkretna odpowiedz z danymi.' },
+            { role: 'user', content: String(prompt) },
+          ];
+          const res1 = await this.executorTurn(forced, toolSchemas, 'required');
+          const calls1 = res1.toolCalls || [];
+          if (calls1.length) {
+            forced.push({ role: 'assistant', content: res1.content || null, tool_calls: calls1 });
+            for (const call of calls1) {
+              const nm = call.function && call.function.name;
+              let ar: any = {};
+              try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
+              try {
+                const outp = await this.tools.executeTool(nm, ar, cwd);
+                forced.push({ role: 'tool', tool_call_id: call.id, content: String(typeof outp === 'string' ? outp : JSON.stringify(outp)).slice(0, 6000) });
+              } catch (e: any) {
+                forced.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + e.message });
+              }
+            }
+            const res2 = await this.executorTurn(forced, toolSchemas, 'auto');
+            const fixed = this.stripMarkers(res2.content);
+            if (fixed && fixed.trim().length > 5) { draftAnswer = fixed; }
+          }
+        } catch (error: any) {
+          console.log('[Swarm] Wymuszone sprawdzenie nieudane: ' + error.message);
+        }
+      }
       if (!draftAnswer || !String(draftAnswer).trim()) {
         draftAnswer = 'Nie udalo sie uzyskac odpowiedzi - darmowy silnik chwilowo odmowil (limit tokenow). Sprobuj ponownie za minute albo wlacz inny darmowy silnik w zakladce Silniki.';
       }
