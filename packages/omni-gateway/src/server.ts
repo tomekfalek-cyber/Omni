@@ -7,7 +7,9 @@ import cors from 'cors';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import { WEB_UI_HTML } from './web-ui.js';
+import * as fs from 'fs';
 import { ConfigStore, KEY_OPENROUTER, MODEL_PRESETS, PROVIDERS } from './config-store.js';
+import { VoiceManager } from './voice/voice-manager.js';
 
 const OPENROUTER_AUTH_URL = 'https://openrouter.ai/auth';
 const OPENROUTER_KEYS_URL = 'https://openrouter.ai/api/v1/auth/keys';
@@ -27,6 +29,7 @@ export class OmniGateway {
   private recentTasks: any[] = [];
   private oauthStates: Map<string, { verifier: string, createdAt: number }> = new Map();
   private startedAt: number = Date.now();
+  private voice: VoiceManager;
 
   constructor(port: number = 7800, host: string = '127.0.0.1', config?: ConfigStore) {
     this.config = config || new ConfigStore();
@@ -36,6 +39,7 @@ export class OmniGateway {
     this.httpServer = createServer(this.app);
     this.wss = new WebSocketServer({ server: this.httpServer, path: '/ws' });
     this.swarm = new SwarmManager();
+    this.voice = new VoiceManager();
     this.wireApprovals();
 
     this.setupWebUI();
@@ -121,6 +125,11 @@ export class OmniGateway {
       providers: PROVIDERS,
       autoApproveTools: cfg.autoApproveTools,
       tools: this.swarm.listTools(),
+      voice: cfg.voice,
+      voiceRate: cfg.voiceRate,
+      voiceAutoRead: cfg.voiceAutoRead,
+      voices: this.voice.listVoices(),
+      voiceEngines: { edge: this.voice.edgeAvailable(), piper: this.voice.piperAvailable() },
       node: process.version,
     };
   }
@@ -162,6 +171,39 @@ export class OmniGateway {
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
+    });
+
+    this.app.get('/api/voice/voices', (_req, res) => {
+      res.json({ voices: this.voice.listVoices(), current: this.config.get().voice, engines: { edge: this.voice.edgeAvailable(), piper: this.voice.piperAvailable() } });
+    });
+
+    this.app.post('/api/voice/speak', async (req, res) => {
+      try {
+        const body = req.body || {};
+        const voice = String(body.voice || this.config.get().voice || 'pl-PL-MarekNeural');
+        const rate = String(body.rate || this.config.get().voiceRate || '+0%');
+        const result = await this.voice.speak(String(body.text || ''), voice, rate);
+        res.json({ ok: true, url: '/voice/' + path.basename(result.file), mime: result.mime });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/voice/upload', async (req, res) => {
+      try {
+        const body = req.body || {};
+        const id = this.voice.saveUploadedVoice(body.name, body.onnx, body.config);
+        res.json({ ok: true, id: id, voices: this.voice.listVoices() });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/voice/:file', (req, res) => {
+      const name = String(req.params.file || '').replace(new RegExp('[^A-Za-z0-9_.-]', 'g'), '');
+      const full = path.join(this.voice.outDirPath(), name);
+      if (!name || !fs.existsSync(full)) { res.status(404).json({ error: 'Brak pliku' }); return; }
+      res.sendFile(full);
     });
 
     this.app.post('/api/test', async (_req, res) => {

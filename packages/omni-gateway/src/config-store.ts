@@ -13,6 +13,9 @@ export interface OmniConfig {
   botName: string;
   language: string;
   autoApproveTools: boolean;
+  voice: string;
+  voiceRate: string;
+  voiceAutoRead: boolean;
 }
 
 export interface ProviderInfo {
@@ -61,6 +64,9 @@ const DEFAULTS: OmniConfig = {
   botName: 'Omni',
   language: 'pl',
   autoApproveTools: true,
+  voice: 'pl-PL-MarekNeural',
+  voiceRate: '+0%',
+  voiceAutoRead: false,
 };
 
 export function providerInfo(id: string): ProviderInfo {
@@ -142,6 +148,9 @@ export class ConfigStore {
     if (typeof patch.botName === 'string' && patch.botName.trim()) next.botName = patch.botName.trim();
     if (typeof patch.language === 'string' && patch.language.trim()) next.language = patch.language.trim();
     if (typeof patch.autoApproveTools === 'boolean') next.autoApproveTools = patch.autoApproveTools;
+    if (typeof patch.voice === 'string' && patch.voice.trim()) next.voice = patch.voice.trim();
+    if (typeof patch.voiceRate === 'string' && patch.voiceRate.trim()) next.voiceRate = patch.voiceRate.trim();
+    if (typeof patch.voiceAutoRead === 'boolean') next.voiceAutoRead = patch.voiceAutoRead;
 
     const incoming = apiKeys || {};
     for (const name of Object.keys(incoming)) {

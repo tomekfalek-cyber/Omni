@@ -87,6 +87,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       <div class="nav-group">Konfiguracja</div>
       <button class="nav-item" data-page="keys"><span class="ico">K</span>Modele i klucze API</button>
       <button class="nav-item" data-page="engines"><span class="ico">S</span>Silniki</button>
+      <button class="nav-item" data-page="voice"><span class="ico">G</span>Glos</button>
       <button class="nav-item" data-page="settings"><span class="ico">U</span>Ustawienia</button>
       <div class="nav-group">Praca</div>
       <button class="nav-item" data-page="sessions"><span class="ico">S</span>Sesje</button>
@@ -161,6 +162,29 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       </div>
     </section>
 
+    <section class="page hidden" id="page-voice">
+      <div class="grid">
+        <div class="card">
+          <h2>Glos bota</h2>
+          <label class="lbl">Wybierz glos</label><select id="voiceSelect"></select>
+          <label class="lbl">Tempo mowy</label><select id="voiceRate"><option value="-20%">Wolniej (-20%)</option><option value="+0%">Normalnie</option><option value="+20%">Szybciej (+20%)</option></select>
+          <label class="opt"><input type="checkbox" id="voiceAuto" /><div><b>Czytaj odpowiedzi na glos</b><span>Bot odczyta kazda odpowiedz.</span></div></label>
+          <div class="row"><button class="btn primary" id="voiceSave">Zapisz glos</button><button class="btn" id="voiceTest">Posluchaj</button></div>
+          <audio id="voicePlayer" controls style="width:100%;margin-top:12px"></audio>
+        </div>
+        <div class="card">
+          <h2>Wgraj wlasny glos</h2>
+          <p class="mut small">Obslugiwane sa modele glosu Piper: plik .onnx oraz .onnx.json.</p>
+          <label class="lbl">Nazwa glosu</label><input type="text" id="voiceName" placeholder="np. moj_glos" />
+          <label class="lbl">Model (.onnx)</label><input type="file" id="voiceOnnx" accept=".onnx" />
+          <label class="lbl">Konfiguracja (.onnx.json)</label><input type="file" id="voiceCfg" accept=".json,.onnx.json" />
+          <div class="row"><button class="btn primary" id="voiceUpload">Wgraj glos</button></div>
+          <pre class="out" id="voiceOut">tu pojawi sie wynik</pre>
+        </div>
+        <div class="card"><h2>Silniki glosu</h2><div id="voiceEngines" class="mut">sprawdzam...</div></div>
+      </div>
+    </section>
+
     <section class="page hidden" id="page-sessions">
       <div class="card"><h2>Sesje</h2><div class="list" id="sessionsList"></div></div>
     </section>
@@ -213,7 +237,7 @@ function api(path, opts){
   });
 }
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>]/g, function(c){ return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; }); }
-var TITLES = { chat:"Czat", keys:"Modele i klucze API", engines:"Silniki", sessions:"Sesje", tasks:"Zadania", settings:"Ustawienia", status:"Status i diagnostyka" };
+var TITLES = { chat:"Czat", keys:"Modele i klucze API", engines:"Silniki", voice:"Glos", sessions:"Sesje", tasks:"Zadania", settings:"Ustawienia", status:"Status i diagnostyka" };
 function show(page){
   var pages = document.querySelectorAll(".page");
   for(var i=0;i<pages.length;i++){ pages[i].className = "page hidden"; }
@@ -223,6 +247,7 @@ function show(page){
   for(var k=0;k<items.length;k++){ items[k].className = "nav-item" + (items[k].getAttribute("data-page") === page ? " active" : ""); }
   el("pageTitle").textContent = TITLES[page] || page;
   if(page === "engines"){ renderEngines(); }
+  if(page === "voice"){ renderVoices(); }
   if(page === "sessions"){ loadSessions(); }
   if(page === "tasks"){ loadTasks(); }
   if(page === "status"){ renderStatus(); }
@@ -275,6 +300,58 @@ function renderEngines(){
   var tools = (s.tools) || [];
   el("toolsBox").innerHTML = tools.length ? tools.map(function(t){ return "<div class=item><b>" + esc(t.name) + "</b><div class=mut>" + esc(t.description) + "</div></div>"; }).join("") : "<div class=mut>brak narzedzi</div>";
   el("keyState").innerHTML = s.hasOpenRouterKey ? "<span class=badge ok>klucz zapisany</span> Wpisz nowy, aby go zmienic." : "<span class=badge err>brak klucza</span> Wklej klucz albo uzyj OAuth.";
+}
+function renderVoices(){
+  var voices = (state.status && state.status.voices) || [];
+  var sel = el("voiceSelect");
+  if(!sel){ return; }
+  sel.innerHTML = "";
+  for(var i=0;i<voices.length;i++){
+    var o = document.createElement("option");
+    o.value = voices[i].id;
+    o.textContent = voices[i].label + (voices[i].available ? "" : " (niedostepny)");
+    sel.appendChild(o);
+  }
+  sel.value = (state.config && state.config.voice) || "pl-PL-MarekNeural";
+  if(el("voiceRate")){ el("voiceRate").value = (state.config && state.config.voiceRate) || "+0%"; }
+  if(el("voiceAuto")){ el("voiceAuto").checked = !!(state.config && state.config.voiceAutoRead); }
+  var eng = (state.status && state.status.voiceEngines) || {};
+  el("voiceEngines").innerHTML = "Edge TTS: " + (eng.edge ? "<span class=badge ok>dziala</span>" : "<span class=badge err>brak</span>") + " &middot; Piper (wlasne glosy): " + (eng.piper ? "<span class=badge ok>dziala</span>" : "<span class=badge err>brak</span>");
+}
+function speakText(text){
+  api("/api/voice/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text, voice: (state.config && state.config.voice) || "pl-PL-MarekNeural" }) })
+    .then(function(d){ var pl = el("voicePlayer"); if(pl){ pl.src = d.url; pl.play(); } })
+    .catch(function(e){ toast("Blad glosu: " + e.message, "err"); });
+}
+function saveVoice(){
+  var body = { voice: el("voiceSelect").value, voiceRate: el("voiceRate").value, voiceAutoRead: !!el("voiceAuto").checked };
+  api("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    .then(function(){ toast("Glos zapisany.", "ok"); return loadStatus(); })
+    .then(function(){ return loadConfig(); })
+    .catch(function(e){ toast("Blad: " + e.message, "err"); });
+}
+function sendUpload(name, onnx, cfg){
+  el("voiceOut").textContent = "wysylam...";
+  api("/api/voice/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name, onnx: onnx, config: cfg }) })
+    .then(function(d){ el("voiceOut").textContent = "Wgrano: " + d.id; toast("Glos wgrany.", "ok"); return loadStatus(); })
+    .then(function(){ renderVoices(); })
+    .catch(function(e){ el("voiceOut").textContent = "Blad: " + e.message; });
+}
+function uploadVoice(){
+  var name = (el("voiceName").value || "").trim();
+  var f1 = el("voiceOnnx").files[0];
+  var f2 = el("voiceCfg").files[0];
+  if(!name || !f1){ toast("Podaj nazwe i plik .onnx", "err"); return; }
+  var r1 = new FileReader();
+  r1.onload = function(){
+    var onnx = String(r1.result).split(",")[1];
+    if(f2){
+      var r2 = new FileReader();
+      r2.onload = function(){ sendUpload(name, onnx, String(r2.result).split(",")[1]); };
+      r2.readAsDataURL(f2);
+    } else { sendUpload(name, onnx, null); }
+  };
+  r1.readAsDataURL(f1);
 }
 function renderStatus(){
   var s = state.status || {};
@@ -339,7 +416,17 @@ function md(text){
 function addMsg(kind, text){
   var d = document.createElement("div");
   d.className = "msg " + kind;
-  if(kind === "bot"){ d.innerHTML = md(text); } else { d.textContent = text; }
+  if(kind === "bot"){
+    d.innerHTML = md(text);
+    var sp = document.createElement("button");
+    sp.className = "badge";
+    sp.textContent = "Czytaj";
+    sp.style.marginTop = "8px";
+    sp.addEventListener("click", function(){ speakText(text); });
+    d.appendChild(document.createElement("br"));
+    d.appendChild(sp);
+    if(state.config && state.config.voiceAutoRead){ speakText(text); }
+  } else { d.textContent = text; }
   el("chatLog").appendChild(d);
   el("chatLog").scrollTop = el("chatLog").scrollHeight;
   return d;
@@ -450,6 +537,9 @@ function boot(){
     saveConfig();
   });
   el("reloadEngine").addEventListener("click", function(){ saveConfig(); });
+  el("voiceSave").addEventListener("click", saveVoice);
+  el("voiceTest").addEventListener("click", function(){ speakText("Dzien dobry. Tak brzmi moj glos."); });
+  el("voiceUpload").addEventListener("click", uploadVoice);
   var radios = document.querySelectorAll("input[name=provider]");
   for(var ri=0; ri<radios.length; ri++){
     radios[ri].addEventListener("change", function(){ applyProviderModels(this.value); });
