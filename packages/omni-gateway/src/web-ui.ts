@@ -317,10 +317,29 @@ function sendMessage(){
       .catch(function(e){ addMsg("sys", "Blad: " + e.message); state.pending = false; });
   }
 }
+function md(text){
+  var BT = String.fromCharCode(96);
+  var NL = String.fromCharCode(10);
+  var s = esc(text);
+  var chunks = s.split(BT + BT + BT);
+  var out = "";
+  for(var ci=0; ci<chunks.length; ci++){
+    if(ci % 2 === 1){ out += "<pre class=out>" + chunks[ci] + "</pre>"; continue; }
+    var inline = chunks[ci].split(BT);
+    var seg = "";
+    for(var ii=0; ii<inline.length; ii++){
+      seg += (ii % 2 === 1) ? "<code>" + inline[ii] + "</code>" : inline[ii];
+    }
+    seg = seg.replace(/[*][*]([^*]+)[*][*]/g, "<b>$1</b>");
+    seg = seg.split(NL).join("<br>");
+    out += seg;
+  }
+  return out;
+}
 function addMsg(kind, text){
   var d = document.createElement("div");
   d.className = "msg " + kind;
-  d.textContent = text;
+  if(kind === "bot"){ d.innerHTML = md(text); } else { d.textContent = text; }
   el("chatLog").appendChild(d);
   el("chatLog").scrollTop = el("chatLog").scrollHeight;
   return d;

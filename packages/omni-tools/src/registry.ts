@@ -3,6 +3,7 @@ import { ApprovalManager } from 'omni-core/approval-manager.js';
 import { FileTools } from './tools/file-tools.js';
 import { GitTools } from './tools/git-tools.js';
 import { ShellSandbox } from './tools/shell-sandbox.js';
+import { WebTools } from './tools/web-tools.js';
 
 export class ToolRegistry {
   private tools: Map<string, {
@@ -34,6 +35,11 @@ export class ToolRegistry {
 
     // Rejestracja Shell Sandbox
     this.registerTool(shellSandbox.getDefinitions()[0], (args, cwd) => shellSandbox.execute(args, cwd));
+
+    // Narzedzia internetowe (bez kluczy API)
+    const webTools = new WebTools();
+    this.registerTool(webTools.getDefinitions()[0], (args) => webTools.search(args));
+    this.registerTool(webTools.getDefinitions()[1], (args) => webTools.fetchUrl(args));
   }
 
   private registerTool(definition: ToolDefinition, executor: (args: any, cwd: string) => Promise<any>) {

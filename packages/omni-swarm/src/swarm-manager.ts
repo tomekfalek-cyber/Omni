@@ -27,6 +27,7 @@ export class SwarmManager {
     
     this.memory = new OmniMemory();
     this.tools = new ToolRegistry();
+    this.registerMemoryTools();
   }
 
   /** Przebudowuje silniki po zmianie klucza, dostawcy lub modelu w panelu. */
@@ -52,6 +53,69 @@ export class SwarmManager {
     return this.executor.getCompletion(messages);
   }
 
+  private registerMemoryTools() {
+    this.tools.register({
+      definition: {
+        name: 'memory_save',
+        description: 'Zapisuje trwala notatke w pamieci bota (fakt, preferencja, ustalenie).',
+        parameters: { text: 'string' },
+        requiresApproval: false,
+        timeoutMs: 5000,
+        maxOutputBytes: 0,
+      },
+      execute: async (args: any) => {
+        const text = String((args && args.text) || '').trim();
+        if (!text) { throw new Error('Pusta notatka.'); }
+        this.memory.saveFact('note_' + Date.now(), text);
+        return 'Zapisano w pamieci: ' + text;
+      },
+    });
+    this.tools.register({
+      definition: {
+        name: 'memory_search',
+        description: 'Przeszukuje pamiec bota (wczesniejsze rozmowy i notatki).',
+        parameters: { query: 'string' },
+        requiresApproval: false,
+        timeoutMs: 8000,
+        maxOutputBytes: 20000,
+      },
+      execute: async (args: any) => {
+        const query = String((args && args.query) || '').trim();
+        if (!query) { throw new Error('Podaj zapytanie.'); }
+        const hits: any[] = this.memory.search(query, 8) as any;
+        if (!hits.length) { return 'Brak wynikow w pamieci.'; }
+        return hits.map((h: any) => '- [' + h.role + '] ' + String(h.content).slice(0, 300)).join(String.fromCharCode(10));
+      },
+    });
+  }
+
+  private toolSchemas(): any[] {
+    return this.tools.getAllDefinitions().map((t: any) => ({
+      type: 'function',
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: {
+          type: 'object',
+          properties: Object.keys(t.parameters || {}).reduce((acc: any, key: string) => { acc[key] = { type: t.parameters[key] === 'number' ? 'number' : 'string' }; return acc; }, {}),
+          required: Object.keys(t.parameters || {}),
+        },
+      },
+    }));
+  }
+
+  private async executorTurn(messages: any[], tools: any[]): Promise<{ content: string, toolCalls: any[] }> {
+    const provider: any = this.executor;
+    if (typeof provider.getCompletionWithTools === 'function') {
+      try {
+        return await provider.getCompletionWithTools(messages, tools);
+      } catch (error: any) {
+        console.log('[Swarm] Natywne narzedzia niedostepne (' + error.message + '), uzywam trybu tekstowego.');
+      }
+    }
+    const content = await provider.getCompletion(messages);
+    return { content: content, toolCalls: [] };
+  }
   public getApprovalManager(): any {
     return this.tools.approvalManager;
   }
@@ -118,46 +182,64 @@ export class SwarmManager {
       let executionResult = '';
       let draftAnswer = '';
       let usedTools = false;
+      const toolSchemas = this.toolSchemas();
+      const messages: any[] = [
+        { role: 'system', content: 'Jestes Executorem z realnymi narzedziami. Katalog roboczy: ' + cwd + '. Uzywaj narzedzi, gdy potrzebujesz danych z komputera lub z internetu. Nigdy nie zmyslaj wynikow. Gdy masz juz dane, odpowiedz po polsku.' },
+        { role: 'user', content: 'Zadanie: ' + prompt + '\nPlan:\n' + plan },
+      ];
 
       for (let i = 0; i < task.maxIterations; i++) {
         task.iterations = i + 1;
-        const action = await this.runExecutor(plan, executionResult, cwd, false);
+        const response = await this.executorTurn(messages, toolSchemas);
+        const toolCalls = response.toolCalls || [];
+        console.log('[Swarm] Iteracja ' + (i + 1) + ': narzedzia=' + (toolCalls.length ? toolCalls.map((c: any) => c.function.name).join(',') : 'brak'));
 
-        const calls = this.parseToolCalls(action);
-        console.log('[Swarm] Iteracja ' + (i + 1) + ': narzedzia=' + (calls.length ? calls.map((c) => c.name).join(',') : 'brak') + ' dlugosc=' + action.length);
-        const cleanedAction = this.stripMarkers(action);
-
-        if (calls.length === 0) {
-          if (cleanedAction) draftAnswer = cleanedAction;
+        if (!toolCalls.length) {
+          const textCalls = this.parseToolCalls(response.content);
+          if (textCalls.length) {
+            for (const call of textCalls) {
+              usedTools = true;
+              try {
+                const output = await this.tools.executeTool(call.name, call.args, cwd);
+                const text = typeof output === 'string' ? output : JSON.stringify(output);
+                executionResult += text;
+                this.memory.appendTranscript(sessionId, 'tool', call.name + ': ' + text.slice(0, 400));
+              } catch (error: any) {
+                executionResult += 'BLAD ' + call.name + ': ' + error.message;
+              }
+            }
+            messages.push({ role: 'user', content: 'Wyniki narzedzi:\n' + executionResult });
+            continue;
+          }
+          const cleaned = this.stripMarkers(response.content);
+          if (cleaned) { draftAnswer = cleaned; }
           break;
         }
 
-        for (const call of calls) {
+        messages.push({ role: 'assistant', content: response.content || null, tool_calls: toolCalls });
+        for (const call of toolCalls) {
           usedTools = true;
+          const name = call.function && call.function.name;
+          let args: any = {};
+          try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (error) { args = {}; }
           try {
-            console.log('[Swarm] Wykonuje narzedzie: ' + call.name);
-            const output = await this.tools.executeTool(call.name, call.args, cwd);
+            console.log('[Swarm] Wykonuje narzedzie: ' + name);
+            const output = await this.tools.executeTool(name, args, cwd);
             const text = typeof output === 'string' ? output : JSON.stringify(output);
-            executionResult += '\n[WYNIK NARZEDZIA ' + call.name + ']\n' + text + '\n';
-            this.memory.appendTranscript(sessionId, 'tool', call.name + ': ' + text.slice(0, 400));
+            executionResult += text;
+            messages.push({ role: 'tool', tool_call_id: call.id, content: text.slice(0, 8000) });
+            this.memory.appendTranscript(sessionId, 'tool', name + ': ' + text.slice(0, 400));
           } catch (error: any) {
-            executionResult += '\n[BLAD NARZEDZIA ' + call.name + '] ' + error.message + '\n';
-            this.memory.appendTranscript(sessionId, 'tool', 'BLAD ' + call.name + ': ' + error.message);
+            messages.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + error.message });
           }
-        }
-
-        const review = await this.runReviewer(prompt, plan, executionResult || action, cwd);
-        if (!review.includes('[[APPROVED]]')) {
-          executionResult += '\n[UWAGA REVIEWERA] ' + this.stripMarkers(review) + '\n';
         }
       }
 
       if (usedTools) {
-        const finalAnswer = await this.runExecutor(plan, executionResult, cwd, true);
-        const cleanedFinal = this.stripMarkers(finalAnswer);
-        if (cleanedFinal) draftAnswer = cleanedFinal;
-        const toolsUsed = this.parseToolCalls(executionResult).map(function (c) { return c.name; }).join(', ');
-        this.memory.appendTranscript(sessionId, 'system', 'Uzyte narzedzia: ' + (toolsUsed || 'brak'));
+        messages.push({ role: 'user', content: 'Na podstawie wynikow narzedzi napisz teraz konkretna odpowiedz dla uzytkownika po polsku. Bez wywolywania narzedzi.' });
+        const finalResponse = await this.executorTurn(messages, []);
+        const cleanedFinal = this.stripMarkers(finalResponse.content);
+        if (cleanedFinal) { draftAnswer = cleanedFinal; }
       }
       // KROK 4: Evolver uczy się z zadania
       await this.runEvolver(prompt, executionResult);

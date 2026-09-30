@@ -68,6 +68,19 @@ export class QwenProvider extends EventEmitter {
     }
   }
 
+  async getCompletionWithTools(messages: ChatCompletionMessageParam[], tools: any[]): Promise<{ content: string, toolCalls: any[] }> {
+    const payload: any = {
+      model: this.config.model,
+      messages: messages,
+      stream: false,
+      temperature: this.config.temperature,
+      max_tokens: this.config.maxTokens,
+    };
+    if (tools && tools.length) { payload.tools = tools; }
+    const response: any = await this.client.chat.completions.create(payload);
+    const message: any = (response.choices && response.choices[0] && response.choices[0].message) || {};
+    return { content: message.content || '', toolCalls: message.tool_calls || [] };
+  }
   async getCompletion(messages: ChatCompletionMessageParam[]): Promise<string> {
     try {
       const response = await this.client.chat.completions.create({
