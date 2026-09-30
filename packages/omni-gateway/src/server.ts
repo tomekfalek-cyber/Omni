@@ -33,6 +33,7 @@ export class OmniGateway {
   private oauthStates: Map<string, { verifier: string, createdAt: number }> = new Map();
   private startedAt: number = Date.now();
   private chatLog: any[] = [];
+  private appVersion: string = '';
   private voice: VoiceManager;
   private automations: AutomationScheduler;
 
@@ -53,6 +54,7 @@ export class OmniGateway {
     });
     this.automations.start();
     this.loadChat();
+    this.appVersion = crypto.createHash('sha256').update(WEB_UI_HTML).digest('hex').slice(0, 12);
     this.swarm.onEvent = (event: any) => { this.broadcast({ type: 'agent.event', event: event }); };
     this.swarm.onToken = (chunk: string) => { this.broadcast({ type: 'task.token', chunk: chunk }); };
     this.wireApprovals();
@@ -122,7 +124,7 @@ export class OmniGateway {
       const cfg = this.config.get();
       if (!cfg.accessCode) { next(); return; }
       const p = req.path || '/';
-      if (p === '/api/login' || p === '/health' || p === '/manifest.webmanifest' || p === '/sw.js' || p.indexOf('/icon-') === 0) { next(); return; }
+      if (p === '/api/login' || p === '/api/version' || p === '/health' || p === '/manifest.webmanifest' || p === '/sw.js' || p.indexOf('/icon-') === 0) { next(); return; }
       const cookie = String(req.headers.cookie || '');
       if (cookie.indexOf('omni_token=' + this.tokenFor(cfg.accessCode)) !== -1) { next(); return; }
       if (p.indexOf('/api/') === 0) { res.status(401).json({ error: 'Wymagany kod dostepu' }); return; }
@@ -157,7 +159,13 @@ export class OmniGateway {
 
   private setupWebUI() {
     this.app.get('/', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-store, must-revalidate');
       res.type('html').send(WEB_UI_HTML);
+    });
+
+    this.app.get('/api/version', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ version: this.appVersion, app: 'omni' });
     });
 
     this.app.get('/manifest.webmanifest', (_req, res) => {

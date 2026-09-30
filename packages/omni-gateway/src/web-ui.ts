@@ -573,6 +573,24 @@ function afterBotAnswer(text){
     if(el("voiceHint")){ el("voiceHint").textContent = "Odpowiedz czytana na glos"; }
   }
 }
+function startVersionWatch(){
+  var check = function(){
+    fetch("/api/version?t=" + Date.now())
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || !d.version){ return; }
+        if(!state.appVersion){ state.appVersion = d.version; return; }
+        if(d.version !== state.appVersion){ state.appVersion = d.version; toast("Nowa wersja Omni - odswiezam...", "ok"); setTimeout(function(){ location.reload(); }, 1200); }
+      })
+      .catch(function(){});
+  };
+  setTimeout(check, 8000);
+  setInterval(check, 60000);
+  document.addEventListener("visibilitychange", function(){ if(!document.hidden){ check(); } });
+  if("serviceWorker" in navigator){
+    navigator.serviceWorker.getRegistration().then(function(reg){ if(reg){ reg.update(); } }).catch(function(){});
+  }
+}
 function showAgentStatus(ev){
   if(!ev){ return; }
   var d = document.getElementById("agentStatus");
@@ -877,11 +895,12 @@ function boot(){
   for(var ri=0; ri<radios.length; ri++){
     radios[ri].addEventListener("change", function(){ applyProviderModels(this.value); });
   }
-  if("serviceWorker" in navigator){ navigator.serviceWorker.register("/sw.js").catch(function(){}); }
+  if("serviceWorker" in navigator){ navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(function(){}); }
   state.clientId = Math.random().toString(36).slice(2);
   loadChatHistory();
   setupInstallBar();
   initMic();
+  startVersionWatch();
   el("micBtn").addEventListener("click", toggleMic);
   if(el("installBtn")){
     el("installBtn").addEventListener("click", function(){
