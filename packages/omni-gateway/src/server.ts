@@ -8,6 +8,7 @@ import * as crypto from 'crypto';
 import * as path from 'path';
 import { WEB_UI_HTML } from './web-ui.js';
 import * as fs from 'fs';
+import * as os from 'os';
 import { ConfigStore, KEY_OPENROUTER, MODEL_PRESETS, PROVIDERS } from './config-store.js';
 import { VoiceManager } from './voice/voice-manager.js';
 import { LOGIN_PAGE } from './login-page.js';
@@ -337,6 +338,13 @@ export class OmniGateway {
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
+    });
+
+    this.app.get('/image/:file', (req, res) => {
+      const name = String(req.params.file || '').replace(new RegExp('[^A-Za-z0-9_.-]', 'g'), '');
+      const full = path.join(os.homedir(), '.omni', 'images', name);
+      if (!name || !fs.existsSync(full)) { res.status(404).json({ error: 'Brak obrazka' }); return; }
+      res.sendFile(full);
     });
 
     this.app.get('/voice/:file', (req, res) => {

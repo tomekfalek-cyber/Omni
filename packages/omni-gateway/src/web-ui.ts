@@ -119,7 +119,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
         <div class="chat-log" id="chatLog"></div>
         <div class="composer">
           <textarea id="chatInput" rows="2" placeholder="Napisz wiadomosc i nacisnij Enter (Shift+Enter = nowa linia)"></textarea>
-          <button class="btn" id="micBtn" title="Rozmowa glosowa">MOW</button>
+          <button class="btn" id="micBtn" title="Rozmowa glosowa"><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'><rect x='9' y='2' width='6' height='11' rx='3'></rect><path d='M5 11a7 7 0 0 0 14 0'></path><line x1='12' y1='18' x2='12' y2='23'></line></svg></button>
           <button class="btn primary" id="sendBtn">Wyslij</button>
         </div>
         <div class="chat-hint" id="voiceHint">Rozmowa glosowa: kliknij MOW i mow</div>
@@ -467,6 +467,8 @@ function md(text){
   }
   return out;
 }
+var MIC_ICON = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'><rect x='9' y='2' width='6' height='11' rx='3'></rect><path d='M5 11a7 7 0 0 0 14 0'></path><line x1='12' y1='18' x2='12' y2='23'></line></svg>";
+var STOP_ICON = "<svg width='14' height='14' viewBox='0 0 24 24' fill='currentColor'><rect x='5' y='5' width='14' height='14' rx='2'></rect></svg>";
 function initMic(){
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){
@@ -485,12 +487,12 @@ function initMic(){
     el("chatInput").value = text;
     if(ev.results[ev.results.length - 1].isFinal){
       state.listening = false;
-      el("micBtn").textContent = "MOW";
+      el("micBtn").innerHTML = MIC_ICON;
       sendMessage();
     }
   };
-  r.onend = function(){ state.listening = false; el("micBtn").textContent = "MOW"; };
-  r.onerror = function(e){ state.listening = false; el("micBtn").textContent = "MOW"; toast("Mikrofon: " + e.error, "err"); };
+  r.onend = function(){ state.listening = false; el("micBtn").innerHTML = MIC_ICON; };
+  r.onerror = function(e){ state.listening = false; el("micBtn").innerHTML = MIC_ICON; toast("Mikrofon: " + e.error, "err"); };
   state.recog = r;
 }
 function toggleMic(){
@@ -498,9 +500,9 @@ function toggleMic(){
   if(!state.recog){ return; }
   if(state.listening){ try { state.recog.stop(); } catch(e){} return; }
   state.listening = true;
-  el("micBtn").textContent = "STOP";
+  el("micBtn").innerHTML = STOP_ICON;
   if(el("voiceHint")){ el("voiceHint").textContent = "Slucham... mow teraz"; }
-  try { state.recog.start(); } catch(e){ state.listening = false; el("micBtn").textContent = "MOW"; }
+  try { state.recog.start(); } catch(e){ state.listening = false; el("micBtn").innerHTML = MIC_ICON; }
 }
 function afterBotAnswer(text){
   var cfg = state.config || {};
@@ -532,6 +534,19 @@ function addMsg(kind, text){
   d.className = "msg " + kind;
   if(kind === "bot"){
     d.innerHTML = md(text);
+    var iparts = String(text).split("/image/");
+    for(var ipi = 1; ipi < iparts.length; ipi++){
+      var iname = iparts[ipi].split(new RegExp("[^A-Za-z0-9_.-]"))[0];
+      if(iname){
+        var im = document.createElement("img");
+        im.src = "/image/" + iname;
+        im.style.maxWidth = "100%";
+        im.style.borderRadius = "12px";
+        im.style.marginTop = "8px";
+        d.appendChild(document.createElement("br"));
+        d.appendChild(im);
+      }
+    }
     var sp = document.createElement("button");
     sp.className = "badge";
     sp.textContent = "Czytaj";

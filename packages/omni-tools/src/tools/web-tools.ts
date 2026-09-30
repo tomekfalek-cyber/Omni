@@ -1,4 +1,5 @@
 import { ToolDefinition } from 'omni-core/types.js';
+import * as fs from 'fs';
 import { execFile } from 'child_process';
 import * as os from 'os';
 import * as path from 'path';
@@ -21,7 +22,8 @@ export class WebTools {
       { name: 'web_search', description: 'Szuka informacji w internecie. Zwraca tytuly, adresy i opisy.', parameters: { query: 'string' }, requiresApproval: false, timeoutMs: 35000, maxOutputBytes: this.MAX_BYTES },
       { name: 'web_fetch', description: 'Pobiera strone internetowa jako czysty tekst.', parameters: { url: 'string' }, requiresApproval: false, timeoutMs: 30000, maxOutputBytes: this.MAX_BYTES },
       { name: 'crypto_price', description: 'Aktualny kurs kryptowalut w USD i PLN.', parameters: { coins: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 4000 },
-      { name: 'news', description: 'Najnowsze wiadomosci na podany temat.', parameters: { query: 'string' }, requiresApproval: false, timeoutMs: 25000, maxOutputBytes: 8000 }
+      { name: 'news', description: 'Najnowsze wiadomosci na podany temat.', parameters: { query: 'string' }, requiresApproval: false, timeoutMs: 25000, maxOutputBytes: 8000 },
+      { name: 'image_generate', description: 'Tworzy obrazek/grafike na podstawie opisu.', parameters: { prompt: 'string' }, requiresApproval: false, timeoutMs: 90000, maxOutputBytes: 2000 }
     ];
   }
 
@@ -198,6 +200,22 @@ export class WebTools {
     };
     return map[n] || n;
   }
+
+  public async image(args: { prompt: string }): Promise<string> {
+    const prompt = String((args && args.prompt) || '').trim();
+    if (!prompt) { throw new Error('Podaj opis obrazka.'); }
+    const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=1024&height=1024&nologo=true';
+    const res = await fetch(url, { headers: { 'User-Agent': 'OmniBot/1.2' } });
+    if (!res.ok) { throw new Error('Generator obrazow zwrocil blad ' + res.status); }
+    const buf = Buffer.from(await res.arrayBuffer());
+    const dir = path.join(os.homedir(), '.omni', 'images');
+    fs.mkdirSync(dir, { recursive: true });
+    const name = 'img_' + Date.now() + '.jpg';
+    fs.writeFileSync(path.join(dir, name), buf);
+    return 'Wygenerowalem obrazek. Wpisz w odpowiedzi dokladnie: /image/' + name + ' - panel wyswietli go uzytkownikowi.';
+  }
+
+  public imagesDir(): string { return path.join(os.homedir(), '.omni', 'images'); }
 
   public async crypto(args: { coins: string }): Promise<string> {
     const raw = String((args && args.coins) || '').trim();

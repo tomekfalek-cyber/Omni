@@ -42,6 +42,7 @@ export class ToolRegistry {
     this.registerTool(webTools.getDefinitions()[1], (args) => webTools.fetchUrl(args));
     this.registerTool(webTools.getDefinitions()[2], (args) => webTools.crypto(args));
     this.registerTool(webTools.getDefinitions()[3], (args) => webTools.news(args));
+    this.registerTool(webTools.getDefinitions()[4], (args) => webTools.image(args));
   }
 
   private registerTool(definition: ToolDefinition, executor: (args: any, cwd: string) => Promise<any>) {
