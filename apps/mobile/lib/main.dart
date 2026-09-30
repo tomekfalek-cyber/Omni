@@ -2,6 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'screens/home_screen.dart';
 
+/// Omni „Granat" palette — deep navy with electric-blue accents.
+/// Matches the app logo and background (assets/images/background.png).
+class OmniColors {
+  static const Color granat = Color(0xFF0A1128);
+  static const Color granatDeep = Color(0xFF05091A);
+  static const Color panel = Color(0xFF0B1730);
+  static const Color accent = Color(0xFF3D7BFD);
+  static const Color accentGlow = Color(0xFF7FD8FF);
+  static const Color text = Color(0xFFE6EDF7);
+}
+
 void main() {
   runApp(
     const ProviderScope(
@@ -15,26 +26,35 @@ class OmniApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: OmniColors.accent,
+      brightness: Brightness.dark,
+    ).copyWith(
+      surface: OmniColors.granat,
+      primary: OmniColors.accent,
+      secondary: OmniColors.accentGlow,
+    );
+
     return MaterialApp(
       title: 'Omni Agent',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
-          brightness: Brightness.light,
-        ),
+        colorScheme: scheme,
         useMaterial3: true,
-        fontFamily: 'Roboto',
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
-          brightness: Brightness.dark,
+        scaffoldBackgroundColor: OmniColors.granat,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: false,
         ),
-        useMaterial3: true,
-        fontFamily: 'Roboto',
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: OmniColors.granatDeep,
+          indicatorColor: OmniColors.accent,
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: OmniColors.accent,
+        ),
       ),
-      themeMode: ThemeMode.system,
       home: const HomeScreen(),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../main.dart' show OmniColors;
 import '../providers/chat_provider.dart';
 import '../providers/session_provider.dart';
 import '../services/websocket_service.dart';
@@ -26,11 +27,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final connectionState = ref.watch(webSocketProvider);
-    
+
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        titleSpacing: 12,
+        title: Row(
+          children: [
+            ClipOval(
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 32,
+                height: 32,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'Omni Agent',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/background.png'),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: SafeArea(
+          child: IndexedStack(
+            index: _currentIndex,
+            children: _screens,
+          ),
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
@@ -61,7 +93,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget? _buildConnectionIndicator(ConnectionState state) {
     if (state is Connected) return null;
-    
+
     Color color;
     IconData icon;
     String tooltip;
@@ -78,7 +110,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         tooltip = 'Błąd połączenia';
         break;
       default:
-        color = Colors.grey;
+        color = OmniColors.accent;
         icon = Icons.cloud_off;
         tooltip = 'Rozłączono';
     }

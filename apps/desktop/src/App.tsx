@@ -32,16 +32,28 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-950 text-gray-100">
+    <div
+      className="flex h-screen text-gray-100 bg-cover bg-center"
+      style={{ backgroundImage: "url('/background.png')" }}
+    >
       {/* Sidebar */}
-      <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
-        <div className="p-4 border-b border-gray-800">
-          <h1 className="text-xl font-bold text-blue-400">🤖 Omni Agent</h1>
-          <div className="mt-2 flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
-            <span className="text-sm text-gray-400">
-              {connected ? 'Połączono' : 'Rozłączono'}
-            </span>
+      <div className="w-64 bg-[#05091A]/85 backdrop-blur border-r border-[#1B2B4D] flex flex-col">
+        <div className="p-4 border-b border-[#1B2B4D]">
+          <div className="flex items-center space-x-3">
+            <img
+              src="/logo.png"
+              alt="Omni Agent"
+              className="w-10 h-10 rounded-full ring-2 ring-[#3D7BFD]/60"
+            />
+            <div>
+              <h1 className="text-lg font-bold text-[#7FD8FF] leading-tight">Omni Agent</h1>
+              <div className="mt-1 flex items-center space-x-2">
+                <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className="text-xs text-gray-400">
+                  {connected ? 'Połączono' : 'Rozłączono'}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -78,13 +90,13 @@ function App() {
           </button>
         </nav>
 
-        <div className="p-4 border-t border-gray-800">
+        <div className="p-4 border-t border-[#1B2B4D]">
           <VoiceRecorder onRecordingComplete={handleRecordingComplete} />
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col backdrop-blur-[2px]">
         {currentView === 'chat' && (
           <ChatPanel onSendMessage={handleSendMessage} />
         )}
