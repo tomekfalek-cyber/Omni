@@ -10,6 +10,7 @@ import { WEB_UI_HTML } from './web-ui.js';
 import * as fs from 'fs';
 import { ConfigStore, KEY_OPENROUTER, MODEL_PRESETS, PROVIDERS } from './config-store.js';
 import { VoiceManager } from './voice/voice-manager.js';
+import { LOGIN_PAGE } from './login-page.js';
 
 const OPENROUTER_AUTH_URL = 'https://openrouter.ai/auth';
 const OPENROUTER_KEYS_URL = 'https://openrouter.ai/api/v1/auth/keys';
@@ -43,6 +44,7 @@ export class OmniGateway {
     this.swarm.workspaceCwd = this.config.get().workspaceDir;
     this.wireApprovals();
 
+    this.setupAuth();
     this.setupWebUI();
     this.setupREST();
     this.setupOAuth();
@@ -84,9 +86,94 @@ export class OmniGateway {
     return proto + '://' + host;
   }
 
+  private tokenFor(code: string): string {
+    return crypto.createHash('sha256').update('omni-gate:' + code).digest('hex');
+  }
+
+  private isLocalRequest(req: any): boolean {
+    const remote = String((req.socket && req.socket.remoteAddress) || '');
+    return remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
+  }
+
+  private setupAuth() {
+    this.app.post('/api/login', (req, res) => {
+      const cfg = this.config.get();
+      const code = String((req.body && req.body.code) || '');
+      if (!cfg.accessCode) { res.json({ ok: true, note: 'Kod nie jest ustawiony' }); return; }
+      if (code !== cfg.accessCode) { res.status(403).json({ error: 'Zly kod dostepu' }); return; }
+      res.setHeader('Set-Cookie', 'omni_token=' + this.tokenFor(cfg.accessCode) + '; Path=/; Max-Age=2592000; SameSite=Lax');
+      res.json({ ok: true });
+    });
+
+    this.app.use((req, res, next) => {
+      const cfg = this.config.get();
+      if (!cfg.accessCode) { next(); return; }
+      const p = req.path || '/';
+      if (p === '/api/login' || p === '/health' || p === '/manifest.webmanifest' || p === '/sw.js' || p.indexOf('/icon-') === 0) { next(); return; }
+      const cookie = String(req.headers.cookie || '');
+      if (cookie.indexOf('omni_token=' + this.tokenFor(cfg.accessCode)) !== -1) { next(); return; }
+      if (p.indexOf('/api/') === 0) { res.status(401).json({ error: 'Wymagany kod dostepu' }); return; }
+      res.type('html').send(LOGIN_PAGE);
+    });
+  }
+  private assetsDir(): string {
+    const here = path.dirname(new URL(import.meta.url).pathname);
+    const candidates = [
+      path.join(process.cwd(), 'packages', 'omni-gateway', 'assets'),
+      path.join(process.cwd(), 'assets'),
+      path.join(here, '..', 'assets'),
+    ];
+    for (const dir of candidates) {
+      try { if (fs.existsSync(path.join(dir, 'icon-512.png'))) { return dir; } } catch (error) { }
+    }
+    return candidates[0];
+  }
+
   private setupWebUI() {
     this.app.get('/', (_req, res) => {
       res.type('html').send(WEB_UI_HTML);
+    });
+
+    this.app.get('/manifest.webmanifest', (_req, res) => {
+      const cfg = this.config.get();
+      const manifest = {
+        name: cfg.botName + ' - Twoj asystent',
+        short_name: cfg.botName,
+        description: 'Osobisty asystent AI dzialajacy na Twoim komputerze.',
+        start_url: '/',
+        scope: '/',
+        display: 'standalone',
+        background_color: '#0b0f14',
+        theme_color: '#0b0f14',
+        lang: 'pl',
+        icons: [
+          { src: '/icon-96.png', sizes: '96x96', type: 'image/png' },
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      };
+      res.type('application/manifest+json').send(JSON.stringify(manifest));
+    });
+
+    for (const size of [96, 192, 512]) {
+      this.app.get('/icon-' + size + '.png', (_req, res) => {
+        try {
+          const file = path.join(this.assetsDir(), 'icon-' + size + '.png');
+          res.type('png').send(fs.readFileSync(file));
+        } catch (error: any) {
+          console.log('[Gateway] Nie moge podac ikony: ' + error.message);
+          res.status(404).end();
+        }
+      });
+    }
+
+    this.app.get('/sw.js', (_req, res) => {
+      res.type('application/javascript').send(
+        'self.addEventListener("install", () => self.skipWaiting());' +
+        'self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));' +
+        'self.addEventListener("fetch", () => {});'
+      );
     });
   }
 
@@ -173,6 +260,23 @@ export class OmniGateway {
         res.json({ ok: true, keyNames: this.config.keyNames() });
       } catch (error: any) {
         res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/tunnel', (_req, res) => {
+      try {
+        const logPath = path.join(process.cwd(), 'tunnel.log');
+        const log = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
+        const marker = '.trycloudflare.com';
+        const parts = log.split('https://');
+        let url = '';
+        for (const part of parts) {
+          const idx = part.indexOf(marker);
+          if (idx > 0) { url = 'https://' + part.slice(0, idx + marker.length); }
+        }
+        res.json({ url: url, connected: log.indexOf('Registered tunnel connection') !== -1 });
+      } catch (error: any) {
+        res.json({ url: '', connected: false });
       }
     });
 

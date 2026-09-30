@@ -17,6 +17,7 @@ export interface OmniConfig {
   voiceRate: string;
   voiceAutoRead: boolean;
   workspaceDir: string;
+  accessCode: string;
 }
 
 export interface ProviderInfo {
@@ -69,6 +70,7 @@ const DEFAULTS: OmniConfig = {
   voiceRate: '+0%',
   voiceAutoRead: false,
   workspaceDir: '/home/openclaw',
+  accessCode: '',
 };
 
 export function providerInfo(id: string): ProviderInfo {
@@ -154,6 +156,7 @@ export class ConfigStore {
     if (typeof patch.voiceRate === 'string' && patch.voiceRate.trim()) next.voiceRate = patch.voiceRate.trim();
     if (typeof patch.voiceAutoRead === 'boolean') next.voiceAutoRead = patch.voiceAutoRead;
     if (typeof patch.workspaceDir === 'string' && patch.workspaceDir.trim()) next.workspaceDir = patch.workspaceDir.trim();
+    if (typeof patch.accessCode === 'string') next.accessCode = patch.accessCode.trim();
 
     const incoming = apiKeys || {};
     for (const name of Object.keys(incoming)) {
