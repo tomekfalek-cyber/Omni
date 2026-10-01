@@ -108,6 +108,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       <div class="nav-group">Rozmowa</div>
       <button class="nav-item active" data-page="chat"><span class="ico">C</span>Czat</button>
       <div class="nav-group">Konfiguracja</div>
+      <button class="nav-item" data-page="files"><span class="ico">F</span>Pliki</button>
       <button class="nav-item" data-page="backup"><span class="ico">B</span>Kopia zapasowa</button>
       <button class="nav-item" data-page="stats"><span class="ico">Y</span>Statystyki</button>
       <button class="nav-item" data-page="memory"><span class="ico">P</span>Pamięć i skille</button>
@@ -337,6 +338,15 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       </div>
     </section>
 
+    <section class="page hidden" id="page-files">
+      <div class="card">
+        <h2>Pliki bota (katalog roboczy)</h2>
+        <div class="mut">Przeglądaj i edytuj pliki w katalogu roboczym bota. Ścieżka poza katalogiem jest blokowana.</div>
+        <div class="row"><input type="text" id="filesPath" placeholder="np. ." style="flex:1" /><button class="btn" onclick="loadFiles()">Otwórz</button><button class="btn" onclick="filesUp()">Wyżej</button></div>
+        <div class="mut" id="filesState"></div>
+      </div>
+      <div class="grid"><div class="card"><h2>Zawartość</h2><div id="filesList">ładuję...</div></div><div class="card"><h2>Podgląd / edycja</h2><div class="mut" id="fileOpened"></div><textarea id="fileBox" rows="12" style="width:100%"></textarea><div class="row"><button class="btn primary" onclick="saveFile()">Zapisz plik</button></div><div class="mut" id="fileState"></div></div></div>
+    </section>
     <section class="page hidden" id="page-backup">
       <div class="card">
         <h2>Kopia zapasowa</h2>
@@ -440,6 +450,7 @@ function show(page){
   if(page === "memory"){ loadMemory(); }
   if(page === "stats"){ loadStats(); }
   if(page === "backup"){ }
+  if(page === "files"){ loadFiles(); }
 
   if(page === "engines"){ loadEngineOptions(); var es = document.getElementById('engSave'); if(es && !es.__omniBound){ es.__omniBound = true; es.addEventListener('click', saveEngine); } }
   if(page === "voice"){ renderVoices(); }
@@ -804,6 +815,63 @@ function markAllRead(){
 }
 function statTile(label, value, hint){
   return '<div class="card"><h2>' + esc(label) + '</h2><div style="font-size:26px;font-weight:700">' + esc(String(value)) + '</div><div class="mut">' + esc(hint || '') + '</div></div>';
+}
+var oFileCur = '';
+function loadFiles(){
+  var p = document.getElementById('filesPath');
+  var dir = p ? p.value : '.';
+  var st = document.getElementById('filesState');
+  if(st){ st.textContent = 'Czytam: ' + dir; }
+  return api('/api/files?dir=' + encodeURIComponent(dir)).then(function(d){
+    var l = document.getElementById('filesList');
+    if(!l){ return; }
+    var es = (d && d.entries) || [];
+    var html = '';
+    for(var i=0;i<es.length;i++){
+      var e = es[i];
+      var t = e.isDir ? 'DIR' : (e.size + ' B');
+      html += '<div style="cursor:pointer;padding:3px 0" data-open="' + esc(e.name) + '" data-dir="' + (e.isDir ? '1' : '0') + '">' + (e.isDir ? '(katalog) ' : '') + esc(e.name) + ' <span class="mut">' + t + '</span></div>';
+    }
+    l.innerHTML = html || 'Pusto.';
+    var els = l.querySelectorAll('div[data-open]');
+    for(var j=0;j<els.length;j++){ els[j].addEventListener('click', function(ev){ fileOpen(ev.currentTarget); }); }
+    var s2 = document.getElementById('filesState');
+    if(s2){ s2.textContent = 'Katalog: ' + ((d && d.dir) || '.') + ' (' + es.length + ' pozycji)'; }
+  }).catch(function(e){ var s3 = document.getElementById('filesState'); if(s3){ s3.textContent = 'Blad: ' + e.message; } });
+}
+function fileOpen(el){
+  var name = el.getAttribute('data-open');
+  var isDir = el.getAttribute('data-dir') === '1';
+  var p = document.getElementById('filesPath');
+  var cur = p ? (p.value || '.') : '.';
+  var join = (cur === '.' || cur === '') ? name : (cur.replace(new RegExp('/+$'), '') + '/' + name);
+  if(isDir){ if(p){ p.value = join; } loadFiles(); return; }
+  oFileCur = join;
+  var lbl = document.getElementById('fileOpened');
+  var st = document.getElementById('fileState');
+  if(lbl){ lbl.textContent = join; }
+  if(st){ st.textContent = ''; }
+  return api('/api/files/read?path=' + encodeURIComponent(join)).then(function(d){
+    var b = document.getElementById('fileBox');
+    if(b){ b.value = (d && d.content) || ''; }
+  }).catch(function(e){ var st2 = document.getElementById('fileState'); if(st2){ st2.textContent = 'Blad: ' + e.message; } });
+}
+function saveFile(){
+  var b = document.getElementById('fileBox');
+  var st = document.getElementById('fileState');
+  if(!b || !oFileCur){ if(st){ st.textContent = 'Najpierw otworz plik.'; } return; }
+  if(st){ st.textContent = 'Zapisuje...'; }
+  return api('/api/files/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: oFileCur, content: b.value }) })
+    .then(function(d){ if(st){ st.textContent = (d && d.ok) ? 'Zapisane (' + d.chars + ' znakow).' : 'Nie udalo sie.'; } })
+    .catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+}
+function filesUp(){
+  var p = document.getElementById('filesPath');
+  if(!p){ return; }
+  var cur = p.value || '.';
+  var i = cur.replace(new RegExp('/+$'), '').lastIndexOf('/');
+  p.value = i > 0 ? cur.slice(0, i) : '.';
+  loadFiles();
 }
 function downloadBackup(){
   var st = document.getElementById('bakState');

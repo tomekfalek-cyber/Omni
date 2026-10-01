@@ -325,6 +325,46 @@ export class OmniGateway {
         models: MODEL_PRESETS.map((m) => ({ provider: m.provider, id: m.id, label: m.label, note: m.note || '' })),
       });
     });
+    this.app.get('/api/files', (req, res) => {
+      try {
+        const root = String(this.config.get().workspaceDir || process.env.HOME || '/home/openclaw');
+        const rel = String((req.query && req.query.dir) || '');
+        const full = path.resolve(root, rel);
+        if (full !== root && full.indexOf(root + path.sep) !== 0) { res.status(400).json({ error: 'Poza katalogiem roboczym.' }); return; }
+        if (!fs.existsSync(full)) { res.status(404).json({ error: 'Nie ma takiego katalogu.' }); return; }
+        const entries = fs.readdirSync(full).map((name) => {
+          let isDir = false; let size = 0;
+          try { const st = fs.statSync(path.join(full, name)); isDir = st.isDirectory(); size = st.size; } catch (e) { }
+          return { name: name, isDir: isDir, size: size };
+        }).sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : (a.isDir ? -1 : 1)));
+        res.json({ root: root, dir: path.relative(root, full) || '.', entries: entries.slice(0, 400) });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.get('/api/files/read', (req, res) => {
+      try {
+        const root = String(this.config.get().workspaceDir || process.env.HOME || '/home/openclaw');
+        const rel = String((req.query && req.query.path) || '');
+        const full = path.resolve(root, rel);
+        if (full.indexOf(root + path.sep) !== 0) { res.status(400).json({ error: 'Poza katalogiem roboczym.' }); return; }
+        if (!fs.existsSync(full)) { res.status(404).json({ error: 'Brak pliku.' }); return; }
+        const st = fs.statSync(full);
+        if (st.size > 2000000) { res.status(400).json({ error: 'Plik za duzy (limit 2 MB).' }); return; }
+        res.json({ ok: true, path: rel, content: fs.readFileSync(full, 'utf8').slice(0, 400000) });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.post('/api/files/save', (req, res) => {
+      try {
+        const root = String(this.config.get().workspaceDir || process.env.HOME || '/home/openclaw');
+        const rel = String((req.body && req.body.path) || '');
+        const content = String((req.body && req.body.content) || '');
+        const full = path.resolve(root, rel);
+        if (full.indexOf(root + path.sep) !== 0) { res.status(400).json({ error: 'Poza katalogiem roboczym.' }); return; }
+        fs.writeFileSync(full, content, 'utf8');
+        res.json({ ok: true, chars: content.length });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
     this.app.get('/api/backup', (_req, res) => {
       const home = process.env.HOME || '/home/openclaw';
       const rd = (p: string): any => { try { return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null; } catch (e) { return null; } };
