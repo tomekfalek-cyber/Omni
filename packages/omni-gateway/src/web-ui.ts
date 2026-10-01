@@ -966,7 +966,7 @@ function renderReminders(list){
     var r = list[i];
     var when = new Date(Number(r.at));
     var stat = r.done ? ' (wyslane)' : '';
-    html += '<div>' + when.toLocaleString('pl-PL') + ' - ' + esc(r.text) + stat + ' <button class=\'btn\' data-remdel=\'' + esc(r.id) + '\'>Usun</button></div>';
+    html += '<div>' + when.toLocaleString('pl-PL') + ' - ' + esc(r.text) + stat + ' <button class="btn" data-remdel="' + esc(r.id) + '">Usun</button></div>';
   }
   box.innerHTML = html;
   var bs = box.querySelectorAll('button[data-remdel]');
