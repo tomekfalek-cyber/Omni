@@ -6,7 +6,12 @@ LOG=$REPO/tunnel.log
 JSON=$REPO/docs/address.json
 NODE=/home/openclaw/.openclaw/tools/node-v24.19.0/bin/node
 
-URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$LOG" 2>/dev/null | tail -1)
+DOMAIN=$(cat /home/openclaw/.omni/ngrok-domain.txt 2>/dev/null | tr -d ' ')
+if [ -n "$DOMAIN" ]; then
+  URL="https://$DOMAIN"
+else
+  URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$LOG" 2>/dev/null | tail -1)
+fi
 [ -z "$URL" ] && exit 0
 
 CUR=$(sed -n 's/.*"url"[ ]*:[ ]*"\([^"]*\)".*/\1/p' "$JSON" 2>/dev/null | head -1)

@@ -377,6 +377,11 @@ export class OmniGateway {
 
     this.app.get('/api/tunnel', (_req, res) => {
       try {
+        const domainFile = path.join(process.env.HOME || '/home/openclaw', '.omni', 'ngrok-domain.txt');
+        if (fs.existsSync(domainFile)) {
+          const domain = String(fs.readFileSync(domainFile, 'utf8')).trim();
+          if (domain) { res.json({ url: 'https://' + domain, connected: true }); return; }
+        }
         const logPath = path.join(process.cwd(), 'tunnel.log');
         const log = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
         const marker = '.trycloudflare.com';
