@@ -73,7 +73,7 @@ export class SwarmManager {
       '4. Nigdy nie mow, ze cos zostalo zrobione, jesli nie masz dowodu (wynik komendy, sciezka pliku, kod HTTP). Brak dowodu = powiedz wprost, czego brakuje.',
       '5. Jesli narzedzie zawiedzie dwa razy, zmien podejscie i powiedz o tym. Nie powtarzaj tej samej nieudanej proby.',
       '6. Nie wymyslaj ograniczen, ktorych nie masz: masz internet, pamiec, narzedzia i dzisiejsza date. Jesli czegos nie mozesz - powiedz dokladnie czego i dlaczego.',
-      '7. Zanim zrobisz cos na zewnatrz (wyslanie wiadomosci, publikacja) - zapytaj. Czytanie i praca lokalna sa dozwolone bez pytania.',
+      '7. Praca lokalna jest DOZWOLONA i nie wymaga pytania: zapisuj pliki, uruchamiaj komendy i testy, commituj w lokalnym repo - po prostu to zrob i pokaz wynik. Pytaj TYLKO o dzialania na zewnatrz: wyslanie wiadomosci, publikacja, push do CUDZEGO repozytorium.',
       '8. Nie uruchamiaj destrukcyjnych komend bez zgody.',
       '9. Korzystaj z pamieci: najpierw sprawdz, co juz wiesz, potem zapisuj trwale ustalenia.',
       '10. Koncz zadanie: albo wynik z dowodem, albo konkretna przeszkoda. Nie koncz na samym planie.',
@@ -444,7 +444,7 @@ export class SwarmManager {
       let isAction = false;
       for (const key of actionKeys) { if (lowerPrompt.indexOf(key) !== -1) { isAction = true; break; } }
       const folded = this.foldPl(lowerPrompt);
-      const needToolStems = ['ile plik', 'plik', 'folder', 'katalog', 'policz', 'sprawdz', 'wypisz', 'pokaz', 'lista', 'znajdz', 'cena', 'kurs', 'walut', 'pogod', 'dzisiaj', 'aktualn', 'pobierz', 'przeczytaj', 'otworz', 'rozmiar', 'dysk', 'wersj', 'stan ', 'zawartosc', 'ile ', 'jaka ', 'jaki ', 'gdzie ', 'kiedy '];
+      const needToolStems = ['utworz', 'napisz', 'skrypt', 'kod', 'program', 'uruchom', 'commit', 'zainstaluj', 'ile plik', 'plik', 'folder', 'katalog', 'policz', 'sprawdz', 'wypisz', 'pokaz', 'lista', 'znajdz', 'cena', 'kurs', 'walut', 'pogod', 'dzisiaj', 'aktualn', 'pobierz', 'przeczytaj', 'otworz', 'rozmiar', 'dysk', 'wersj', 'stan ', 'zawartosc', 'ile ', 'jaka ', 'jaki ', 'gdzie ', 'kiedy '];
       for (const st of needToolStems) { if (folded.indexOf(st) !== -1) { isAction = true; break; } }
       const messages: any[] = [
         { role: 'system', content: (this.behaviorRules() + String.fromCharCode(10) + this.capabilities(cwd) + String.fromCharCode(10) + this.readKnowledge()) + String.fromCharCode(10) + 'WAZNE: gdy pytanie dotyczy faktow, kursow, wiadomosci, pogody, przepisow lub czegokolwiek z internetu - NAJPIERW wywolaj odpowiednie narzedzie. Nie odpowiadaj na takie pytania z pamieci.' },
