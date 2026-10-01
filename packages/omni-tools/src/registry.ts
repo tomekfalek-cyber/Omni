@@ -1,5 +1,7 @@
 import { ToolDefinition, ToolCall } from 'omni-core/types.js';
 import { ApprovalManager } from 'omni-core/approval-manager.js';
+import * as fs from 'fs';
+import * as path from 'path';
 import { FileTools } from './tools/file-tools.js';
 import { GitTools } from './tools/git-tools.js';
 import { ShellSandbox } from './tools/shell-sandbox.js';
@@ -36,6 +38,43 @@ export class ToolRegistry {
 
     // Rejestracja Shell Sandbox
     this.registerTool(shellSandbox.getDefinitions()[0], (args, cwd) => shellSandbox.execute(args, cwd));
+    // Przypomnienia: bot naprawde ustawia je z czatu (ten sam plik, ktory czyta harmonogram)
+    const remFile = () => path.join(process.env.HOME || '/home/openclaw', '.omni', 'reminders.json');
+    const readRem = () => { try { const f = remFile(); return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : []; } catch (e) { return []; } };
+    const writeRem = (list: any[]) => { const f = remFile(); try { fs.mkdirSync(path.dirname(f), { recursive: true }); } catch (e) { } fs.writeFileSync(f, JSON.stringify(list, null, 2), 'utf8'); };
+    this.registerTool({
+      name: 'reminder_set',
+      description: 'Ustawia przypomnienie. Podaj text oraz czas: at (ISO, np. 2026-10-01T16:30:00) albo inMinutes (za ile minut).',
+      parameters: { text: 'string', at: 'string', inMinutes: 'number' },
+      requiresApproval: false,
+      timeoutMs: 5000,
+      maxOutputBytes: 4000,
+    }, async (args: any) => {
+      const text = String((args && args.text) || '').trim();
+      if (!text) { return 'BLAD: podaj tresc przypomnienia.'; }
+      let at = 0;
+      if (args && args.at) { at = Date.parse(String(args.at)); }
+      else if (args && args.inMinutes !== undefined) { at = Date.now() + Number(args.inMinutes) * 60000; }
+      if (!at || isNaN(at)) { return 'BLAD: podaj czas (at ISO albo inMinutes).'; }
+      if (at <= Date.now()) { return 'BLAD: czas musi byc w przyszlosci. Teraz jest ' + new Date().toLocaleString('pl-PL') + '.'; }
+      const list = readRem();
+      list.push({ id: 'r' + Date.now(), text: text.slice(0, 400), at: at, done: false });
+      writeRem(list);
+      return 'Przypomnienie ustawione na ' + new Date(at).toLocaleString('pl-PL') + ': ' + text + '. Powiadomienie przyjdzie do panelu (popup), a przy ustawionym Telegramie takze na telefon.';
+    });
+    this.registerTool({
+      name: 'reminder_list',
+      description: 'Wypisuje ustawione przypomnienia.',
+      parameters: {},
+      requiresApproval: false,
+      timeoutMs: 5000,
+      maxOutputBytes: 6000,
+    }, async () => {
+      const list = readRem();
+      if (!list.length) { return 'Brak przypomnien.'; }
+      return list.map((r: any) => (r.done ? '[x] ' : '[ ] ') + new Date(Number(r.at)).toLocaleString('pl-PL') + ' - ' + String(r.text || '')).join(String.fromCharCode(10));
+    });
+
 
     // Narzedzia internetowe (bez kluczy API)
     const webTools = new WebTools();
