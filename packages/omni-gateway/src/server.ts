@@ -298,6 +298,25 @@ export class OmniGateway {
       this.addNotification('Silnik nie odpowiada', 'Aktywny silnik ' + active + ' nie odpowiada, a zaden zapasowy nie ma waznego klucza. Wpisz klucz w zakladce Klucze API.', 'engine');
     } catch (error: any) { console.log('[Silniki] Blad sprawdzania: ' + error.message); }
   }
+  /** Wysyla ikone apki z katalogu docs (kopiuje do pamieci przy pierwszym uzyciu). */
+  private sendIcon(res: any, name: string): void {
+    const tries = [
+      path.join(process.cwd(), 'docs', name),
+      path.join('/home/openclaw/omni', 'docs', name),
+      path.join(process.env.HOME || '/home/openclaw', 'omni', 'docs', name),
+    ];
+    for (const p of tries) {
+      try {
+        if (fs.existsSync(p)) {
+          res.setHeader('Content-Type', 'image/png');
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          res.send(fs.readFileSync(p));
+          return;
+        }
+      } catch (e) { }
+    }
+    res.status(404).json({ error: 'Brak ikony.' });
+  }
   private summaryFile(): string {
     return path.join(process.env.HOME || '/home/openclaw', '.omni', 'summary.json');
   }
