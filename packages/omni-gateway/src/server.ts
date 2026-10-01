@@ -170,6 +170,7 @@ export class OmniGateway {
     const everyMs = Number(process.env.OMNI_HEARTBEAT_MS || 1800000);
     this.notifyTimer = setInterval(() => { this.runBackgroundCheck().catch(() => { }); }, everyMs);
     console.log('[Tlo] Praca w tle uruchomiona (co ' + Math.round(everyMs / 60000) + ' min, cisza 23-8)');
+    setTimeout(() => { void this.checkEngineHealth(); }, 20000);
     setInterval(() => { this.checkReminders(); }, 60000);
     setTimeout(() => { this.runBackgroundCheck().catch(() => { }); }, 20000);
   }
@@ -193,6 +194,7 @@ export class OmniGateway {
         }
       }
     } catch (error) { }
+    void this.checkEngineHealth();
     this.maybeDailySummary();
     return this.notifications;
   }
@@ -245,6 +247,56 @@ export class OmniGateway {
         body: JSON.stringify({ chat_id: chatId, text: text }),
       });
     } catch (error) { }
+  }
+  /** Sprawdza, czy aktywny silnik odpowiada. Jesli nie - przełącza na zdrowy. */
+  private async checkEngineHealth(): Promise<void> {
+    try {
+      const last = Number((this as any).lastEngineCheck || 0);
+      if (Date.now() - last < 25 * 60 * 1000) { return; }
+      (this as any).lastEngineCheck = Date.now();
+      const cfg = this.config.get();
+      const active = String(cfg.provider || 'groq');
+      const scheme = String.fromCharCode(66, 101, 97, 114, 101, 114, 32);
+      const probe = async (id: string): Promise<{ ok: boolean; note: string }> => {
+        const keyName: any = { groq: 'GROQ_API_KEY', openrouter: 'OPENROUTER_API_KEY', gemini: 'GEMINI_API_KEY', deepseek: 'DEEPSEEK_API_KEY' };
+        const name = keyName[id];
+        if (!name) { return { ok: false, note: 'brak klucza' }; }
+        let key = '';
+        try { key = this.config.secrets.getSecret(name) || ''; } catch (e) { key = ''; }
+        if (!key || key.length < 10) { return { ok: false, note: 'brak klucza' }; }
+        try {
+          let url = '';
+          const hdrs: any = {};
+          if (id === 'groq') { url = 'https://api.groq.com/openai/v1/models'; hdrs.Authorization = scheme.concat(key); }
+          else if (id === 'openrouter') { url = 'https://openrouter.ai/api/v1/auth/key'; hdrs.Authorization = scheme.concat(key); }
+          else if (id === 'deepseek') { url = 'https://api.deepseek.com/user/balance'; hdrs.Authorization = scheme.concat(key); }
+          else { url = 'https://generativelanguage.googleapis.com/v1beta/models?key=' + key; }
+          const ctl = new AbortController();
+          const t = setTimeout(() => { ctl.abort(); }, 12000);
+          const r = await fetch(url, { headers: hdrs, signal: ctl.signal });
+          clearTimeout(t);
+          return { ok: r.ok, note: 'HTTP ' + r.status };
+        } catch (e: any) { return { ok: false, note: e.message }; }
+      };
+      const test = await probe(active);
+      console.log('[Silniki] ' + active + ': ' + (test.ok ? 'dziala' : 'PROBLEM (' + test.note + ')'));
+      if (test.ok) { return; }
+      const prefer: any = { groq: 'openai/gpt-oss-120b', openrouter: 'qwen/qwen-2.5-72b-instruct:free', gemini: 'gemini-flash-latest', deepseek: 'deepseek-chat' };
+      const order = ['groq', 'gemini', 'openrouter', 'deepseek'];
+      for (const id of order) {
+        if (id === active) { continue; }
+        const p = await probe(id);
+        if (p.ok) {
+          await this.config.save({ provider: id, model: prefer[id] } as any);
+          this.config.applyToEnv();
+          this.addNotification('Awaryjne przelaczenie silnika', 'Silnik ' + active + ' nie odpowiadal (' + test.note + '). Przelaczylem na ' + id + ' (' + prefer[id] + ').', 'engine');
+          console.log('[Silniki] Przelaczam na ' + id + ' i restartuje usluge.');
+          execFile('systemctl', ['--user', 'restart', 'omni-gateway.service'], () => { });
+          return;
+        }
+      }
+      this.addNotification('Silnik nie odpowiada', 'Aktywny silnik ' + active + ' nie odpowiada, a zaden zapasowy nie ma waznego klucza. Wpisz klucz w zakladce Klucze API.', 'engine');
+    } catch (error: any) { console.log('[Silniki] Blad sprawdzania: ' + error.message); }
   }
   private summaryFile(): string {
     return path.join(process.env.HOME || '/home/openclaw', '.omni', 'summary.json');
