@@ -70,6 +70,7 @@ export class OmniGateway {
       console.log('[Gateway] Omni Gateway uruchomiony na ' + host + ':' + port);
       console.log('[Gateway] Panel, klucze API i OAuth gotowe.');
       this.startBackgroundWork();
+      this.startTelegram();
     });
   }
 
@@ -165,6 +166,56 @@ export class OmniGateway {
       }
     } catch (error) { }
     return this.notifications;
+  }
+  private tgTimer: any = null;
+  private tgOffset = 0;
+
+  private startTelegram(): void {
+    if (this.tgTimer) { return; }
+    this.tgTimer = setInterval(() => { this.telegramPoll().catch(() => { }); }, 4000);
+    const has = (this.config.secrets.getSecret('TELEGRAM_BOT_TOKEN') || '').length > 10;
+    console.log('[Telegram] Odbior wiadomosci ' + (has ? 'wlaczony' : 'gotowy (wpisz token w panelu)') + '.');
+  }
+
+  private async telegramPoll(): Promise<void> {
+    const botToken = this.config.secrets.getSecret('TELEGRAM_BOT_TOKEN') || '';
+    if (botToken.length < 10) { return; }
+    const url = 'https://api.telegram.org/bot' + botToken + '/getUpdates?timeout=0&offset=' + this.tgOffset;
+    const r = await fetch(url);
+    if (!r.ok) { return; }
+    const data: any = await r.json().catch(() => null);
+    if (!data || !data.ok || !Array.isArray(data.result) || !data.result.length) { return; }
+    for (const upd of data.result) {
+      this.tgOffset = Number(upd.update_id) + 1;
+      const msg = upd.message || upd.edited_message;
+      if (!msg || !msg.text) { continue; }
+      const chatId = String((msg.chat && msg.chat.id) || '');
+      const allowed = String(this.config.secrets.getSecret('TELEGRAM_CHAT_ID') || '').trim();
+      if (!allowed) {
+        await this.telegramSend(botToken, chatId, 'Twoj chat ID to: ' + chatId + String.fromCharCode(10) + 'Wpisz go w panelu Omni (Integracje -> Telegram), a zaczne odbierac polecenia.');
+        continue;
+      }
+      if (chatId !== allowed) { continue; }
+      console.log('[Telegram] Wiadomosc od ' + chatId + ': ' + String(msg.text).slice(0, 60));
+      try {
+        const cfg = this.config.get();
+        const task = await this.swarm.executeTask('tg_' + chatId, String(msg.text), cfg.workspaceDir || process.cwd());
+        const answer = String((task && task.result) || '').trim() || 'Nie udalo sie uzyskac odpowiedzi.';
+        await this.telegramSend(botToken, chatId, answer.slice(0, 3500));
+      } catch (error: any) {
+        await this.telegramSend(botToken, chatId, 'Blad: ' + error.message);
+      }
+    }
+  }
+
+  private async telegramSend(botToken: string, chatId: string, text: string): Promise<void> {
+    try {
+      await fetch('https://api.telegram.org/bot' + botToken + '/sendMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text: text }),
+      });
+    } catch (error) { }
   }
   private tokenFor(code: string): string {
     return crypto.createHash('sha256').update('omni-gate:' + code).digest('hex');
