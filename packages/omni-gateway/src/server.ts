@@ -533,6 +533,41 @@ export class OmniGateway {
       } catch (e) { }
       res.json({ entries: lines.reverse() });
     });
+    this.app.get('/api/threads', (_req, res) => {
+      const home = process.env.HOME || '/home/openclaw';
+      const map: any = {};
+      try {
+        const f = path.join(home, '.omni', 'chat.json');
+        if (fs.existsSync(f)) {
+          const chat = JSON.parse(fs.readFileSync(f, 'utf8'));
+          for (const k of Object.keys(chat || {})) {
+            const m = chat[k];
+            if (!m || !m.ts) { continue; }
+            const id = String(m.clientId || 'domyslna');
+            if (!map[id]) { map[id] = { id: id, count: 0, lastTs: 0, preview: '' }; }
+            map[id].count++;
+            if (Number(m.ts) >= map[id].lastTs) { map[id].lastTs = Number(m.ts); map[id].preview = String(m.text || '').slice(0, 80); }
+          }
+        }
+      } catch (e) { }
+      const list = Object.keys(map).map((k) => map[k]).sort((a, b) => b.lastTs - a.lastTs);
+      res.json({ threads: list });
+    });
+
+    this.app.post('/api/threads/delete', (req, res) => {
+      try {
+        const id = String((req.body && req.body.id) || '');
+        const home = process.env.HOME || '/home/openclaw';
+        const f = path.join(home, '.omni', 'chat.json');
+        if (id && fs.existsSync(f)) {
+          const chat = JSON.parse(fs.readFileSync(f, 'utf8'));
+          const out: any = {};
+          for (const k of Object.keys(chat || {})) { if (String((chat[k] || {}).clientId || 'domyslna') !== id) { out[k] = chat[k]; } }
+          fs.writeFileSync(f, JSON.stringify(out), 'utf8');
+        }
+        res.json({ ok: true });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
     this.app.get('/api/history/search', (req, res) => {
       const home = process.env.HOME || '/home/openclaw';
       const q = String((req.query && req.query.q) || '').trim().toLowerCase();

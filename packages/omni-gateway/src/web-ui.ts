@@ -168,6 +168,11 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
 
     <section class="page" id="page-chat">
       <div class="chat-wrap">
+      <div class="row" id="threadBar">
+        <select id="threadSel" onchange="switchThread(this.value)" style="flex:1"></select>
+        <button class="btn" onclick="newThread()">+ Nowa rozmowa</button>
+        <button class="btn" onclick="deleteThread()">Usuń</button>
+      </div>
         <div class="chat-log" id="chatLog"></div>
         <div class="composer">
           <textarea id="chatInput" rows="2" placeholder="Napisz wiadomosc i nacisnij Enter (Shift+Enter = nowa linia)"></textarea>
@@ -563,6 +568,7 @@ function show(page){
   if(page === "activity"){ loadActivity(); }
   if(page === "reminders"){ loadReminders(); }
   if(page === "history"){ }
+  if(page === "chat"){ loadThreads(); }
 
   if(page === "engines"){ loadEngineOptions(); var es = document.getElementById('engSave'); if(es && !es.__omniBound){ es.__omniBound = true; es.addEventListener('click', saveEngine); } }
   if(page === "voice"){ renderVoices(); }
@@ -1384,6 +1390,42 @@ function setupInstallBar(){
     else { toast("W Chrome: menu (3 kropki) i wybierz Zainstaluj aplikacje.", "ok"); }
   });
   document.getElementById("installBarClose").addEventListener("click", function(){ bar.classList.add("hidden"); });
+}
+function loadThreads(){
+  return api('/api/threads').then(function(d){
+    var sel = document.getElementById('threadSel');
+    if(!sel){ return; }
+    var ts = (d && d.threads) || [];
+    var html = '';
+    for(var i=0;i<ts.length;i++){
+      var t = ts[i];
+      var lab = (t.preview ? t.preview.slice(0, 42) : String(t.id)) + '  (' + t.count + ')';
+      html += '<option value=' + String.fromCharCode(34) + esc(t.id) + String.fromCharCode(34) + (t.id === state.clientId ? ' selected' : '') + '>' + esc(lab) + '</option>';
+    }
+    sel.innerHTML = html || '<option value=' + String.fromCharCode(34) + esc(state.clientId) + String.fromCharCode(34) + '>Nowa rozmowa</option>';
+  }).catch(function(){});
+}
+function switchThread(id){
+  if(!id){ return; }
+  state.clientId = id;
+  try { localStorage.setItem('omniThread', id); } catch(e){}
+  var log = document.getElementById('chatLog');
+  if(log){ log.innerHTML = ''; }
+  loadChatHistory();
+  loadThreads();
+}
+function newThread(){
+  state.clientId = (function(){ try { return localStorage.getItem('omniThread') || Math.random().toString(36).slice(2); } catch(e){ return Math.random().toString(36).slice(2); } })();
+  try { localStorage.setItem('omniThread', state.clientId); } catch(e){}
+  var log = document.getElementById('chatLog');
+  if(log){ log.innerHTML = ''; }
+  loadThreads();
+}
+function deleteThread(){
+  if(!confirm('Usunac cala ta rozmowe?')){ return; }
+  var id = state.clientId;
+  return api('/api/threads/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) })
+    .then(function(){ newThread(); }).catch(function(){});
 }
 function loadChatHistory(){
   return api("/api/chat").then(function(d){
