@@ -1,4 +1,5 @@
 import express from 'express';
+import { execFile } from 'child_process';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { SwarmManager } from 'omni-swarm/swarm-manager.js';
@@ -29,6 +30,8 @@ export const KEY_REGISTRY = [
   { name: 'DEEPSEEK_API_KEY', label: 'DeepSeek', desc: 'Silnik platny - tylko za Twoja zgoda. Klucz: platform.deepseek.com/api_keys', group: 'Modele i mowa' },
   { name: 'GITHUB_TOKEN', label: 'GitHub', desc: 'Repozytoria, wypychanie, powiadomienia. Token: github.com/settings/tokens', group: 'Integracje' },
   { name: 'TELEGRAM_BOT_TOKEN', label: 'Telegram - token bota', desc: 'Utworz bota u @BotFather i wklej token', group: 'Integracje' },
+  { name: 'NGROK_AUTHTOKEN', label: 'ngrok - token (staly adres)', desc: 'Token z dashboard.ngrok.com - daje adres, ktory sie NIE zmienia po restarcie', group: 'Adres i zdalny dostep' },
+  { name: 'NGROK_DOMAIN', label: 'ngrok - zarezerwowana domena', desc: 'np. exclude-jaunt-subarctic.ngrok-free.dev (Dashboard ngrok -> Domains)', group: 'Adres i zdalny dostep' },
   { name: 'TELEGRAM_CHAT_ID', label: 'Telegram - Twoj chat ID', desc: 'Napisz do bota - odpowie Ci Twoim chat ID', group: 'Integracje' },
 ];
 
@@ -322,9 +325,15 @@ export class OmniGateway {
       });
     });
     this.app.get('/api/secrets/list', (_req, res) => {
+      const home = process.env.HOME || '/home/openclaw';
+      let ngrokTok = ''; let ngrokDom = '';
+      try { const y = path.join(home, '.config', 'ngrok', 'ngrok.yml'); if (fs.existsSync(y)) { const raw = fs.readFileSync(y, 'utf8'); const m = raw.match(/authtoken:\s*(\S+)/); if (m) { ngrokTok = String(m[1]); } } } catch (e) { }
+      try { const d = path.join(home, '.omni', 'ngrok-domain.txt'); if (fs.existsSync(d)) { ngrokDom = String(fs.readFileSync(d, 'utf8')).trim(); } } catch (e) { }
       const out = KEY_REGISTRY.map((k) => {
         let set = false; let len = 0;
-        try { const v = this.config.secrets.getSecret(k.name) || ''; set = v.length > 0; len = v.length; } catch (e) { }
+        if (k.name === 'NGROK_AUTHTOKEN') { set = ngrokTok.length > 10; len = ngrokTok.length; }
+        else if (k.name === 'NGROK_DOMAIN') { set = ngrokDom.length > 3; len = ngrokDom.length; }
+        else { try { const v = this.config.secrets.getSecret(k.name) || ''; set = v.length > 0; len = v.length; } catch (e) { } }
         return { name: k.name, label: k.label, desc: k.desc, group: k.group, isSet: set, length: len };
       });
       res.json({ keys: out });
@@ -337,6 +346,26 @@ export class OmniGateway {
         const known = KEY_REGISTRY.filter((k) => k.name === name)[0];
         if (!known) { res.status(400).json({ error: 'Nieznany klucz.' }); return; }
         if (value.length < 4) { res.status(400).json({ error: 'Wartosc jest za krotka.' }); return; }
+        if (name === 'NGROK_DOMAIN') {
+          fs.writeFileSync(path.join(process.env.HOME || '/home/openclaw', '.omni', 'ngrok-domain.txt'), value, 'utf8');
+          execFile('systemctl', ['--user', 'restart', 'omni-ngrok.service'], () => { });
+          res.json({ ok: true, name: name }); return;
+        }
+        if (name === 'NGROK_AUTHTOKEN') {
+          const yml = path.join(process.env.HOME || '/home/openclaw', '.config', 'ngrok', 'ngrok.yml');
+          let raw = fs.existsSync(yml) ? fs.readFileSync(yml, 'utf8') : 'version: "3"';
+          const idx = raw.indexOf('authtoken:');
+          if (idx !== -1) {
+            const lineEnd = raw.indexOf(String.fromCharCode(10), idx);
+            const rest = lineEnd === -1 ? '' : raw.slice(lineEnd);
+            raw = raw.slice(0, idx) + 'authtoken: ' + value + rest;
+          } else {
+            raw = raw + String.fromCharCode(10) + 'agent:' + String.fromCharCode(10) + '    authtoken: ' + value + String.fromCharCode(10);
+          }
+          fs.writeFileSync(yml, raw, 'utf8');
+          execFile('systemctl', ['--user', 'restart', 'omni-ngrok.service'], () => { });
+          res.json({ ok: true, name: name }); return;
+        }
         const patch: any = {};
         patch[name] = value;
         await this.config.save({}, patch);
