@@ -325,6 +325,48 @@ export class OmniGateway {
         models: MODEL_PRESETS.map((m) => ({ provider: m.provider, id: m.id, label: m.label, note: m.note || '' })),
       });
     });
+    this.app.get('/api/memory/overview', (_req, res) => {
+      const home = process.env.HOME || '/home/openclaw';
+      let rules = '';
+      let skills: any[] = [];
+      try {
+        const rf = path.join(home, '.omni', 'memory', 'skills.md');
+        if (fs.existsSync(rf)) { rules = fs.readFileSync(rf, 'utf8'); }
+      } catch (e) { }
+      try {
+        const dir = path.join(home, '.omni', 'skills');
+        if (fs.existsSync(dir)) {
+          skills = fs.readdirSync(dir).filter((f) => f.slice(-3) === '.md').map((f) => {
+            const raw = fs.readFileSync(path.join(dir, f), 'utf8');
+            const lines = raw.split(String.fromCharCode(10));
+            const title = (lines[0] || f).replace(new RegExp('^#+ '), '');
+            const whenLine = lines.filter((l) => l.indexOf('KIEDY:') === 0)[0] || '';
+            return { file: f, title: title, when: whenLine.replace('KIEDY: ', ''), chars: raw.length, content: raw.slice(0, 4000) };
+          });
+        }
+      } catch (e) { }
+      res.json({ rules: rules.slice(0, 60000), skills: skills });
+    });
+
+    this.app.post('/api/memory/rules', (req, res) => {
+      try {
+        const text = String((req.body && req.body.text) || '').slice(0, 60000);
+        const dir = path.join(process.env.HOME || '/home/openclaw', '.omni', 'memory');
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'skills.md'), text, 'utf8');
+        res.json({ ok: true, chars: text.length });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.post('/api/skills/delete', (req, res) => {
+      try {
+        const file = String((req.body && req.body.file) || '').replace(new RegExp('[^A-Za-z0-9_.-]', 'g'), '');
+        if (!file) { res.status(400).json({ error: 'Brak nazwy.' }); return; }
+        const full = path.join(process.env.HOME || '/home/openclaw', '.omni', 'skills', file);
+        if (fs.existsSync(full)) { fs.unlinkSync(full); }
+        res.json({ ok: true });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
     this.app.get('/api/secrets/list', (_req, res) => {
       const home = process.env.HOME || '/home/openclaw';
       let ngrokTok = ''; let ngrokDom = '';

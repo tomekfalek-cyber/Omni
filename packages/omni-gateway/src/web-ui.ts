@@ -108,6 +108,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       <div class="nav-group">Rozmowa</div>
       <button class="nav-item active" data-page="chat"><span class="ico">C</span>Czat</button>
       <div class="nav-group">Konfiguracja</div>
+      <button class="nav-item" data-page="memory"><span class="ico">P</span>Pamięć i skille</button>
       <button class="nav-item" data-page="apikeys"><span class="ico">A</span>Klucze API</button>
       <button class="nav-item" data-page="keys"><span class="ico">K</span>Modele i klucze API</button>
       <button class="nav-item" data-page="engines"><span class="ico">S</span>Silniki</button>
@@ -334,6 +335,17 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       </div>
     </section>
 
+    <section class="page hidden" id="page-memory">
+      <div class="card">
+        <h2>Pamięć długoterminowa (zasady)</h2>
+        <div class="mut">To, czego bot się nauczył. Możesz edytować ręcznie — zmiany działają od razu.</div>
+        <textarea id="memRules" rows="12" style="width:100%"></textarea>
+        <div class="row"><button class="btn primary" onclick="saveRules()">Zapisz zasady</button></div>
+        <div class="mut" id="memRulesState"></div>
+      </div>
+      <div class="card"><h2>Skille bota (procedury)</h2><div class="mut">Procedury, które bot zapisał i z których korzysta przy zadaniach.</div></div>
+      <div id="memSkills">ładuję...</div>
+    </section>
     <section class="page hidden" id="page-apikeys">
       <div class="card">
         <h2>Klucze API - wszystkie w jednym miejscu</h2>
@@ -404,6 +416,7 @@ function show(page){
   if(page === "status"){ loadNotifications(); var nc = document.getElementById('notifCheck'); if(nc && !nc.__omniBound){ nc.__omniBound = true; nc.addEventListener('click', checkNow); } var nr = document.getElementById('notifReadAll'); if(nr && !nr.__omniBound){ nr.__omniBound = true; nr.addEventListener('click', markAllRead); } }
   if(page === "keys"){ var kv = document.getElementById('keysVerify'); if(kv && !kv.__omniBound){ kv.__omniBound = true; kv.addEventListener('click', verifyKeys); verifyKeys(); } }
   if(page === "apikeys"){ loadApiKeys(); var av = document.getElementById('akVerify'); if(av && !av.__omniBound){ av.__omniBound = true; av.addEventListener('click', akVerify); } }
+  if(page === "memory"){ loadMemory(); }
 
   if(page === "engines"){ loadEngineOptions(); var es = document.getElementById('engSave'); if(es && !es.__omniBound){ es.__omniBound = true; es.addEventListener('click', saveEngine); } }
   if(page === "voice"){ renderVoices(); }
@@ -765,6 +778,41 @@ function markAllRead(){
   h += '<div class="mut" id="' + id + '_st"></div>';
   h += '</div>';
   return h;
+}
+function loadMemory(){
+  return api('/api/memory/overview').then(function(d){
+    var r = document.getElementById('memRules');
+    if(r){ r.value = (d && d.rules) || ''; }
+    var box = document.getElementById('memSkills');
+    if(!box){ return; }
+    var list = (d && d.skills) || [];
+    if(!list.length){ box.innerHTML = '<div class="card">Brak zapisanych skilli. Bot zapisze je sam, gdy nauczy sie nowej procedury.</div>'; return; }
+    var html = '';
+    for(var i=0;i<list.length;i++){
+      var s = list[i];
+      html += '<div class="card" style="margin-bottom:8px">';
+      html += '<b>' + esc(s.title) + '</b>';
+      html += '<div class="mut">KIEDY: ' + esc(s.when) + '</div>';
+      html += '<pre style="white-space:pre-wrap;max-height:150px;overflow:auto">' + esc(s.content) + '</pre>';
+      html += '<button class="btn" data-delskill="' + esc(s.file) + '">Usun ten skill</button>';
+      html += '</div>';
+    }
+    box.innerHTML = html;
+    var bs = box.querySelectorAll('button[data-delskill]');
+    for(var j=0;j<bs.length;j++){ bs[j].addEventListener('click', function(ev){ delSkill(ev.target.getAttribute('data-delskill')); }); }
+  }).catch(function(){});
+}
+function saveRules(){
+  var r = document.getElementById('memRules');
+  var st = document.getElementById('memRulesState');
+  if(!r){ return; }
+  if(st){ st.textContent = 'Zapisuje...'; }
+  return api('/api/memory/rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: r.value }) })
+    .then(function(d){ if(st){ st.textContent = (d && d.ok) ? 'Zapisane - bot uzywa tego od razu.' : 'Nie udalo sie zapisac.'; } })
+    .catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+}
+function delSkill(file){
+  return api('/api/skills/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file: file }) }).then(loadMemory).catch(function(){});
 }
 function loadApiKeys(){
   return api('/api/secrets/list').then(function(d){
