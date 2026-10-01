@@ -908,6 +908,23 @@ function saveEngine(){
   }
   b.innerHTML = html;
 }
+function showOmniNotify(n){
+  try {
+    if(!n){ return; }
+    var t = String(n.title || 'Powiadomienie');
+    var b = String(n.body || '');
+    try { if('Notification' in window && Notification.permission === 'granted'){ new Notification(t, { body: b }); } } catch(e){}
+    var box = document.getElementById('omniToasts');
+    if(!box){ box = document.createElement('div'); box.id = 'omniToasts'; box.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:9999;display:flex;flex-direction:column;gap:8px;max-width:330px'; document.body.appendChild(box); }
+    var card = document.createElement('div');
+    card.style.cssText = 'background:#111827;color:#e5e7eb;border:1px solid #374151;border-left:4px solid #22c55e;border-radius:10px;padding:10px 12px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.45)';
+    card.innerHTML = '<b>' + esc(t) + '</b><br>' + esc(b);
+    box.appendChild(card);
+    try { if(typeof beep === 'function'){ beep(); } } catch(e){}
+    setTimeout(function(){ try { box.removeChild(card); } catch(e){} }, 12000);
+  } catch(e){}
+}
+try { if('Notification' in window && Notification.permission === 'default'){ Notification.requestPermission(); } } catch(e){}
 function loadNotifications(){
   return api('/api/notifications').then(renderNotifications).catch(function(){});
 }
@@ -1349,6 +1366,7 @@ function connectWs(){
         el("chatLog").scrollTop = el("chatLog").scrollHeight;
         return;
       }
+      if(m.type === "notification" && m.notification){ showOmniNotify(m.notification); return; }
       if(m.type === "chat.message"){
         var cm = m.message || {};
         if(cm.clientId && cm.clientId === state.clientId){ return; }

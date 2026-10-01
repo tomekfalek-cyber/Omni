@@ -331,6 +331,16 @@ export class OmniGateway {
     }
     res.status(404).json({ error: 'Brak ikony.' });
   }
+  /** Wysyla alert na Telegram wlasciciela (jesli token i chat ID sa ustawione). */
+  private async sendTelegramAlert(text: string): Promise<void> {
+    try {
+      let token = ''; let chat = '';
+      try { token = this.config.secrets.getSecret('TELEGRAM_BOT_TOKEN') || ''; } catch (e) { }
+      try { chat = this.config.secrets.getSecret('TELEGRAM_CHAT_ID') || ''; } catch (e) { }
+      if (!token || !chat) { return; }
+      await this.telegramSend(token, chat, text);
+    } catch (e) { }
+  }
   private summaryFile(): string {
     return path.join(process.env.HOME || '/home/openclaw', '.omni', 'summary.json');
   }
@@ -395,6 +405,7 @@ export class OmniGateway {
           r.done = true;
           changed = true;
           this.addNotification('Przypomnienie', String(r.text || ''), 'reminder');
+          void this.sendTelegramAlert('Przypomnienie: ' + String(r.text || ''));
         }
       }
       if (changed) { this.saveReminders(list); }
