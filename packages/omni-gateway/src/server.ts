@@ -598,7 +598,7 @@ export class OmniGateway {
         if (image.indexOf('data:image/') !== 0) { res.status(400).json({ error: 'Brak obrazka.' }); return; }
         let key = this.config.secrets.getSecret('GEMINI_API_KEY') || '';
         let endpoint = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
-        let candidates = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+        let candidates = ['gemini-flash-latest', 'gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-3.5-flash'];
         if (key.length < 10) { key = this.config.secrets.getSecret('OPENROUTER_API_KEY') || ''; endpoint = 'https://openrouter.ai/api/v1/chat/completions'; candidates = ['qwen/qwen2.5-vl-72b-instruct', 'openai/gpt-4o-mini']; }
         if (key.length < 10) { key = this.config.secrets.getSecret('GROQ_API_KEY') || ''; endpoint = 'https://api.groq.com/openai/v1/chat/completions'; candidates = ['meta-llama/llama-4-scout-17b-16e-instruct']; }
         if (key.length < 10) { res.status(400).json({ error: 'Wzrok potrzebuje klucza Google AI Studio (Gemini) - jest darmowy: aistudio.google.com/apikey . Wpisz go w zakladce Modele i klucze.' }); return; }
