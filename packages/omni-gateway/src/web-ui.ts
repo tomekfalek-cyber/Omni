@@ -67,6 +67,21 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
 .sidebar.nav-collapsed .nav-group,.sidebar.nav-collapsed .brand-text{display:none}
 .sidebar.nav-collapsed .nav-item{justify-content:center;padding:10px 0}
 .sidebar.nav-collapsed .nav-item .lbl{display:none}
+
+body.light{background:#f4f7fb;color:#0f172a}
+body.light .sidebar{background:#ffffff;border-right-color:#dbe3ee}
+body.light .topbar{background:#ffffff;border-bottom-color:#dbe3ee}
+body.light .card{background:#ffffff;border-color:#dbe3ee}
+body.light .nav-item{color:#334155}
+body.light .nav-item.active{background:#e8effc;color:#0b3a8f}
+body.light .mut{color:#5b6b82}
+body.light .nav-group{color:#7c8aa3}
+body.light input,body.light textarea,body.light select{background:#ffffff;color:#0f172a;border-color:#cbd5e1}
+body.light pre{background:#f8fafc;color:#0f172a}
+body.light .nav-toggle{background:#f1f5f9;color:#0f172a;border-color:#cbd5e1}
+body.light .pill{background:#eef2f9;color:#334155;border-color:#dbe3ee}
+body.light .btn{background:#f1f5f9;color:#0f172a;border-color:#cbd5e1}
+body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
 @media (max-width: 860px){
   html,body{height:auto}
   #app{flex-direction:column !important;height:100dvh}
@@ -144,7 +159,8 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
   <main class="main">
     <header class="topbar">
       <h1 id="pageTitle">Czat</h1>
-      <div class="pills"><span class="pill" id="pillEngine">-</span><span class="pill" id="pillModel">-</span></div>
+              <button class="btn" id="themeBtn" onclick="toggleTheme()" title="Motyw jasny/ciemny" style="margin-left:8px">☀</button>
+<div class="pills"><span class="pill" id="pillEngine">-</span><span class="pill" id="pillModel">-</span></div>
     </header>
 
     <section class="page" id="page-chat">
@@ -478,6 +494,20 @@ document.addEventListener('click', function(ev){
     t = t.parentNode;
   }
 });
+function setTheme(mode){
+  document.body.classList.toggle('light', mode === 'light');
+  try { localStorage.setItem('omniTheme', mode); } catch(e){}
+  var b = document.getElementById('themeBtn');
+  if(b){ b.textContent = (mode === 'light') ? '🌙' : '☀'; }
+  var s = document.getElementById('theme');
+  if(s){ s.value = mode; }
+}
+function toggleTheme(){
+  setTheme(document.body.classList.contains('light') ? 'dark' : 'light');
+}
+(function(){
+  try { var m = localStorage.getItem('omniTheme'); if(m){ setTheme(m); } } catch(e){}
+})();
 function show(page){
   var pages = document.querySelectorAll(".page");
   for(var i=0;i<pages.length;i++){ pages[i].className = "page hidden"; }
