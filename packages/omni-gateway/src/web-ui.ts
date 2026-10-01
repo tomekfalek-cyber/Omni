@@ -108,6 +108,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       <div class="nav-group">Rozmowa</div>
       <button class="nav-item active" data-page="chat"><span class="ico">C</span>Czat</button>
       <div class="nav-group">Konfiguracja</div>
+      <button class="nav-item" data-page="apikeys"><span class="ico">A</span>Klucze API</button>
       <button class="nav-item" data-page="keys"><span class="ico">K</span>Modele i klucze API</button>
       <button class="nav-item" data-page="engines"><span class="ico">S</span>Silniki</button>
       <button class="nav-item" data-page="voice"><span class="ico">G</span>Glos</button>
@@ -332,6 +333,15 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       </div>
     </section>
 
+    <section class="page hidden" id="page-apikeys">
+      <div class="card">
+        <h2>Klucze API - wszystkie w jednym miejscu</h2>
+        <div class="mut">Tu wpisujesz i zmieniasz klucze do wszystkich uslug. Wartosci sa ukryte (widzisz tylko, czy klucz jest ustawiony).</div>
+        <div class="row"><button class="btn primary" id="akVerify">Sprawdz klucze u dostawcow</button></div>
+        <div class="mut" id="akVerifyBox" style="margin-top:8px"></div>
+      </div>
+      <div id="apikeysBox">laduje...</div>
+    </section>
     <section class="page hidden" id="page-status">
     <section class="page hidden" id="page-status">
       <div class="card" style="margin-bottom:14px">
@@ -712,7 +722,56 @@ function checkNow(){
 }
 function markAllRead(){
   return api('/api/notifications/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }).then(loadNotifications).catch(function(){});
-}function verifyKeys(){
+}function akRow(k){
+  var st = k.isSet ? '<b style="color:#22c55e">ustawiony</b> (' + k.length + ' znakow)' : '<b style="color:#f59e0b">brak</b>';
+  var id = 'akin_' + k.name;
+  var h = '<div class="card" style="margin-bottom:10px">';
+  h += '<h2>' + esc(k.label) + '</h2>';
+  h += '<div class="mut">' + esc(k.desc) + '</div>';
+  h += '<div class="mut">Stan: ' + st + '</div>';
+  h += '<input type="password" id="' + id + '" placeholder="wklej nowy klucz, zeby zmienic" autocomplete="off" />';
+  h += '<div class="row"><button class="btn primary" data-save="' + k.name + '">Zapisz klucz</button></div>';
+  h += '<div class="mut" id="' + id + '_st"></div>';
+  h += '</div>';
+  return h;
+}
+function loadApiKeys(){
+  return api('/api/secrets/list').then(function(d){
+    var box = document.getElementById('apikeysBox');
+    if(!box){ return; }
+    var keys = (d && d.keys) || [];
+    var html = '';
+    for(var i=0;i<keys.length;i++){ html += akRow(keys[i]); }
+    box.innerHTML = html || 'Brak kluczy.';
+    var btns = box.querySelectorAll('button[data-save]');
+    for(var j=0;j<btns.length;j++){
+      btns[j].addEventListener('click', function(ev){ akSave(ev.target.getAttribute('data-save')); });
+    }
+  }).catch(function(e){ var b = document.getElementById('apikeysBox'); if(b){ b.textContent = 'Blad: ' + e.message; } });
+}
+function akSave(name){
+  var inp = document.getElementById('akin_' + name);
+  var st = document.getElementById(name + '_st');
+  if(!inp){ return; }
+  var val = (inp.value || '').trim();
+  if(!val){ if(st){ st.textContent = 'Wpisz klucz.'; } return; }
+  if(st){ st.textContent = 'Zapisuje...'; }
+  return api('/api/secrets/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name, value: val }) })
+    .then(function(r){ if(st){ st.textContent = r && r.ok ? 'Zapisano. Klucz dziala od razu.' : ('Blad: ' + ((r && r.error) || 'nieznany')); } inp.value = ''; loadApiKeys(); })
+    .catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+}
+function akVerify(){
+  var b = document.getElementById('akVerifyBox');
+  if(b){ b.textContent = 'Sprawdzam...'; }
+  return api('/api/keys/verify').then(function(d){
+    var list = (d && d.keys) || [];
+    var html = '';
+    for(var i=0;i<list.length;i++){ html += '<div><b>' + (list[i].state === 'ok' ? 'OK' : (list[i].state === 'brak' ? 'brak' : 'BLAD')) + '</b> - ' + esc(list[i].label) + ': ' + esc(list[i].message || '') + '</div>'; }
+    var b2 = document.getElementById('akVerifyBox');
+    if(b2){ b2.innerHTML = html || 'Brak danych.'; }
+  }).catch(function(){});
+}
+function verifyKeys(){
   var box = document.getElementById('keysResult');
   if(box){ box.textContent = 'Sprawdzam klucze...'; }
   return api('/api/keys/verify').then(function(d){

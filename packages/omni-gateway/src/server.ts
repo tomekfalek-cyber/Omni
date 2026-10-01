@@ -22,6 +22,16 @@ function b64url(buf: Buffer): string {
   return buf.toString('base64').split('+').join('-').split('/').join('_').split('=').join('');
 }
 
+export const KEY_REGISTRY = [
+  { name: 'GROQ_API_KEY', label: 'Groq', desc: 'Darmowy i szybki model tekstowy + rozpoznawanie mowy. Klucz: console.groq.com/keys', group: 'Modele i mowa' },
+  { name: 'OPENROUTER_API_KEY', label: 'OpenRouter', desc: 'Darmowe modele chmurowe. Klucz: openrouter.ai/keys', group: 'Modele i mowa' },
+  { name: 'GEMINI_API_KEY', label: 'Google AI Studio (Gemini)', desc: 'Wzrok bota (obrazki) + model. Klucz: aistudio.google.com/apikey', group: 'Modele i mowa' },
+  { name: 'DEEPSEEK_API_KEY', label: 'DeepSeek', desc: 'Silnik platny - tylko za Twoja zgoda. Klucz: platform.deepseek.com/api_keys', group: 'Modele i mowa' },
+  { name: 'GITHUB_TOKEN', label: 'GitHub', desc: 'Repozytoria, wypychanie, powiadomienia. Token: github.com/settings/tokens', group: 'Integracje' },
+  { name: 'TELEGRAM_BOT_TOKEN', label: 'Telegram - token bota', desc: 'Utworz bota u @BotFather i wklej token', group: 'Integracje' },
+  { name: 'TELEGRAM_CHAT_ID', label: 'Telegram - Twoj chat ID', desc: 'Napisz do bota - odpowie Ci Twoim chat ID', group: 'Integracje' },
+];
+
 export class OmniGateway {
   private app: express.Application;
   private httpServer: any;
@@ -310,6 +320,29 @@ export class OmniGateway {
         providers: PROVIDERS.map((p) => ({ id: p.id, label: p.label, free: p.free, hasKey: p.keyEnv ? this.config.hasKeyFor(p.id) : true })),
         models: MODEL_PRESETS.map((m) => ({ provider: m.provider, id: m.id, label: m.label, note: m.note || '' })),
       });
+    });
+    this.app.get('/api/secrets/list', (_req, res) => {
+      const out = KEY_REGISTRY.map((k) => {
+        let set = false; let len = 0;
+        try { const v = this.config.secrets.getSecret(k.name) || ''; set = v.length > 0; len = v.length; } catch (e) { }
+        return { name: k.name, label: k.label, desc: k.desc, group: k.group, isSet: set, length: len };
+      });
+      res.json({ keys: out });
+    });
+
+    this.app.post('/api/secrets/set', async (req, res) => {
+      try {
+        const name = String((req.body && req.body.name) || '').trim().toUpperCase();
+        const value = String((req.body && req.body.value) || '').trim();
+        const known = KEY_REGISTRY.filter((k) => k.name === name)[0];
+        if (!known) { res.status(400).json({ error: 'Nieznany klucz.' }); return; }
+        if (value.length < 4) { res.status(400).json({ error: 'Wartosc jest za krotka.' }); return; }
+        const patch: any = {};
+        patch[name] = value;
+        await this.config.save({}, patch);
+        this.startTelegram();
+        res.json({ ok: true, name: name });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
     });
     this.app.get('/api/notifications', (_req, res) => {
       this.loadNotifications();
