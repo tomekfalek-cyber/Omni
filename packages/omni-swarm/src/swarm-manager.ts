@@ -18,6 +18,9 @@ export class SwarmManager {
   /** Wywolywane, gdy czat padnie na limicie/blędzie dostawcy (np. 429). */
   public onEngineFailure?: () => void;
 
+  /** Prawda, gdy bot wlasnie wykonuje zadanie. */
+  public busy = false;
+
   constructor() {
     const provider = (process.env.OMNI_LLM_PROVIDER as any) || 'ollama';
     // Konfigurowalne przez .env — domyślnie model mieszczący się na słabym sprzęcie.
@@ -417,6 +420,12 @@ export class SwarmManager {
     } catch (error) { }
   }
   async executeTask(sessionId: string, prompt: string, cwd: string): Promise<Task> {
+    this.busy = true;
+    try { return await this.executeTaskInner(sessionId, prompt, cwd); }
+    finally { this.busy = false; }
+  }
+
+  private async executeTaskInner(sessionId: string, prompt: string, cwd: string): Promise<Task> {
     const taskId = uuidv4();
     const task: Task = {
       id: taskId,

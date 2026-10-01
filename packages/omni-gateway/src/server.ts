@@ -292,6 +292,11 @@ export class OmniGateway {
           this.config.applyToEnv();
           this.addNotification('Awaryjne przelaczenie silnika', 'Silnik ' + active + ' nie odpowiadal (' + test.note + '). Przelaczylem na ' + id + ' (' + prefer[id] + ').', 'engine');
           console.log('[Silniki] Przelaczam na ' + id + ' i restartuje usluge.');
+          if (this.swarm && this.swarm.busy) {
+            console.log('[Silniki] Bot jest zajety - przekladam przelaczenie o 60 s.');
+            setTimeout(() => { void this.checkEngineHealth(true); }, 60000);
+            return;
+          }
           execFile('systemctl', ['--user', 'restart', 'omni-gateway.service'], () => { });
           return;
         }
