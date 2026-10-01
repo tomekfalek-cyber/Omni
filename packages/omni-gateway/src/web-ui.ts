@@ -176,7 +176,7 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
           <button class="btn" id="docBtn" title="Wgraj dokument PDF/Word i popros o streszczenie" onclick="docUpload()">📄</button>
           <button class="btn primary" id="sendBtn">Wyslij</button>
         </div>
-        <div class="chat-hint" id="voiceHint">Rozmowa glosowa: kliknij MOW i mow</div>
+        <div class="chat-hint" id="voiceHint">Rozmowa głosowa po przyciśnięciu ikony mikrofonu</div>
       </div>
     </section>
 
@@ -810,7 +810,7 @@ function initMic(){
   if(!SR){
     el("micBtn").disabled = true;
     el("micBtn").title = "Ta przegladarka nie obsluguje mikrofonu - uzyj Chrome";
-    if(el("voiceHint")){ el("voiceHint").textContent = "Rozmowa glosowa: uzyj Chrome"; }
+    if(el("voiceHint")){ el("voiceHint").textContent = "Rozmowa głosowa: użyj Chrome"; }
     return;
   }
   var r = new SR();
@@ -837,7 +837,7 @@ function toggleMic(){
   if(state.listening){ try { state.recog.stop(); } catch(e){} return; }
   state.listening = true;
   el("micBtn").innerHTML = STOP_ICON;
-  if(el("voiceHint")){ el("voiceHint").textContent = "Slucham... mow teraz"; }
+  if(el("voiceHint")){ el("voiceHint").textContent = "Słucham... mów teraz"; }
   try { state.recog.start(); } catch(e){ state.listening = false; el("micBtn").innerHTML = MIC_ICON; }
 }
 function afterBotAnswer(text){
@@ -846,7 +846,7 @@ function afterBotAnswer(text){
     speakText(text);
     var wait = 3500 + String(text || "").length * 70;
     setTimeout(function(){ if(state.config && state.config.voiceHandsFree && !state.pending){ toggleMic(); } }, wait);
-    if(el("voiceHint")){ el("voiceHint").textContent = "Tryb rozmowy wlaczony - mow"; }
+    if(el("voiceHint")){ el("voiceHint").textContent = "Tryb rozmowy włączony — mów"; }
   } else if(cfg.voiceAutoRead){
     speakText(text);
     if(el("voiceHint")){ el("voiceHint").textContent = "Odpowiedz czytana na glos"; }
