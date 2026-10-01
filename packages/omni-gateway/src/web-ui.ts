@@ -108,6 +108,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       <div class="nav-group">Rozmowa</div>
       <button class="nav-item active" data-page="chat"><span class="ico">C</span>Czat</button>
       <div class="nav-group">Konfiguracja</div>
+      <button class="nav-item" data-page="backup"><span class="ico">B</span>Kopia zapasowa</button>
       <button class="nav-item" data-page="stats"><span class="ico">Y</span>Statystyki</button>
       <button class="nav-item" data-page="memory"><span class="ico">P</span>Pamięć i skille</button>
       <button class="nav-item" data-page="apikeys"><span class="ico">A</span>Klucze API</button>
@@ -336,6 +337,20 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       </div>
     </section>
 
+    <section class="page hidden" id="page-backup">
+      <div class="card">
+        <h2>Kopia zapasowa</h2>
+        <div class="mut">Jedno kliknięcie zapisuje: konfigurację, historię czatu, zasady bota, skille, powiadomienia, automatyzacje oraz (zaszyfrowane) klucze API.</div>
+        <div class="row"><button class="btn primary" onclick="downloadBackup()">Pobierz kopię (plik)</button></div>
+        <div class="mut" id="bakState"></div>
+      </div>
+      <div class="card">
+        <h2>Przywróć z kopii</h2>
+        <div class="mut">Wybierz plik kopii — przywrócę konfigurację, pamięć, skille i historię.</div>
+        <div class="row"><button class="btn" onclick="restoreBackup()">Wgraj kopię</button></div>
+        <div class="mut" id="resState"></div>
+      </div>
+    </section>
     <section class="page hidden" id="page-stats">
       <div class="grid" id="statsTiles">ładuję...</div>
       <div class="card"><h2>Aktywność (ostatnie 7 dni)</h2><div id="statsChart"></div></div>
@@ -424,6 +439,7 @@ function show(page){
   if(page === "apikeys"){ loadApiKeys(); var av = document.getElementById('akVerify'); if(av && !av.__omniBound){ av.__omniBound = true; av.addEventListener('click', akVerify); } }
   if(page === "memory"){ loadMemory(); }
   if(page === "stats"){ loadStats(); }
+  if(page === "backup"){ }
 
   if(page === "engines"){ loadEngineOptions(); var es = document.getElementById('engSave'); if(es && !es.__omniBound){ es.__omniBound = true; es.addEventListener('click', saveEngine); } }
   if(page === "voice"){ renderVoices(); }
@@ -788,6 +804,39 @@ function markAllRead(){
 }
 function statTile(label, value, hint){
   return '<div class="card"><h2>' + esc(label) + '</h2><div style="font-size:26px;font-weight:700">' + esc(String(value)) + '</div><div class="mut">' + esc(hint || '') + '</div></div>';
+}
+function downloadBackup(){
+  var st = document.getElementById('bakState');
+  if(st){ st.textContent = 'Przygotowuje kopie...'; }
+  return api('/api/backup').then(function(d){
+    var blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'omni-kopia-' + new Date().toISOString().slice(0,10) + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    if(st){ st.textContent = 'Gotowe - plik pobrany.'; }
+  }).catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+}
+function restoreBackup(){
+  var inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.json';
+  inp.onchange = function(){
+    var f = inp.files && inp.files[0];
+    if(!f){ return; }
+    var st = document.getElementById('resState');
+    if(st){ st.textContent = 'Wczytuje...'; }
+    var rd = new FileReader();
+    rd.onload = function(){
+      var pack = null;
+      try { pack = JSON.parse(rd.result); } catch(e){ if(st){ st.textContent = 'To nie jest poprawny plik.'; } return; }
+      api('/api/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pack: pack }) })
+        .then(function(r){ if(st){ st.textContent = (r && r.ok) ? 'Przywrocono. Odswiez strone (F5).' : ('Blad: ' + ((r && r.error) || 'nieznany')); } })
+        .catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+    };
+    rd.readAsText(f);
+  };
+  inp.click();
 }
 function loadStats(){
   return api('/api/stats').then(function(d){

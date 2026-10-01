@@ -325,6 +325,42 @@ export class OmniGateway {
         models: MODEL_PRESETS.map((m) => ({ provider: m.provider, id: m.id, label: m.label, note: m.note || '' })),
       });
     });
+    this.app.get('/api/backup', (_req, res) => {
+      const home = process.env.HOME || '/home/openclaw';
+      const rd = (p: string): any => { try { return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null; } catch (e) { return null; } };
+      const pack: any = {
+        kind: 'omni-backup',
+        version: VERSION,
+        at: new Date().toISOString(),
+        config: this.config.get(),
+        chat: rd(path.join(home, '.omni', 'chat.json')),
+        notifications: rd(path.join(home, '.omni', 'notifications.json')),
+        automations: rd(path.join(home, '.omni', 'automations.json')),
+        secretsRaw: (() => { try { const p = path.join(home, '.omni', 'secrets', 'encrypted-secrets.json'); return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; } catch (e) { return ''; } })(),
+        memoryRules: (() => { try { const p = path.join(home, '.omni', 'memory', 'skills.md'); return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; } catch (e) { return ''; } })(),
+        skills: (() => { const out: any[] = []; try { const d = path.join(home, '.omni', 'skills'); if (fs.existsSync(d)) { for (const f of fs.readdirSync(d)) { if (f.slice(-3) === '.md') { out.push({ file: f, content: fs.readFileSync(path.join(d, f), 'utf8') }); } } } } catch (e) { } return out; })(),
+      };
+      try { delete pack.config.accessCode; } catch (e) { }
+      res.json(pack);
+    });
+
+    this.app.post('/api/restore', async (req, res) => {
+      try {
+        const pack = (req.body && req.body.pack) || {};
+        if (pack.kind !== 'omni-backup') { res.status(400).json({ error: 'To nie jest kopia Omni.' }); return; }
+        const home = process.env.HOME || '/home/openclaw';
+        const base = path.join(home, '.omni');
+        const wr = (p: string, data: string): void => { try { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, data, 'utf8'); } catch (e) { } };
+        if (pack.chat) { wr(path.join(base, 'chat.json'), JSON.stringify(pack.chat)); }
+        if (pack.notifications) { wr(path.join(base, 'notifications.json'), JSON.stringify(pack.notifications, null, 2)); }
+        if (pack.automations) { wr(path.join(base, 'automations.json'), JSON.stringify(pack.automations, null, 2)); }
+        if (pack.memoryRules) { wr(path.join(base, 'memory', 'skills.md'), String(pack.memoryRules)); }
+        if (pack.secretsRaw) { wr(path.join(base, 'secrets', 'encrypted-secrets.json'), String(pack.secretsRaw)); }
+        if (Array.isArray(pack.skills)) { for (const s of pack.skills) { const f = String(s.file || '').replace(new RegExp('[^A-Za-z0-9_.-]', 'g'), ''); if (f) { wr(path.join(base, 'skills', f), String(s.content || '')); } } }
+        if (pack.config) { const c = Object.assign({}, pack.config); delete c.accessCode; await this.config.save(c); }
+        res.json({ ok: true });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
     this.app.get('/api/stats', (_req, res) => {
       const home = process.env.HOME || '/home/openclaw';
       const readJson = (p: string): any => { try { return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null; } catch (e) { return null; } };
