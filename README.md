@@ -84,6 +84,17 @@ https://tomekfalek-cyber.github.io/Omni/
 
 Strona zawiera przycisk **Otwórz Omni**, **kod QR** oraz instrukcje krok po kroku.
 
+### Bezposredni adres Omni (staly)
+
+https://exclude-jaunt-subarctic.ngrok-free.dev
+
+Adres jest **staly** - nie zmienia sie po restarcie komputera (domena zarezerwowana w darmowym planie ngrok).
+Przy pierwszym wejsciu w przegladarce pojawi sie strona ostrzezenia ngrok (ograniczenie darmowego planu) - wystarczy kliknac **Visit Site**.
+
+Kod dostepu ustawiasz w panelu (Ustawienia -> Kod dostepu). Telefon pamieta go przez 30 dni.
+
+Gdy komputer jest wylaczony, aplikacja pokazuje ekran "Omni jest teraz wylaczony" (z automatycznym odswiezaniem) zamiast bledu.
+
 ### Komputer (Windows / macOS / Linux)
 1. Otwórz link w **Chrome**.
 2. Menu **⋮** -> **Zainstaluj aplikację**.
