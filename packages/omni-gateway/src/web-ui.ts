@@ -332,6 +332,13 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
     </section>
 
     <section class="page hidden" id="page-status">
+    <section class="page hidden" id="page-status">
+      <div class="card" style="margin-bottom:14px">
+        <h2>Powiadomienia (praca w tle)</h2>
+        <div class="mut">Bot sam sprawdza w tle (co 30 min, w godzinach 8-23), czy jest cos, o czym warto Cie powiadomic - np. nowe powiadomienia na GitHubie.</div>
+        <div class="row"><button class="btn primary" id="notifCheck">Sprawdz teraz</button><button class="btn" id="notifReadAll">Oznacz jako przeczytane</button></div>
+        <div class="mut" id="notifBox" style="margin-top:8px">sprawdzam...</div>
+      </div>
       <div class="card"><h2>Status systemu</h2><div class="kv" id="statusKv"></div></div>
     </section>
   </main>
@@ -381,6 +388,8 @@ function show(page){
   if(page === "automations"){ loadAutomations(); }
   if(page === "integrations"){ loadIntegrations(); }
   if(page === "costs"){ loadCosts(); }
+
+  if(page === "status"){ loadNotifications(); var nc = document.getElementById('notifCheck'); if(nc && !nc.__omniBound){ nc.__omniBound = true; nc.addEventListener('click', checkNow); } var nr = document.getElementById('notifReadAll'); if(nr && !nr.__omniBound){ nr.__omniBound = true; nr.addEventListener('click', markAllRead); } }
   if(page === "keys"){ var kv = document.getElementById('keysVerify'); if(kv && !kv.__omniBound){ kv.__omniBound = true; kv.addEventListener('click', verifyKeys); verifyKeys(); } }
 
   if(page === "engines"){ loadEngineOptions(); var es = document.getElementById('engSave'); if(es && !es.__omniBound){ es.__omniBound = true; es.addEventListener('click', saveEngine); } }
@@ -641,6 +650,29 @@ function saveEngine(){
     if(b){ b.innerHTML = 'Aktywny silnik: <b>' + esc(cfg.provider || '?') + '</b> / ' + esc(cfg.model || '?') + (cfg.provider && cfg.provider !== prov.value ? ' <i>(dostawca bez klucza - zostalem lokalnie)</i>' : ''); }
     loadCosts();
   }).catch(function(e){ var b2 = document.getElementById('engResult'); if(b2){ b2.textContent = 'Blad: ' + e.message; } });
+}function renderNotifications(d){
+  var b = document.getElementById('notifBox');
+  if(!b){ return; }
+  var list = (d && d.notifications) || [];
+  if(!list.length){ b.innerHTML = 'Brak powiadomien. Praca w tle czuwa.'; return; }
+  var html = '';
+  for(var i=0;i<list.length;i++){
+    var n = list[i];
+    var mark = n.read ? '' : '<b>[NOWE]</b> ';
+    html += '<div style="margin-bottom:6px">' + mark + '<b>' + esc(n.title) + '</b>: ' + esc(n.body) + '</div>';
+  }
+  b.innerHTML = html;
+}
+function loadNotifications(){
+  return api('/api/notifications').then(renderNotifications).catch(function(){});
+}
+function checkNow(){
+  var b = document.getElementById('notifBox');
+  if(b){ b.textContent = 'Sprawdzam w tle...'; }
+  return api('/api/notifications/check', { method: 'POST' }).then(renderNotifications).catch(function(e){ var b2 = document.getElementById('notifBox'); if(b2){ b2.textContent = 'Blad: ' + e.message; } });
+}
+function markAllRead(){
+  return api('/api/notifications/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }).then(loadNotifications).catch(function(){});
 }function verifyKeys(){
   var box = document.getElementById('keysResult');
   if(box){ box.textContent = 'Sprawdzam klucze...'; }

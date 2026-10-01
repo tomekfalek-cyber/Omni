@@ -69,6 +69,7 @@ export class OmniGateway {
     this.httpServer.listen(port, host, () => {
       console.log('[Gateway] Omni Gateway uruchomiony na ' + host + ':' + port);
       console.log('[Gateway] Panel, klucze API i OAuth gotowe.');
+      this.startBackgroundWork();
     });
   }
 
@@ -102,6 +103,69 @@ export class OmniGateway {
     return proto + '://' + host;
   }
 
+  private notifications: any[] = [];
+  private notifyTimer: any = null;
+
+  private loadNotifications(): void {
+    try {
+      const f = path.join(process.env.HOME || '/home/openclaw', '.omni', 'notifications.json');
+      if (fs.existsSync(f)) { const parsed = JSON.parse(fs.readFileSync(f, 'utf8')); if (Array.isArray(parsed)) { this.notifications = parsed; } }
+    } catch (error) { }
+  }
+
+  private saveNotifications(): void {
+    try {
+      const dir = path.join(process.env.HOME || '/home/openclaw', '.omni');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'notifications.json'), JSON.stringify(this.notifications.slice(0, 100), null, 2), 'utf8');
+    } catch (error) { }
+  }
+
+  private addNotification(title: string, body: string, kind: string): void {
+    this.loadNotifications();
+    const last = this.notifications[0];
+    if (last && last.title === title && last.body === body && (Date.now() - Number(last.at || 0)) < 3600000) { return; }
+    const item = { id: 'n' + Date.now(), title: title, body: body, kind: kind || 'info', at: Date.now(), read: false };
+    this.notifications.unshift(item);
+    this.saveNotifications();
+    this.broadcast({ type: 'notification', notification: item });
+    console.log('[Tlo] Powiadomienie: ' + title + ' - ' + body.slice(0, 80));
+  }
+
+  private quietHours(): boolean {
+    const h = new Date().getHours();
+    return h >= 23 || h < 8;
+  }
+
+  private startBackgroundWork(): void {
+    if (this.notifyTimer) { return; }
+    const everyMs = Number(process.env.OMNI_HEARTBEAT_MS || 1800000);
+    this.notifyTimer = setInterval(() => { this.runBackgroundCheck().catch(() => { }); }, everyMs);
+    console.log('[Tlo] Praca w tle uruchomiona (co ' + Math.round(everyMs / 60000) + ' min, cisza 23-8)');
+    setTimeout(() => { this.runBackgroundCheck().catch(() => { }); }, 20000);
+  }
+
+  private async runBackgroundCheck(): Promise<any[]> {
+    if (this.quietHours()) { return this.notifications; }
+    this.loadNotifications();
+    const found: any[] = [];
+    try {
+      const token = this.config.secrets.getSecret('GITHUB_TOKEN') || '';
+      if (token) {
+        const r = await fetch('https://api.github.com/notifications', { headers: { Authorization: ('token '.concat(token)), 'User-Agent': 'OmniBot' } });
+        if (r.ok) {
+          const list: any = await r.json().catch(() => []);
+          if (Array.isArray(list) && list.length > 0) {
+            const first = list[0] && list[0].subject ? String(list[0].subject.title || '') : '';
+            const repo = list[0] && list[0].repository ? String(list[0].repository.full_name || '') : '';
+            this.addNotification('GitHub', 'Masz ' + list.length + ' nieprzeczytanych powiadomien. Ostatnie: ' + first + ' (' + repo + ')', 'github');
+            found.push({ kind: 'github', count: list.length });
+          }
+        }
+      }
+    } catch (error) { }
+    return this.notifications;
+  }
   private tokenFor(code: string): string {
     return crypto.createHash('sha256').update('omni-gate:' + code).digest('hex');
   }
@@ -184,6 +248,23 @@ export class OmniGateway {
         providers: PROVIDERS.map((p) => ({ id: p.id, label: p.label, free: p.free, hasKey: p.keyEnv ? this.config.hasKeyFor(p.id) : true })),
         models: MODEL_PRESETS.map((m) => ({ provider: m.provider, id: m.id, label: m.label, note: m.note || '' })),
       });
+    });
+    this.app.get('/api/notifications', (_req, res) => {
+      this.loadNotifications();
+      res.json({ notifications: this.notifications.slice(0, 50), unread: this.notifications.filter((n) => !n.read).length });
+    });
+
+    this.app.post('/api/notifications/read', (req, res) => {
+      this.loadNotifications();
+      const id = String((req.body && req.body.id) || '');
+      this.notifications = this.notifications.map((n) => (id ? (n.id === id ? Object.assign({}, n, { read: true }) : n) : Object.assign({}, n, { read: true })));
+      this.saveNotifications();
+      res.json({ ok: true });
+    });
+
+    this.app.post('/api/notifications/check', async (_req, res) => {
+      try { const list = await this.runBackgroundCheck(); this.startBackgroundWork(); res.json({ ok: true, notifications: list, unread: this.notifications.filter((n) => !n.read).length }); }
+      catch (error: any) { res.status(500).json({ error: error.message }); }
     });
     this.app.get('/api/keys/verify', async (_req, res) => {
       const scheme = String.fromCharCode(66, 101, 97, 114, 101, 114, 32);
