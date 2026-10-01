@@ -28,7 +28,10 @@ export class ShellSandbox {
   private async executeLocal(command: string, cwd: string): Promise<string> {
     const { exec: nodeExec } = await import('child_process');
     return await new Promise<string>((resolve, reject) => {
-      nodeExec(command, { cwd: cwd, timeout: 30000, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+      const nodeDir = String(process.execPath || '').replace(/[\\/]node$/, '');
+      const basePath = process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+      const env = Object.assign({}, process.env, { PATH: basePath + ':' + nodeDir });
+      nodeExec(command, { cwd: cwd, timeout: 30000, maxBuffer: 1024 * 1024, env: env }, (error, stdout, stderr) => {
         const out = String(stdout || '') + String(stderr || '');
         if (error && !out) {
           reject(new Error('Polecenie nie powiodlo sie: ' + error.message));
