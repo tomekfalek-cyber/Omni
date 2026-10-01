@@ -631,12 +631,15 @@ export class SwarmManager {
         const lowerClaim = norm(draftAnswer);
         let claimed = false;
         for (const cw of claimWords) { if (lowerClaim.indexOf(cw) !== -1) { claimed = true; break; } }
-        if (claimed && !usedTools) {
+        const runningWords = ['dziala w tle', 'dziala niezaleznie', 'nasluchuje', 'dziala na porcie', 'dostepny pod', 'przetrwa', 'serwer dziala', 'uruchomiony w tle'];
+        let runningClaim = false;
+        for (const rw of runningWords) { if (lowerClaim.indexOf(rw) !== -1) { runningClaim = true; break; } }
+        if ((claimed && !usedTools) || runningClaim) {
           console.log('[Swarm] Twierdzenie bez sprawdzenia - wymuszam weryfikacje narzedziami.');
           this.emit({ kind: 'writing', text: 'Sprawdzam to narzedziami...' });
           const nl3 = String.fromCharCode(10);
           const forcedV: any[] = [
-            { role: 'system', content: this.capabilities(cwd) + nl3 + this.readKnowledge() + nl3 + 'Zanim odpowiesz: SPRAWDZ to narzedziami (file_list, file_read, shell_exec). Nie twierdz bez dowodu. W odpowiedzi podaj, co sprawdziles i jaki jest wynik.' },
+            { role: 'system', content: this.capabilities(cwd) + nl3 + this.readKnowledge() + nl3 + 'Zanim odpowiesz: SPRAWDZ KOMENDA, czy to naprawde dziala (np. curl -sS -m 5 http://127.0.0.1:PORT/ albo ps aux | grep). Nie twierdz bez dowodu. Jesli sprawdzenie sie nie powiedzie - napisz WPROST, ze nie dziala, i co poszlo nie tak.' },
             { role: 'user', content: String(prompt) },
           ];
           const vr1 = await this.executorTurn(forcedV, toolSchemas, 'auto');
