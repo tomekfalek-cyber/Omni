@@ -80,6 +80,13 @@ export class SwarmManager {
       '11. Formatuj czytelnie (naglowki, listy). Bez lania wody.',
     ].join(nl);
   }
+  /** Sklada polskie znaki do ASCII (do dopasowywania slow kluczowych). */
+  private foldPl(s: string): string {
+    const map: any = { 'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z', 'Ą': 'a', 'Ć': 'c', 'Ę': 'e', 'Ł': 'l', 'Ń': 'n', 'Ó': 'o', 'Ś': 's', 'Ź': 'z', 'Ż': 'z' };
+    let out = '';
+    for (const ch of String(s || '')) { out += (map[ch] !== undefined ? map[ch] : ch); }
+    return out;
+  }
   private registerMemoryTools() {
     this.tools.register({
       definition: {
@@ -436,6 +443,9 @@ export class SwarmManager {
       const actionKeys = ['zbuduj', 'stworz', 'napisz plik', 'aplikacj', 'projekt', 'refaktor', 'zaimplementuj', 'przygotuj', 'zapisz plik', 'edytuj plik', 'wypchnij', 'commit'];
       let isAction = false;
       for (const key of actionKeys) { if (lowerPrompt.indexOf(key) !== -1) { isAction = true; break; } }
+      const folded = this.foldPl(lowerPrompt);
+      const needToolStems = ['ile plik', 'plik', 'folder', 'katalog', 'policz', 'sprawdz', 'wypisz', 'pokaz', 'lista', 'znajdz', 'cena', 'kurs', 'walut', 'pogod', 'dzisiaj', 'aktualn', 'pobierz', 'przeczytaj', 'otworz', 'rozmiar', 'dysk', 'wersj', 'stan ', 'zawartosc', 'ile ', 'jaka ', 'jaki ', 'gdzie ', 'kiedy '];
+      for (const st of needToolStems) { if (folded.indexOf(st) !== -1) { isAction = true; break; } }
       const messages: any[] = [
         { role: 'system', content: (this.behaviorRules() + String.fromCharCode(10) + this.capabilities(cwd) + String.fromCharCode(10) + this.readKnowledge()) + String.fromCharCode(10) + 'WAZNE: gdy pytanie dotyczy faktow, kursow, wiadomosci, pogody, przepisow lub czegokolwiek z internetu - NAJPIERW wywolaj odpowiednie narzedzie. Nie odpowiadaj na takie pytania z pamieci.' },
         { role: 'user', content: 'Zadanie: ' + prompt + '\nPlan:\n' + plan },
