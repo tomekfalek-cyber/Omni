@@ -132,6 +132,7 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
       <div class="nav-group">Rozmowa</div>
       <button class="nav-item active" data-page="chat"><span class="ico">C</span>Czat</button>
       <div class="nav-group">Konfiguracja</div>
+      <button class="nav-item" data-page="reminders"><span class="ico">R</span>Przypomnienia</button>
       <button class="nav-item" data-page="activity"><span class="ico">D</span>Dziennik działań</button>
       <button class="nav-item" data-page="summary"><span class="ico">S</span>Podsumowanie</button>
       <button class="nav-item" data-page="files"><span class="ico">F</span>Pliki</button>
@@ -365,6 +366,16 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
       </div>
     </section>
 
+    <section class="page hidden" id="page-reminders">
+      <div class="card">
+        <h2>Nowe przypomnienie</h2>
+        <div class="mut">Bot przypomni Ci w panelu, a gdy podłączysz Telegram — także na telefonie.</div>
+        <input type="text" id="remText" placeholder="np. zadzwonić do Kowalskiego" />
+        <div class="row"><input type="datetime-local" id="remWhen" /><button class="btn primary" onclick="addReminder()">Dodaj</button><button class="btn" onclick="quickReminder(60)">+1h</button><button class="btn" onclick="quickReminder(1440)">+1 dzien</button></div>
+        <div class="mut" id="remState"></div>
+      </div>
+      <div class="card"><h2>Zaplanowane</h2><div id="remList">ładuję...</div></div>
+    </section>
     <section class="page hidden" id="page-activity">
       <div class="card">
         <h2>Dziennik działań</h2>
@@ -540,6 +551,7 @@ function show(page){
   if(page === "files"){ loadFiles(); }
   if(page === "summary"){ loadSummary(); }
   if(page === "activity"){ loadActivity(); }
+  if(page === "reminders"){ loadReminders(); }
 
   if(page === "engines"){ loadEngineOptions(); var es = document.getElementById('engSave'); if(es && !es.__omniBound){ es.__omniBound = true; es.addEventListener('click', saveEngine); } }
   if(page === "voice"){ renderVoices(); }
@@ -910,6 +922,46 @@ function showSummary(d){
   var b = document.getElementById('sumBox');
   var t = (d && d.text) || '';
   if(b){ b.textContent = t || '(brak)'; }
+}
+function renderReminders(list){
+  var box = document.getElementById('remList');
+  if(!box){ return; }
+  if(!list || !list.length){ box.innerHTML = 'Brak przypomnien.'; return; }
+  var html = '';
+  for(var i=0;i<list.length;i++){
+    var r = list[i];
+    var when = new Date(Number(r.at));
+    var stat = r.done ? ' (wyslane)' : '';
+    html += '<div>' + when.toLocaleString('pl-PL') + ' - ' + esc(r.text) + stat + ' <button class=\'btn\' data-remdel=\'' + esc(r.id) + '\'>Usun</button></div>';
+  }
+  box.innerHTML = html;
+  var bs = box.querySelectorAll('button[data-remdel]');
+  for(var j=0;j<bs.length;j++){ bs[j].addEventListener('click', function(ev){ delReminder(ev.target.getAttribute('data-remdel')); }); }
+}
+function loadReminders(){
+  return api('/api/reminders').then(function(d){ renderReminders((d && d.reminders) || []); _fillRemWhen(); }).catch(function(){});
+}
+function _fillRemWhen(){
+  var w = document.getElementById('remWhen');
+  if(w && !w.value){ var d = new Date(Date.now() + 3600000); w.value = new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16); }
+}
+function addReminder(){
+  var t = document.getElementById('remText');
+  var w = document.getElementById('remWhen');
+  var st = document.getElementById('remState');
+  if(!t || !w){ return; }
+  var when = w.value ? new Date(w.value).getTime() : 0;
+  if(st){ st.textContent = 'Zapisuje...'; }
+  return api('/api/reminders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t.value, at: when }) })
+    .then(function(d){ if(st){ st.textContent = (d && d.ok) ? 'Dodane.' : ('Blad: ' + ((d && d.error) || 'nieznany')); } if(t){ t.value = ''; } renderReminders((d && d.reminders) || []); })
+    .catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+}
+function quickReminder(minutes){
+  var w = document.getElementById('remWhen');
+  if(w){ w.value = new Date(Date.now() + minutes*60000 - new Date().getTimezoneOffset()*60000).toISOString().slice(0,16); }
+}
+function delReminder(id){
+  return api('/api/reminders/done', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) }).then(function(d){ renderReminders((d && d.reminders) || []); }).catch(function(){});
 }
 function loadActivity(){
   return api('/api/activity?limit=120').then(function(d){

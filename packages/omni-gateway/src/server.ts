@@ -170,6 +170,7 @@ export class OmniGateway {
     const everyMs = Number(process.env.OMNI_HEARTBEAT_MS || 1800000);
     this.notifyTimer = setInterval(() => { this.runBackgroundCheck().catch(() => { }); }, everyMs);
     console.log('[Tlo] Praca w tle uruchomiona (co ' + Math.round(everyMs / 60000) + ' min, cisza 23-8)');
+    setInterval(() => { this.checkReminders(); }, 60000);
     setTimeout(() => { this.runBackgroundCheck().catch(() => { }); }, 20000);
   }
 
@@ -285,6 +286,34 @@ export class OmniGateway {
       fs.writeFileSync(f, JSON.stringify({ date: today, text: text, at: Date.now() }, null, 2), 'utf8');
       this.addNotification('Podsumowanie dnia', text.split(String.fromCharCode(10)).slice(2).join(' ').slice(0, 220), 'summary');
     } catch (error) { }
+  }
+  private remindersFile(): string {
+    return path.join(process.env.HOME || '/home/openclaw', '.omni', 'reminders.json');
+  }
+
+  private loadReminders(): any[] {
+    try { const f = this.remindersFile(); if (fs.existsSync(f)) { const j = JSON.parse(fs.readFileSync(f, 'utf8')); if (Array.isArray(j)) { return j; } } } catch (e) { }
+    return [];
+  }
+
+  private saveReminders(list: any[]): void {
+    try { fs.mkdirSync(path.dirname(this.remindersFile()), { recursive: true }); fs.writeFileSync(this.remindersFile(), JSON.stringify(list.slice(0, 300), null, 2), 'utf8'); } catch (e) { }
+  }
+
+  private checkReminders(): void {
+    try {
+      const list = this.loadReminders();
+      let changed = false;
+      for (const r of list) {
+        if (!r || r.done) { continue; }
+        if (Number(r.at) <= Date.now()) {
+          r.done = true;
+          changed = true;
+          this.addNotification('Przypomnienie', String(r.text || ''), 'reminder');
+        }
+      }
+      if (changed) { this.saveReminders(list); }
+    } catch (e) { }
   }
   private tokenFor(code: string): string {
     return crypto.createHash('sha256').update('omni-gate:' + code).digest('hex');
@@ -432,6 +461,33 @@ export class OmniGateway {
         }
       } catch (e) { }
       res.json({ entries: lines.reverse() });
+    });
+    this.app.get('/api/reminders', (_req, res) => {
+      res.json({ reminders: this.loadReminders() });
+    });
+
+    this.app.post('/api/reminders', (req, res) => {
+      try {
+        const body = req.body || {};
+        const text = String(body.text || '').trim();
+        const at = Number(body.at || 0);
+        if (!text) { res.status(400).json({ error: 'Brak tresci przypomnienia.' }); return; }
+        if (!at || at < Date.now() - 60000) { res.status(400).json({ error: 'Podaj czas w przyszlosci.' }); return; }
+        const list = this.loadReminders();
+        list.push({ id: 'r' + Date.now(), text: text.slice(0, 400), at: at, done: false });
+        this.saveReminders(list);
+        res.json({ ok: true, reminders: list });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.post('/api/reminders/done', (req, res) => {
+      try {
+        const id = String((req.body && req.body.id) || '');
+        let list = this.loadReminders();
+        if (id) { list = list.filter((r) => r.id !== id); }
+        this.saveReminders(list);
+        res.json({ ok: true, reminders: list });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
     });
     this.app.get('/api/summary', (_req, res) => {
       try {
