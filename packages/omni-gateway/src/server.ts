@@ -179,6 +179,7 @@ export class OmniGateway {
         }
       }
     } catch (error) { }
+    this.maybeDailySummary();
     return this.notifications;
   }
   private tgTimer: any = null;
@@ -229,6 +230,47 @@ export class OmniGateway {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: chatId, text: text }),
       });
+    } catch (error) { }
+  }
+  private summaryFile(): string {
+    return path.join(process.env.HOME || '/home/openclaw', '.omni', 'summary.json');
+  }
+
+  private buildSummary(): string {
+    const home = process.env.HOME || '/home/openclaw';
+    const nl = String.fromCharCode(10);
+    const rd = (p: string): any => { try { return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null; } catch (e) { return null; } };
+    const chat = rd(path.join(home, '.omni', 'chat.json')) || {};
+    const dayAgo = Date.now() - 86400000;
+    let msgs = 0;
+    for (const k of Object.keys(chat)) { const m = chat[k]; if (m && m.ts && Number(m.ts) >= dayAgo) { msgs++; } }
+    const notifs = rd(path.join(home, '.omni', 'notifications.json')) || [];
+    let skills = 0;
+    try { const sd = path.join(home, '.omni', 'skills'); if (fs.existsSync(sd)) { skills = fs.readdirSync(sd).filter((f) => f.slice(-3) === '.md').length; } } catch (e) { }
+    const cfg = this.config.get();
+    const lines = [
+      'Podsumowanie dnia - ' + new Date().toLocaleDateString('pl-PL'),
+      '',
+      '- Wiadomosci w ciagu 24 godzin: ' + msgs,
+      '- Powiadomienia w kolejce: ' + (Array.isArray(notifs) ? notifs.length : 0),
+      '- Skille bota: ' + skills,
+      '- Silnik: ' + cfg.provider + ' / ' + cfg.model,
+      '- Bot pracuje bez przerwy, a praca w tle czuwa nad GitHubem i powiadomieniami.',
+    ];
+    return lines.join(nl);
+  }
+
+  private maybeDailySummary(): void {
+    try {
+      const f = this.summaryFile();
+      let state: any = {};
+      try { if (fs.existsSync(f)) { state = JSON.parse(fs.readFileSync(f, 'utf8')); } } catch (e) { }
+      const today = new Date().toISOString().slice(0, 10);
+      if (state && state.date === today) { return; }
+      if (new Date().getHours() < Number(process.env.OMNI_SUMMARY_HOUR || 8)) { return; }
+      const text = this.buildSummary();
+      fs.writeFileSync(f, JSON.stringify({ date: today, text: text, at: Date.now() }, null, 2), 'utf8');
+      this.addNotification('Podsumowanie dnia', text.split(String.fromCharCode(10)).slice(2).join(' ').slice(0, 220), 'summary');
     } catch (error) { }
   }
   private tokenFor(code: string): string {
@@ -364,6 +406,19 @@ export class OmniGateway {
         fs.writeFileSync(full, content, 'utf8');
         res.json({ ok: true, chars: content.length });
       } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
+    this.app.get('/api/summary', (_req, res) => {
+      try {
+        const text = this.buildSummary();
+        fs.writeFileSync(this.summaryFile(), JSON.stringify({ date: new Date().toISOString().slice(0, 10), text: text, at: Date.now() }, null, 2), 'utf8');
+        res.json({ ok: true, text: text });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
+
+    this.app.get('/api/summary/last', (_req, res) => {
+      let out: any = null;
+      try { const f = this.summaryFile(); if (fs.existsSync(f)) { out = JSON.parse(fs.readFileSync(f, 'utf8')); } } catch (e) { }
+      res.json({ last: out });
     });
     this.app.get('/api/backup', (_req, res) => {
       const home = process.env.HOME || '/home/openclaw';

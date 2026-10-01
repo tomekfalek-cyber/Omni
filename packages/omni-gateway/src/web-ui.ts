@@ -108,6 +108,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       <div class="nav-group">Rozmowa</div>
       <button class="nav-item active" data-page="chat"><span class="ico">C</span>Czat</button>
       <div class="nav-group">Konfiguracja</div>
+      <button class="nav-item" data-page="summary"><span class="ico">S</span>Podsumowanie</button>
       <button class="nav-item" data-page="files"><span class="ico">F</span>Pliki</button>
       <button class="nav-item" data-page="backup"><span class="ico">B</span>Kopia zapasowa</button>
       <button class="nav-item" data-page="stats"><span class="ico">Y</span>Statystyki</button>
@@ -338,6 +339,15 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       </div>
     </section>
 
+    <section class="page hidden" id="page-summary">
+      <div class="card">
+        <h2>Podsumowanie dzienne</h2>
+        <div class="mut">Bot podsumowuje swoją pracę. Rano (od 8:00) robi to sam i zapisuje jako powiadomienie — możesz też wygenerować ręcznie.</div>
+        <div class="row"><button class="btn primary" onclick="genSummary()">Wygeneruj teraz</button></div>
+        <div class="mut" id="sumState"></div>
+      </div>
+      <div class="card"><h2>Treść</h2><pre id="sumBox" style="white-space:pre-wrap">(jeszcze brak)</pre></div>
+    </section>
     <section class="page hidden" id="page-files">
       <div class="card">
         <h2>Pliki bota (katalog roboczy)</h2>
@@ -451,6 +461,7 @@ function show(page){
   if(page === "stats"){ loadStats(); }
   if(page === "backup"){ }
   if(page === "files"){ loadFiles(); }
+  if(page === "summary"){ loadSummary(); }
 
   if(page === "engines"){ loadEngineOptions(); var es = document.getElementById('engSave'); if(es && !es.__omniBound){ es.__omniBound = true; es.addEventListener('click', saveEngine); } }
   if(page === "voice"){ renderVoices(); }
@@ -817,6 +828,22 @@ function statTile(label, value, hint){
   return '<div class="card"><h2>' + esc(label) + '</h2><div style="font-size:26px;font-weight:700">' + esc(String(value)) + '</div><div class="mut">' + esc(hint || '') + '</div></div>';
 }
 var oFileCur = '';
+function showSummary(d){
+  var b = document.getElementById('sumBox');
+  var t = (d && d.text) || '';
+  if(b){ b.textContent = t || '(brak)'; }
+}
+function genSummary(){
+  var st = document.getElementById('sumState');
+  if(st){ st.textContent = 'Tworze podsumowanie...'; }
+  return api('/api/summary').then(function(d){ if(st){ st.textContent = 'Gotowe.'; } showSummary(d); })
+    .catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+}
+function loadSummary(){
+  return api('/api/summary/last').then(function(d){
+    if(d && d.last && d.last.text){ showSummary(d.last); }
+  }).catch(function(){});
+}
 function loadFiles(){
   var p = document.getElementById('filesPath');
   var dir = p ? p.value : '.';
