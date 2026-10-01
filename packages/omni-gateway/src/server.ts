@@ -462,6 +462,28 @@ export class OmniGateway {
       } catch (e) { }
       res.json({ entries: lines.reverse() });
     });
+    this.app.get('/api/history/search', (req, res) => {
+      const home = process.env.HOME || '/home/openclaw';
+      const q = String((req.query && req.query.q) || '').trim().toLowerCase();
+      if (q.length < 2) { res.json({ query: q, results: [], note: 'Wpisz co najmniej 2 znaki.' }); return; }
+      let results: any[] = [];
+      try {
+        const f = path.join(home, '.omni', 'chat.json');
+        if (fs.existsSync(f)) {
+          const chat = JSON.parse(fs.readFileSync(f, 'utf8'));
+          const keys = Object.keys(chat || {});
+          for (const k of keys) {
+            const m = chat[k];
+            if (!m || typeof m.text !== 'string') { continue; }
+            if (m.text.toLowerCase().indexOf(q) !== -1) {
+              results.push({ at: Number(m.ts || 0), role: String(m.role || ''), text: String(m.text).slice(0, 400) });
+            }
+          }
+        }
+      } catch (e) { }
+      results = results.sort((a, b) => b.at - a.at).slice(0, 60);
+      res.json({ query: q, count: results.length, results: results });
+    });
     this.app.get('/api/reminders', (_req, res) => {
       res.json({ reminders: this.loadReminders() });
     });

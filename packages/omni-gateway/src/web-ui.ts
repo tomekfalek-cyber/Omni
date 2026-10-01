@@ -132,6 +132,7 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
       <div class="nav-group">Rozmowa</div>
       <button class="nav-item active" data-page="chat"><span class="ico">C</span>Czat</button>
       <div class="nav-group">Konfiguracja</div>
+      <button class="nav-item" data-page="history"><span class="ico">H</span>Historia</button>
       <button class="nav-item" data-page="reminders"><span class="ico">R</span>Przypomnienia</button>
       <button class="nav-item" data-page="activity"><span class="ico">D</span>Dziennik działań</button>
       <button class="nav-item" data-page="summary"><span class="ico">S</span>Podsumowanie</button>
@@ -366,6 +367,15 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
       </div>
     </section>
 
+    <section class="page hidden" id="page-history">
+      <div class="card">
+        <h2>Szukanie w historii rozmów</h2>
+        <div class="mut">Przeszukaj wszystkie dawne rozmowy z botem. Wpisz fragment zdania.</div>
+        <div class="row"><input type="text" id="histQ" placeholder="np. faktura, klucz, github" style="flex:1" onkeydown="if(event.key==='Enter'){searchHistory();}" /><button class="btn primary" onclick="searchHistory()">Szukaj</button></div>
+        <div class="mut" id="histState"></div>
+      </div>
+      <div class="card"><h2>Wyniki</h2><div id="histList">wpisz frazę i kliknij Szukaj</div></div>
+    </section>
     <section class="page hidden" id="page-reminders">
       <div class="card">
         <h2>Nowe przypomnienie</h2>
@@ -552,6 +562,7 @@ function show(page){
   if(page === "summary"){ loadSummary(); }
   if(page === "activity"){ loadActivity(); }
   if(page === "reminders"){ loadReminders(); }
+  if(page === "history"){ }
 
   if(page === "engines"){ loadEngineOptions(); var es = document.getElementById('engSave'); if(es && !es.__omniBound){ es.__omniBound = true; es.addEventListener('click', saveEngine); } }
   if(page === "voice"){ renderVoices(); }
@@ -922,6 +933,29 @@ function showSummary(d){
   var b = document.getElementById('sumBox');
   var t = (d && d.text) || '';
   if(b){ b.textContent = t || '(brak)'; }
+}
+function searchHistory(){
+  var q = document.getElementById('histQ');
+  var box = document.getElementById('histList');
+  var st = document.getElementById('histState');
+  var val = q ? q.value : '';
+  if(st){ st.textContent = 'Szukam: ' + val; }
+  return api('/api/history/search?q=' + encodeURIComponent(val)).then(function(d){
+    var rs = (d && d.results) || [];
+    if(box){
+      if(!rs.length){ box.innerHTML = 'Brak wynikow' + ((d && d.note) ? ' (' + esc(d.note) + ')' : '') + '.'; }
+      else {
+        var html = '';
+        for(var i=0;i<rs.length;i++){
+          var r = rs[i];
+          var t = r.at ? new Date(r.at).toLocaleString('pl-PL') : '?';
+          html += '<div>' + t + ' [' + esc(r.role) + ']: ' + esc(r.text) + '</div>';
+        }
+        box.innerHTML = html;
+      }
+    }
+    if(st){ st.textContent = 'Znaleziono: ' + ((d && d.count) || 0); }
+  }).catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
 }
 function renderReminders(list){
   var box = document.getElementById('remList');
