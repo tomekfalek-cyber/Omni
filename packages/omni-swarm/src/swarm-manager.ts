@@ -190,7 +190,7 @@ export class SwarmManager {
         return await provider.getCompletionWithTools(messages, tools, toolChoice);
       } catch (error: any) {
         console.log('[Swarm] Proba z tool_choice=' + String(toolChoice) + ' nieudana (' + error.message + ')');
-        if (this.onEngineFailure && /429|rate limit|quota|limit token|tokenow|resource_exhausted|exhausted|overload|unavailable|503/i.test(String(error.message || ''))) { try { this.onEngineFailure(); } catch (e) { } }
+        if (this.onEngineFailure && /429|rate limit|quota|limit token|tokenow|resource_exhausted|exhausted|overload|unavailable|503|401|invalid|authentication|unauthorized/i.test(String(error.message || ''))) { try { this.onEngineFailure(); } catch (e) { } }
         try {
           if (toolChoice && toolChoice !== 'auto') {
             const nudge = messages.concat([{ role: 'user', content: 'WYWOŁAJ NARZĘDZIE TERAZ. Nie odpowiadaj z pamięci - użyj odpowiedniego narzędzia i podaj wynik z jego działania.' }]);
@@ -624,7 +624,7 @@ export class SwarmManager {
         }
       }
       if (!draftAnswer || !String(draftAnswer).trim()) {
-        draftAnswer = 'Nie udalo sie uzyskac odpowiedzi - darmowy silnik chwilowo odmowil (limit tokenow). Sprobuj ponownie za minute albo wlacz inny darmowy silnik w zakladce Silniki.';
+        draftAnswer = 'Nie udalo sie uzyskac odpowiedzi od silnika (' + String(process.env.OMNI_LLM_PROVIDER || 'aktywny') + '). Najczestsza przyczyna: klucz API odrzucony albo limit darmowego planu. Sprawdz zakladke Klucze API (jest przycisk Sprawdz klucze) i sprobuj ponownie.';
       }
       // KROK 4: Evolver uczy sie z zadania (opcjonalny - blad nie moze zepsuc odpowiedzi)
       try { await this.runEvolver(prompt, executionResult); } catch (error) { }
