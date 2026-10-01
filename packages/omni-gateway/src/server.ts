@@ -579,6 +579,23 @@ export class OmniGateway {
       }
     });
 
+    this.app.post('/api/voice/transcribe', express.raw({ type: ['audio/*', 'application/octet-stream'], limit: '25mb' }), async (req, res) => {
+      try {
+        const key = this.config.secrets.getSecret('GROQ_API_KEY') || '';
+        if (key.length < 10) { res.status(400).json({ error: 'Brak klucza Groq - wpisz go w zakladce Modele i klucze.' }); return; }
+        const buf = req.body as Buffer;
+        if (!buf || !buf.length) { res.status(400).json({ error: 'Brak nagrania.' }); return; }
+        const fd = new FormData();
+        const bytes = new Uint8Array(buf);
+        fd.append('file', new Blob([bytes], { type: 'audio/webm' }), 'nagranie.webm');
+        fd.append('model', 'whisper-large-v3');
+        fd.append('language', 'pl');
+        const r = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: ('Bearer '.concat(key)) }, body: fd });
+        const data: any = await r.json().catch(() => ({}));
+        if (!r.ok) { res.status(500).json({ error: 'Rozpoznawanie nieudane (HTTP ' + r.status + ')' }); return; }
+        res.json({ ok: true, text: String(data.text || '').trim() });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
     this.app.post('/api/voice/upload', async (req, res) => {
       try {
         const body = req.body || {};

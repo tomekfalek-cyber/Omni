@@ -138,6 +138,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
         <div class="composer">
           <textarea id="chatInput" rows="2" placeholder="Napisz wiadomosc i nacisnij Enter (Shift+Enter = nowa linia)"></textarea>
           <button class="btn" id="micBtn" title="Rozmowa glosowa"><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'><rect x='9' y='2' width='6' height='11' rx='3'></rect><path d='M5 11a7 7 0 0 0 14 0'></path><line x1='12' y1='18' x2='12' y2='23'></line></svg></button>
+          <button class="btn" id="micRecBtn" title="Nagraj i rozpoznaj mowe (Whisper, dziala wszędzie)" onclick="toggleRec()">🎙️</button>
           <button class="btn primary" id="sendBtn">Wyslij</button>
         </div>
         <div class="chat-hint" id="voiceHint">Rozmowa glosowa: kliknij MOW i mow</div>
@@ -527,6 +528,44 @@ function loadStatus(){
 }
 function loadConfig(){
   return api("/api/config").then(function(c){ fillConfig(c); renderPills(); });
+}
+function transcribeBlob(blob){
+  return fetch('/api/voice/transcribe', { method: 'POST', headers: { 'Content-Type': 'audio/webm' }, body: blob })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d && d.error){ toast('Blad: ' + d.error, 'err'); return; }
+      var txt = (d && d.text) || '';
+      if(!txt){ toast('Nie rozpoznalem mowy', 'err'); return; }
+      var box = document.getElementById('chatInput');
+      if(box){ box.value = (box.value ? box.value + ' ' : '') + txt; box.focus(); }
+      toast('Rozpoznano: ' + txt, 'ok');
+    })
+    .catch(function(e){ toast('Blad: ' + e.message, 'err'); });
+}
+function toggleRec(){
+  var btn = document.getElementById('micRecBtn');
+  if(state.recording){
+    state.recording = false;
+    if(btn){ btn.textContent = '🎙️'; }
+    try { if(state.recorder){ state.recorder.stop(); } } catch(e){}
+    return;
+  }
+  if(!navigator.mediaDevices || !window.MediaRecorder){ toast('Ta przegladarka nie nagrywa - uzyj Chrome', 'err'); return; }
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream){
+    var chunks = [];
+    var rec = new MediaRecorder(stream);
+    rec.ondataavailable = function(ev){ if(ev.data && ev.data.size){ chunks.push(ev.data); } };
+    rec.onstop = function(){
+      try { stream.getTracks().forEach(function(t){ t.stop(); }); } catch(e){}
+      var blob = new Blob(chunks, { type: 'audio/webm' });
+      transcribeBlob(blob);
+    };
+    state.recorder = rec;
+    state.recording = true;
+    if(btn){ btn.innerHTML = '⏹'; }
+    rec.start();
+    toast('Nagrywam... kliknij ponownie, zeby rozpoznać', 'ok');
+  }).catch(function(e){ toast('Mikrofon: ' + e.message, 'err'); });
 }
 function sendMessage(){
   var box = el("chatInput");
