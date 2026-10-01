@@ -190,7 +190,7 @@ export class SwarmManager {
         return await provider.getCompletionWithTools(messages, tools, toolChoice);
       } catch (error: any) {
         console.log('[Swarm] Proba z tool_choice=' + String(toolChoice) + ' nieudana (' + error.message + ')');
-        if (this.onEngineFailure && /429|rate limit|quota/i.test(String(error.message || ''))) { try { this.onEngineFailure(); } catch (e) { } }
+        if (this.onEngineFailure && /429|rate limit|quota|limit token|tokenow|resource_exhausted|exhausted|overload|unavailable|503/i.test(String(error.message || ''))) { try { this.onEngineFailure(); } catch (e) { } }
         try {
           if (toolChoice && toolChoice !== 'auto') {
             const nudge = messages.concat([{ role: 'user', content: 'WYWOŁAJ NARZĘDZIE TERAZ. Nie odpowiadaj z pamięci - użyj odpowiedniego narzędzia i podaj wynik z jego działania.' }]);
