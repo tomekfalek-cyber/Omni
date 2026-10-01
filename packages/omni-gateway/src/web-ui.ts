@@ -590,11 +590,11 @@ function loadCosts(){
 function renderCosts(d){
   var card = document.getElementById("costsCard");
   if(!card){ return; }
-  var html = "<h2>Koszty - nic nie placisz</h2>";
+  var html = d.free ? "<h2>Koszty - nic nie placisz</h2>" : "<h2>Koszty - silnik platny (za Twoja zgoda)</h2>";
   html += "<div class=mut>Aktywny silnik: <b>" + esc(d.provider || "-") + "</b> / <b>" + esc(d.model || "-") + "</b>";
   html += d.free ? " <span class=badge ok>DARMOWY</span>" : " <span class=badge err>PLATNY</span>";
   html += "</div>";
-  html += "<div class=mut style='margin-top:6px'>Szacowany koszt miesieczny: <b>0 zl</b> - wszystkie silniki Omni dzialaja na darmowych planach.</div>";
+  html += d.free ? "<div class=mut style='margin-top:6px'>Koszt: <b>0 zl</b> - ten silnik dziala na darmowym planie.</div>" : "<div class=mut style='margin-top:6px'>Ten silnik jest <b>rozliczany za tokeny</b> u dostawcy. Sprawdz zuzycie u dostawcy (np. platform.deepseek.com). Wroc na darmowy silnik w zakladce Silniki w kazdej chwili.</div>";
   html += "<div class=mut style='margin-top:8px'>";
   var list = d.providers || [];
   for(var i=0;i<list.length;i++){

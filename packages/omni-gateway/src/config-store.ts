@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { SecretManager } from './security/secret-manager.js';
 
-export type OmniProviderId = 'ollama' | 'openrouter' | 'gemini' | 'groq';
+export type OmniProviderId = 'ollama' | 'openrouter' | 'gemini' | 'groq' | 'deepseek';
 
 export interface OmniConfig {
   provider: OmniProviderId;
@@ -35,6 +35,7 @@ export const PROVIDERS: ProviderInfo[] = [
   { id: 'gemini', label: 'Google AI Studio (Gemini, darmowy)', keyEnv: 'GEMINI_API_KEY', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/', free: true, signup: 'https://aistudio.google.com/apikey' },
   { id: 'groq', label: 'Groq (darmowy i bardzo szybki)', keyEnv: 'GROQ_API_KEY', baseUrl: 'https://api.groq.com/openai/v1', free: true, signup: 'https://console.groq.com/keys' },
   { id: 'ollama', label: 'Lokalnie (Ollama, bez klucza)', keyEnv: '', baseUrl: 'http://127.0.0.1:11434/v1', free: true, signup: '' },
+  { id: 'deepseek', label: 'DeepSeek (PLATNY - opcjonalnie, za Twoja zgoda)', keyEnv: 'DEEPSEEK_API_KEY', baseUrl: 'https://api.deepseek.com', free: false, signup: 'https://platform.deepseek.com/api_keys' },
 ];
 
 export const KEY_OPENROUTER = 'OPENROUTER_API_KEY';
@@ -55,6 +56,8 @@ export const MODEL_PRESETS: ModelPreset[] = [
   { provider: 'groq', id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B (Groq)', note: 'Najmocniejszy na Groq' },
   { provider: 'groq', id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B (Groq)', note: 'Szybki i madry' },
   { provider: 'groq', id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B (Groq)', note: 'Blyskawiczny' },
+  { provider: 'deepseek', id: 'deepseek-chat', label: 'DeepSeek Chat (płatny)', note: 'Tani i mocny - kod i rozmowa' },
+  { provider: 'deepseek', id: 'deepseek-reasoner', label: 'DeepSeek Reasoner (płatny)', note: 'Rozumowanie krok po kroku' },
   { provider: 'ollama', id: 'qwen2.5:1.5b', label: 'Qwen 2.5 1.5B - lokalny', note: 'Offline, slabszy' },
   { provider: 'ollama', id: 'qwen2.5:7b', label: 'Qwen 2.5 7B - lokalny', note: 'Wymaga ok. 5 GB RAM' },
 ];

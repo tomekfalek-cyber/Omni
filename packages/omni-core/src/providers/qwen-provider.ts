@@ -7,6 +7,7 @@ import { EventEmitter } from 'events';
 const COMPATIBLE: Record<string, { baseUrl: string, keyEnv: string }> = {
   groq: { baseUrl: 'https://api.groq.com/openai/v1', keyEnv: 'GROQ_API_KEY' },
   gemini: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/', keyEnv: 'GEMINI_API_KEY' },
+  deepseek: { baseUrl: 'https://api.deepseek.com', keyEnv: 'DEEPSEEK_API_KEY' },
 };
 
 export class QwenProvider extends EventEmitter {
