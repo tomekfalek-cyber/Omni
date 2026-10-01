@@ -625,6 +625,43 @@ export class SwarmManager {
           console.log('[Swarm] Wymuszone sprawdzenie nieudane: ' + error.message);
         }
       }
+      // STRAZ WERYFIKACJI: twierdzenie bez sprawdzenia = wymus narzedzia (tak pracuje asystent).
+      try {
+        const claimWords = ['gotowe', 'uruchomion', 'uruchomilem', 'dziala', 'zrobilem', 'utworzylem', 'zapisalem', 'commituje', 'zainstalowalem', 'wypchna'];
+        const lowerClaim = norm(draftAnswer);
+        let claimed = false;
+        for (const cw of claimWords) { if (lowerClaim.indexOf(cw) !== -1) { claimed = true; break; } }
+        if (claimed && !usedTools) {
+          console.log('[Swarm] Twierdzenie bez sprawdzenia - wymuszam weryfikacje narzedziami.');
+          this.emit({ kind: 'writing', text: 'Sprawdzam to narzedziami...' });
+          const nl3 = String.fromCharCode(10);
+          const forcedV: any[] = [
+            { role: 'system', content: this.capabilities(cwd) + nl3 + this.readKnowledge() + nl3 + 'Zanim odpowiesz: SPRAWDZ to narzedziami (file_list, file_read, shell_exec). Nie twierdz bez dowodu. W odpowiedzi podaj, co sprawdziles i jaki jest wynik.' },
+            { role: 'user', content: String(prompt) },
+          ];
+          const vr1 = await this.executorTurn(forcedV, toolSchemas, 'auto');
+          const vcalls = vr1.toolCalls || [];
+          if (vcalls.length) {
+            forcedV.push({ role: 'assistant', content: vr1.content || null, tool_calls: vcalls });
+            for (const call of vcalls) {
+              const nm = call.function && call.function.name;
+              let ar: any = {};
+              try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
+              try {
+                const outp = await this.tools.executeTool(nm, ar, cwd);
+                forcedV.push({ role: 'tool', tool_call_id: call.id, content: String(typeof outp === 'string' ? outp : JSON.stringify(outp)).slice(0, 6000) });
+              } catch (e: any) {
+                forcedV.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + e.message });
+              }
+            }
+            const vr2 = await this.executorTurn(forcedV, toolSchemas, 'auto');
+            const vfixed = this.stripMarkers(vr2.content);
+            if (vfixed && vfixed.trim().length > 5) { draftAnswer = vfixed; }
+          }
+        }
+      } catch (error: any) {
+        console.log('[Swarm] Straz weryfikacji nieudana: ' + error.message);
+      }
       if (!draftAnswer || !String(draftAnswer).trim()) {
         draftAnswer = 'Nie udalo sie uzyskac odpowiedzi od silnika (' + String(process.env.OMNI_LLM_PROVIDER || 'aktywny') + '). Najczestsza przyczyna: klucz API odrzucony albo limit darmowego planu. Sprawdz zakladke Klucze API (jest przycisk Sprawdz klucze) i sprobuj ponownie.';
       }
