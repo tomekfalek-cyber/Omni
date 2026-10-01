@@ -56,6 +56,19 @@ export class OmniGateway {
     this.app = express();
     this.app.use(cors());
     this.app.use(express.json({ limit: '1mb' }));
+    this.app.use((req, res, next) => {
+      const started = Date.now();
+      const skip = (req.path === '/' || req.path.indexOf('/api/health') === 0 || req.path.indexOf('/api/notifications') === 0);
+      res.on('finish', () => {
+        if (skip) { return; }
+        try {
+          const line = JSON.stringify({ at: Date.now(), method: req.method, path: String(req.path).slice(0, 160), status: res.statusCode, ms: Date.now() - started });
+          fs.appendFileSync(path.join(process.env.HOME || '/home/openclaw', '.omni', 'activity.log'), line + String.fromCharCode(10));
+        } catch (e) { }
+      });
+      next();
+    });
+
     this.httpServer = createServer(this.app);
     this.wss = new WebSocketServer({ server: this.httpServer, path: '/ws' });
     this.swarm = new SwarmManager();
@@ -406,6 +419,19 @@ export class OmniGateway {
         fs.writeFileSync(full, content, 'utf8');
         res.json({ ok: true, chars: content.length });
       } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
+    this.app.get('/api/activity', (req, res) => {
+      const home = process.env.HOME || '/home/openclaw';
+      const lim = Math.min(Number((req.query && req.query.limit) || 120), 500);
+      let lines: any[] = [];
+      try {
+        const f = path.join(home, '.omni', 'activity.log');
+        if (fs.existsSync(f)) {
+          const raw = fs.readFileSync(f, 'utf8').split(String.fromCharCode(10)).filter((l) => l.trim().length > 8);
+          lines = raw.slice(-lim).map((l) => { try { return JSON.parse(l); } catch (e) { return null; } }).filter((x) => x);
+        }
+      } catch (e) { }
+      res.json({ entries: lines.reverse() });
     });
     this.app.get('/api/summary', (_req, res) => {
       try {

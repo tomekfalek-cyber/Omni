@@ -132,6 +132,7 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
       <div class="nav-group">Rozmowa</div>
       <button class="nav-item active" data-page="chat"><span class="ico">C</span>Czat</button>
       <div class="nav-group">Konfiguracja</div>
+      <button class="nav-item" data-page="activity"><span class="ico">D</span>Dziennik działań</button>
       <button class="nav-item" data-page="summary"><span class="ico">S</span>Podsumowanie</button>
       <button class="nav-item" data-page="files"><span class="ico">F</span>Pliki</button>
       <button class="nav-item" data-page="backup"><span class="ico">B</span>Kopia zapasowa</button>
@@ -364,6 +365,15 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
       </div>
     </section>
 
+    <section class="page hidden" id="page-activity">
+      <div class="card">
+        <h2>Dziennik działań</h2>
+        <div class="mut">Każde wywołanie do bota jest zapisywane: co, kiedy i z jakim skutkiem. Widzisz, co bot robi z Twoim komputerem.</div>
+        <div class="row"><button class="btn" onclick="loadActivity()">Odśwież</button></div>
+        <div class="mut" id="actState"></div>
+      </div>
+      <div class="card"><h2>Ostatnie zdarzenia</h2><div id="actList">ładuję...</div></div>
+    </section>
     <section class="page hidden" id="page-summary">
       <div class="card">
         <h2>Podsumowanie dzienne</h2>
@@ -529,6 +539,7 @@ function show(page){
   if(page === "backup"){ }
   if(page === "files"){ loadFiles(); }
   if(page === "summary"){ loadSummary(); }
+  if(page === "activity"){ loadActivity(); }
 
   if(page === "engines"){ loadEngineOptions(); var es = document.getElementById('engSave'); if(es && !es.__omniBound){ es.__omniBound = true; es.addEventListener('click', saveEngine); } }
   if(page === "voice"){ renderVoices(); }
@@ -899,6 +910,27 @@ function showSummary(d){
   var b = document.getElementById('sumBox');
   var t = (d && d.text) || '';
   if(b){ b.textContent = t || '(brak)'; }
+}
+function loadActivity(){
+  return api('/api/activity?limit=120').then(function(d){
+    var box = document.getElementById('actList');
+    var es = (d && d.entries) || [];
+    if(box){
+      if(!es.length){ box.innerHTML = 'Brak zdarzen.'; }
+      else {
+        var html = '';
+        for(var i=0;i<es.length;i++){
+          var e = es[i];
+          var t = new Date(e.at).toLocaleTimeString('pl-PL');
+          var mark = (e.status >= 400) ? ' [BLAD]' : '';
+          html += '<div>' + t + ' | ' + esc(e.method) + ' ' + esc(e.path) + ' | status ' + e.status + mark + ' | ' + e.ms + ' ms</div>';
+        }
+        box.innerHTML = html;
+      }
+    }
+    var st = document.getElementById('actState');
+    if(st){ st.textContent = 'Wpisow: ' + es.length; }
+  }).catch(function(e){ var s2 = document.getElementById('actState'); if(s2){ s2.textContent = 'Blad: ' + e.message; } });
 }
 function genSummary(){
   var st = document.getElementById('sumState');
