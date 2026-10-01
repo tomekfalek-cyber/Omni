@@ -53,6 +53,14 @@ export class OmniGateway {
 
   constructor(port: number = 7800, host: string = '127.0.0.1', config?: ConfigStore) {
     this.config = config || new ConfigStore();
+    try {
+      if (!this.config.get().accessCode) {
+        const gen = String(Math.floor(10000000 + Math.random() * 90000000));
+        this.config.save({ accessCode: gen } as any);
+        console.log('[Bezpieczenstwo] Brak kodu dostepu - wygenerowalem nowy: ' + gen);
+        console.log('[Bezpieczenstwo] Zapisz go! Panel jest teraz chroniony tym kodem.');
+      }
+    } catch (e) { }
     this.app = express();
     this.app.use(cors());
     this.app.use(express.json({ limit: '1mb' }));
@@ -402,11 +410,22 @@ export class OmniGateway {
   }
 
   private setupAuth() {
+    const loginFails: any = {};
     this.app.post('/api/login', (req, res) => {
       const cfg = this.config.get();
+      const ip = String(((req.headers['x-forwarded-for'] as any) || req.socket.remoteAddress || '')).split(',')[0].trim();
+      const rec = loginFails[ip] || { n: 0, until: 0 };
+      if (rec.until && Date.now() < rec.until) { res.status(429).json({ error: 'Za duzo nieudanych prob logowania. Odczekaj 5 minut.' }); return; }
       const code = String((req.body && req.body.code) || '');
       if (!cfg.accessCode) { res.json({ ok: true, note: 'Kod nie jest ustawiony' }); return; }
-      if (code !== cfg.accessCode) { res.status(403).json({ error: 'Zly kod dostepu' }); return; }
+      if (code !== cfg.accessCode) {
+        rec.n = (rec.n || 0) + 1;
+        if (rec.n >= 5) { rec.until = Date.now() + 5 * 60 * 1000; rec.n = 0; console.log('[Bezpieczenstwo] 5 nieudanych prob z ' + ip + ' - blokada na 5 minut.'); }
+        loginFails[ip] = rec;
+        res.status(403).json({ error: 'Zly kod dostepu' });
+        return;
+      }
+      loginFails[ip] = { n: 0, until: 0 };
       res.setHeader('Set-Cookie', 'omni_token=' + this.tokenFor(cfg.accessCode) + '; Path=/; Max-Age=2592000; SameSite=Lax');
       res.json({ ok: true });
     });
