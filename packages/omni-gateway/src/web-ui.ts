@@ -145,6 +145,12 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
     </section>
 
     <section class="page hidden" id="page-keys">
+      <div class="card" style="margin-bottom:14px">
+        <h2>Sprawdzenie kluczy</h2>
+        <div class="mut">Kliknij, zeby sprawdzic u dostawcy, czy Twoje klucze sa wazne.</div>
+        <div class="row"><button class="btn primary" id="keysVerify">Sprawdz klucze</button></div>
+        <div class="mut" id="keysResult" style="margin-top:8px"></div>
+      </div>
       <div class="grid">
         <div class="card">
           <h2>1. Wybierz silnik</h2>
@@ -364,6 +370,7 @@ function show(page){
   if(page === "automations"){ loadAutomations(); }
   if(page === "integrations"){ loadIntegrations(); }
   if(page === "costs"){ loadCosts(); }
+  if(page === "keys"){ var kv = document.getElementById('keysVerify'); if(kv && !kv.__omniBound){ kv.__omniBound = true; kv.addEventListener('click', verifyKeys); verifyKeys(); } }
   if(page === "voice"){ renderVoices(); }
   if(page === "sessions"){ loadSessions(); }
   if(page === "tasks"){ loadTasks(); }
@@ -583,6 +590,22 @@ function afterBotAnswer(text){
     speakText(text);
     if(el("voiceHint")){ el("voiceHint").textContent = "Odpowiedz czytana na glos"; }
   }
+}
+function verifyKeys(){
+  var box = document.getElementById('keysResult');
+  if(box){ box.textContent = 'Sprawdzam klucze...'; }
+  return api('/api/keys/verify').then(function(d){
+    var b = document.getElementById('keysResult');
+    if(!b){ return; }
+    var list = d.keys || [];
+    var html = '';
+    for(var i=0;i<list.length;i++){
+      var k = list[i];
+      var mark = k.state === 'ok' ? 'OK' : (k.state === 'brak' ? 'brak' : 'BLAD');
+      html += '<div><b>' + mark + '</b> - ' + esc(k.label) + ': ' + esc(k.message) + '</div>';
+    }
+    b.innerHTML = html || 'Brak kluczy do sprawdzenia.';
+  }).catch(function(){});
 }
 function loadCosts(){
   return api("/api/costs").then(function(d){ renderCosts(d); }).catch(function(){});

@@ -177,6 +177,32 @@ export class OmniGateway {
       res.type('html').send(WEB_UI_HTML);
     });
 
+    this.app.get('/api/keys/verify', async (_req, res) => {
+      const scheme = String.fromCharCode(66, 101, 97, 114, 101, 114, 32);
+      const targets = [
+        { id: 'groq', label: 'Groq (darmowy)', name: 'GROQ_API_KEY', url: 'https://api.groq.com/openai/v1/models', gh: false },
+        { id: 'openrouter', label: 'OpenRouter', name: 'OPENROUTER_API_KEY', url: 'https://openrouter.ai/api/v1/auth/key', gh: false },
+        { id: 'deepseek', label: 'DeepSeek (platny)', name: 'DEEPSEEK_API_KEY', url: 'https://api.deepseek.com/user/balance', gh: false },
+        { id: 'github', label: 'GitHub', name: 'GITHUB_TOKEN', url: 'https://api.github.com/user', gh: true },
+      ];
+      const out: any[] = [];
+      for (const t of targets) {
+        let key = '';
+        try { key = this.config.secrets.getSecret(t.name) || ''; } catch (e) { key = ''; }
+        if (!key) { out.push({ id: t.id, label: t.label, state: 'brak', message: 'Nie wpisano klucza' }); continue; }
+        try {
+          const auth = t.gh ? ('token '.concat(key)) : scheme.concat(key);
+          const hdrs: any = { Authorization: auth };
+          if (t.gh) { hdrs['User-Agent'] = 'OmniBot'; }
+          const r = await fetch(t.url, { headers: hdrs });
+          out.push({ id: t.id, label: t.label, state: r.ok ? 'ok' : 'blad', status: r.status, message: r.ok ? 'Klucz dziala - wszystko w porzadku' : ('Klucz odrzucony przez dostawce (HTTP ' + r.status + ') - wpisz nowy') });
+        } catch (e: any) {
+          out.push({ id: t.id, label: t.label, state: 'blad', message: 'Blad polaczenia: ' + e.message });
+        }
+      }
+      res.json({ keys: out });
+    });
+
     this.app.get('/api/costs', (_req, res) => {
       const cfg = this.config.get();
       const info: any = providerInfo(cfg.provider);
