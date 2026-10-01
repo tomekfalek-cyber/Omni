@@ -72,6 +72,7 @@ export class OmniGateway {
     this.httpServer = createServer(this.app);
     this.wss = new WebSocketServer({ server: this.httpServer, path: '/ws' });
     this.swarm = new SwarmManager();
+    this.swarm.onEngineFailure = () => { void this.checkEngineHealth(true); };
     this.voice = new VoiceManager();
     this.swarm.workspaceCwd = this.config.get().workspaceDir;
     this.automations = new AutomationScheduler(this.config.dataDir(), async (prompt: string, name: string) => {
@@ -249,10 +250,10 @@ export class OmniGateway {
     } catch (error) { }
   }
   /** Sprawdza, czy aktywny silnik odpowiada. Jesli nie - przełącza na zdrowy. */
-  private async checkEngineHealth(): Promise<void> {
+  private async checkEngineHealth(force?: boolean): Promise<void> {
     try {
       const last = Number((this as any).lastEngineCheck || 0);
-      if (Date.now() - last < 25 * 60 * 1000) { return; }
+      if (!force && Date.now() - last < 25 * 60 * 1000) { return; }
       (this as any).lastEngineCheck = Date.now();
       const cfg = this.config.get();
       const active = String(cfg.provider || 'groq');
@@ -278,7 +279,7 @@ export class OmniGateway {
           return { ok: r.ok, note: 'HTTP ' + r.status };
         } catch (e: any) { return { ok: false, note: e.message }; }
       };
-      const test = await probe(active);
+      const test = force ? { ok: false, note: 'limit lub blad dostawcy w czacie' } : await probe(active);
       console.log('[Silniki] ' + active + ': ' + (test.ok ? 'dziala' : 'PROBLEM (' + test.note + ')'));
       if (test.ok) { return; }
       const prefer: any = { groq: 'openai/gpt-oss-120b', openrouter: 'qwen/qwen-2.5-72b-instruct:free', gemini: 'gemini-flash-latest', deepseek: 'deepseek-chat' };

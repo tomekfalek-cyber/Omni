@@ -15,6 +15,8 @@ export class SwarmManager {
   private memory: OmniMemory;
   public workspaceCwd: string = process.cwd();
   private tools: ToolRegistry;
+  /** Wywolywane, gdy czat padnie na limicie/blędzie dostawcy (np. 429). */
+  public onEngineFailure?: () => void;
 
   constructor() {
     const provider = (process.env.OMNI_LLM_PROVIDER as any) || 'ollama';
@@ -185,6 +187,7 @@ export class SwarmManager {
         return await provider.getCompletionWithTools(messages, tools, toolChoice);
       } catch (error: any) {
         console.log('[Swarm] Proba z tool_choice=' + String(toolChoice) + ' nieudana (' + error.message + ')');
+        if (this.onEngineFailure && /429|rate limit|quota/i.test(String(error.message || ''))) { try { this.onEngineFailure(); } catch (e) { } }
         try {
           if (toolChoice && toolChoice !== 'auto') {
             const nudge = messages.concat([{ role: 'user', content: 'WYWOŁAJ NARZĘDZIE TERAZ. Nie odpowiadaj z pamięci - użyj odpowiedniego narzędzia i podaj wynik z jego działania.' }]);
