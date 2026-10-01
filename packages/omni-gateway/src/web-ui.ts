@@ -188,6 +188,16 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
     </section>
 
     <section class="page hidden" id="page-engines">
+      <div class="card" style="margin-bottom:14px">
+        <h2>Zmien silnik</h2>
+        <label class="lbl">Dostawca</label>
+        <select id="engProvider"></select>
+        <label class="lbl">Model</label>
+        <select id="engModel"></select>
+        <div class="row"><button class="btn primary" id="engSave">Przelacz silnik</button></div>
+        <div class="mut" id="engResult" style="margin-top:8px"></div>
+        <div class="mut small" style="margin-top:6px">Silniki z dopiskiem PLATNY rozliczane sa za tokeny u dostawcy i wymagaja wlasnego klucza (zakladka Modele i klucze).</div>
+      </div>
       <div class="grid">
         <div class="card"><h2>Aktywny silnik</h2><div class="kv" id="engineKv"></div></div>
         <div class="card"><h2>Ollama (lokalnie)</h2><div id="ollamaBox" class="mut">sprawdzam...</div></div>
@@ -371,6 +381,8 @@ function show(page){
   if(page === "integrations"){ loadIntegrations(); }
   if(page === "costs"){ loadCosts(); }
   if(page === "keys"){ var kv = document.getElementById('keysVerify'); if(kv && !kv.__omniBound){ kv.__omniBound = true; kv.addEventListener('click', verifyKeys); verifyKeys(); } }
+
+  if(page === "engines"){ loadEngineOptions(); var es = document.getElementById('engSave'); if(es && !es.__omniBound){ es.__omniBound = true; es.addEventListener('click', saveEngine); } }
   if(page === "voice"){ renderVoices(); }
   if(page === "sessions"){ loadSessions(); }
   if(page === "tasks"){ loadTasks(); }
@@ -591,7 +603,44 @@ function afterBotAnswer(text){
     if(el("voiceHint")){ el("voiceHint").textContent = "Odpowiedz czytana na glos"; }
   }
 }
-function verifyKeys(){
+function fillEngModels(d){
+  var sel = document.getElementById('engModel');
+  if(!sel){ return; }
+  var provSel = document.getElementById('engProvider');
+  var prov = provSel ? provSel.value : '';
+  var all = (d && d.models) || [];
+  var html = '';
+  for(var i=0;i<all.length;i++){ if(all[i].provider === prov){ html += '<option value="' + all[i].id + '">' + esc(all[i].label) + '</option>'; } }
+  sel.innerHTML = html || '<option value="">(brak modeli)</option>';
+}
+function loadEngineOptions(){
+  return api('/api/engine/options').then(function(d){
+    var sel = document.getElementById('engProvider');
+    if(!sel){ return; }
+    var provs = d.providers || [];
+    var html = '';
+    for(var i=0;i<provs.length;i++){ var p = provs[i]; html += '<option value="' + p.id + '">' + esc(p.label) + (p.hasKey ? '' : ' - brak klucza') + '</option>'; }
+    sel.innerHTML = html;
+    var cur = d.current && d.current.provider ? d.current.provider : '';
+    if(cur){ sel.value = cur; }
+    fillEngModels(d);
+    if(!sel.__omniBound){ sel.__omniBound = true; sel.addEventListener('change', function(){ fillEngModels(d); }); }
+    if(!sel.__omniData){ sel.__omniData = true; sel.__omniD = d; } else { sel.__omniD = d; }
+  }).catch(function(){});
+}
+function saveEngine(){
+  var prov = document.getElementById('engProvider');
+  var mod = document.getElementById('engModel');
+  var box = document.getElementById('engResult');
+  if(!prov || !mod){ return; }
+  if(box){ box.textContent = 'Przelaczam silnik...'; }
+  return api('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: prov.value, model: mod.value, modelPro: mod.value }) }).then(function(r){
+    var cfg = (r && r.config) ? r.config : {};
+    var b = document.getElementById('engResult');
+    if(b){ b.innerHTML = 'Aktywny silnik: <b>' + esc(cfg.provider || '?') + '</b> / ' + esc(cfg.model || '?') + (cfg.provider && cfg.provider !== prov.value ? ' <i>(dostawca bez klucza - zostalem lokalnie)</i>' : ''); }
+    loadCosts();
+  }).catch(function(e){ var b2 = document.getElementById('engResult'); if(b2){ b2.textContent = 'Blad: ' + e.message; } });
+}function verifyKeys(){
   var box = document.getElementById('keysResult');
   if(box){ box.textContent = 'Sprawdzam klucze...'; }
   return api('/api/keys/verify').then(function(d){

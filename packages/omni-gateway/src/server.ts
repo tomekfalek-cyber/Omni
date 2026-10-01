@@ -177,6 +177,14 @@ export class OmniGateway {
       res.type('html').send(WEB_UI_HTML);
     });
 
+    this.app.get('/api/engine/options', (_req, res) => {
+      const cfg = this.config.get();
+      res.json({
+        current: { provider: cfg.provider, model: cfg.model },
+        providers: PROVIDERS.map((p) => ({ id: p.id, label: p.label, free: p.free, hasKey: p.keyEnv ? this.config.hasKeyFor(p.id) : true })),
+        models: MODEL_PRESETS.map((m) => ({ provider: m.provider, id: m.id, label: m.label, note: m.note || '' })),
+      });
+    });
     this.app.get('/api/keys/verify', async (_req, res) => {
       const scheme = String.fromCharCode(66, 101, 97, 114, 101, 114, 32);
       const targets = [

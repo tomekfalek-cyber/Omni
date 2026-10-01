@@ -96,6 +96,46 @@ export class SwarmManager {
         return hits.map((h: any) => '- [' + h.role + '] ' + String(h.content).slice(0, 300)).join(String.fromCharCode(10));
       },
     });
+    this.tools.register({
+      definition: {
+        name: 'skill_save',
+        description: 'Zapisuje procedure (skill) do biblioteki bota: nazwa, kiedy uzywac, kroki.',
+        parameters: { name: 'string', when: 'string', steps: 'string' },
+        requiresApproval: false,
+        timeoutMs: 5000,
+        maxOutputBytes: 0,
+      },
+      execute: async (args: any) => {
+        const nm = String((args && args.name) || '').trim();
+        const wh = String((args && args.when) || '').trim();
+        const st = String((args && args.steps) || '').trim();
+        if (!nm || !st) { throw new Error('Podaj nazwe i kroki skilla.'); }
+        this.saveSkillFile(nm, wh, st);
+        return 'Zapisano skill: ' + nm;
+      },
+    });
+    this.tools.register({
+      definition: {
+        name: 'skill_list',
+        description: 'Lista procedur (skilli), ktore bot zna.',
+        parameters: {},
+        requiresApproval: false,
+        timeoutMs: 5000,
+        maxOutputBytes: 6000,
+      },
+      execute: async () => this.listSkills(),
+    });
+    this.tools.register({
+      definition: {
+        name: 'skill_get',
+        description: 'Odczytuje pelna procedure (skill) po nazwie.',
+        parameters: { name: 'string' },
+        requiresApproval: false,
+        timeoutMs: 5000,
+        maxOutputBytes: 12000,
+      },
+      execute: async (args: any) => this.readSkill(String((args && args.name) || '').trim()),
+    });
   }
 
   private toolSchemas(): any[] {
@@ -266,6 +306,44 @@ export class SwarmManager {
     }
   }
   /** Czyta nauczone zasady i profil uzytkownika - to jest pamiec dlugoterminowa bota. */
+  /** Biblioteka procedur bota (skille). */
+  private skillPath(name: string): string {
+    const slug = String(name || '').toLowerCase().replace(new RegExp('[^a-z0-9]+', 'g'), '-').replace(new RegExp('^-+|-+$', 'g'), '').slice(0, 60) || 'skill';
+    return path.join(os.homedir(), '.omni', 'skills', slug + '.md');
+  }
+
+  private saveSkillFile(name: string, when: string, steps: string): void {
+    const nl = String.fromCharCode(10);
+    const dir = path.join(os.homedir(), '.omni', 'skills');
+    fs.mkdirSync(dir, { recursive: true });
+    const body = '# ' + name + nl + 'KIEDY: ' + (when || 'gdy zadanie pasuje') + nl + nl + steps + nl;
+    fs.writeFileSync(this.skillPath(name), body, 'utf8');
+  }
+
+  private listSkills(): string {
+    const nl = String.fromCharCode(10);
+    try {
+      const dir = path.join(os.homedir(), '.omni', 'skills');
+      if (!fs.existsSync(dir)) { return 'Brak zapisanych skilli.'; }
+      const files = fs.readdirSync(dir).filter((f: string) => f.slice(-3) === '.md');
+      if (!files.length) { return 'Brak zapisanych skilli.'; }
+      return files.map((f: string) => {
+        const raw = fs.readFileSync(path.join(dir, f), 'utf8');
+        const lines = raw.split(nl);
+        const title = (lines[0] || f).replace(new RegExp('^#+ ', 'g'), '');
+        const whenLine = lines.filter((l: string) => l.indexOf('KIEDY:') === 0)[0] || '';
+        return '- ' + title + ' (' + whenLine.replace('KIEDY: ', '') + ')';
+      }).join(nl);
+    } catch (error) { return 'Blad odczytu skilli.'; }
+  }
+
+  private readSkill(name: string): string {
+    try {
+      const file = this.skillPath(name);
+      if (!fs.existsSync(file)) { return 'Nie znam skilla o nazwie: ' + name; }
+      return fs.readFileSync(file, 'utf8').slice(0, 6000);
+    } catch (error) { return 'Blad odczytu skilla.'; }
+  }
   private readKnowledge(): string {
     const nl = String.fromCharCode(10);
     try {
@@ -280,6 +358,11 @@ export class SwarmManager {
       if (fs.existsSync(profPath)) {
         const prof = fs.readFileSync(profPath, 'utf8').slice(-1500);
         if (prof.trim().length > 10) { parts.push('O UZYTKOWNIKU (pamietaj):' + nl + prof); }
+      const sdir = path.join(os.homedir(), '.omni', 'skills');
+      if (fs.existsSync(sdir)) {
+        const idx = this.listSkills();
+        if (idx && idx.indexOf('Brak zapisanych') === -1) { parts.push('TWOJE SKILLE (procedury - uzyj skill_get, gdy zadanie pasuje):' + nl + idx); }
+      }
       }
       return parts.join(nl);
     } catch (error) { return ''; }
