@@ -292,6 +292,17 @@ export class OmniGateway {
       res.type('html').send(WEB_UI_HTML);
     });
 
+    this.app.get('/api/engines/models', async (_req, res) => {
+      try {
+        const key = this.config.secrets.getSecret('GROQ_API_KEY') || '';
+        if (key.length < 10) { res.status(400).json({ error: 'Brak klucza Groq.' }); return; }
+        const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: (String.fromCharCode(66,101,97,114,101,114,32).concat(key)) } });
+        const data: any = await r.json().catch(() => ({}));
+        const ids = (data && data.data ? data.data : []).map((m: any) => String(m.id));
+        const vis = ids.filter((x: string) => (x.indexOf('vision') !== -1) || (x.indexOf('llama-4') !== -1) || (x.indexOf('vl') !== -1));
+        res.json({ total: ids.length, vision: vis, all: ids.slice(0, 40) });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
     this.app.get('/api/engine/options', (_req, res) => {
       const cfg = this.config.get();
       res.json({
@@ -579,6 +590,43 @@ export class OmniGateway {
       }
     });
 
+    this.app.post('/api/vision/ask', async (req, res) => {
+      try {
+        const body = req.body || {};
+        const image = String(body.image || '');
+        const question = String(body.question || '').trim();
+        if (image.indexOf('data:image/') !== 0) { res.status(400).json({ error: 'Brak obrazka.' }); return; }
+        let key = this.config.secrets.getSecret('GEMINI_API_KEY') || '';
+        let endpoint = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+        let candidates = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+        if (key.length < 10) { key = this.config.secrets.getSecret('OPENROUTER_API_KEY') || ''; endpoint = 'https://openrouter.ai/api/v1/chat/completions'; candidates = ['qwen/qwen2.5-vl-72b-instruct', 'openai/gpt-4o-mini']; }
+        if (key.length < 10) { key = this.config.secrets.getSecret('GROQ_API_KEY') || ''; endpoint = 'https://api.groq.com/openai/v1/chat/completions'; candidates = ['meta-llama/llama-4-scout-17b-16e-instruct']; }
+        if (key.length < 10) { res.status(400).json({ error: 'Wzrok potrzebuje klucza Google AI Studio (Gemini) - jest darmowy: aistudio.google.com/apikey . Wpisz go w zakladce Modele i klucze.' }); return; }
+
+        let answer = '';
+        let lastErr = '';
+        for (const vm of candidates) {
+          const payload = {
+            model: vm,
+            messages: [{ role: 'user', content: [
+              { type: 'text', text: question || 'Opisz dokladnie, co widzisz na tym obrazku. Odpowiedz po polsku.' },
+              { type: 'image_url', image_url: { url: image } },
+            ] }],
+            max_tokens: 900,
+          };
+          const r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: (String.fromCharCode(66,101,97,114,101,114,32).concat(key)) }, body: JSON.stringify(payload) });
+          const data: any = await r.json().catch(() => ({}));
+          if (r.ok && data && data.choices && data.choices[0] && data.choices[0].message) {
+            answer = String(data.choices[0].message.content || '').trim();
+            if (answer) { console.log('[Wzrok] Model: ' + vm); break; }
+          } else {
+            lastErr = lastErr + ' [' + vm + ': ' + String((data && data.error && data.error.message) || ('HTTP ' + r.status)) + ']';
+          }
+        }
+        if (!answer) { res.status(500).json({ error: 'Nie udalo sie przeanalizowac obrazka: ' + lastErr }); return; }
+        res.json({ ok: true, text: answer });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
     this.app.post('/api/voice/transcribe', express.raw({ type: ['audio/*', 'application/octet-stream'], limit: '25mb' }), async (req, res) => {
       try {
         const key = this.config.secrets.getSecret('GROQ_API_KEY') || '';
@@ -590,10 +638,16 @@ export class OmniGateway {
         fd.append('file', new Blob([bytes], { type: 'audio/webm' }), 'nagranie.webm');
         fd.append('model', 'whisper-large-v3');
         fd.append('language', 'pl');
+        fd.append('prompt', 'Omni. Rozmowa z asystentem o nazwie Omni. Nazwy wlasne: Omni, Omni, oprogramowanie Omni.');
         const r = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: ('Bearer '.concat(key)) }, body: fd });
         const data: any = await r.json().catch(() => ({}));
         if (!r.ok) { res.status(500).json({ error: 'Rozpoznawanie nieudane (HTTP ' + r.status + ')' }); return; }
-        res.json({ ok: true, text: String(data.text || '').trim() });
+        let out = String(data.text || '').trim();
+        try {
+          const nm = String(this.config.get().botName || 'Omni');
+          out = out.replace(new RegExp('\\b(o+m+n+i|o+m+i|anni|annie|anny|omny)\\b', 'gi'), nm);
+        } catch (e) { }
+        res.json({ ok: true, text: out });
       } catch (error: any) { res.status(500).json({ error: error.message }); }
     });
     this.app.post('/api/voice/upload', async (req, res) => {
