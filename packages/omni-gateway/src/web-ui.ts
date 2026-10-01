@@ -140,6 +140,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
           <textarea id="chatInput" rows="2" placeholder="Napisz wiadomosc i nacisnij Enter (Shift+Enter = nowa linia)"></textarea>
           <button class="btn" id="micBtn" title="Rozmowa glosowa"><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'><rect x='9' y='2' width='6' height='11' rx='3'></rect><path d='M5 11a7 7 0 0 0 14 0'></path><line x1='12' y1='18' x2='12' y2='23'></line></svg></button>
           <button class="btn" id="micRecBtn" title="Nagraj i rozpoznaj mowe (Whisper, dziala wszędzie)" onclick="toggleRec()">🎙️</button>
+          <button class="btn" id="docBtn" title="Wgraj dokument PDF/Word i popros o streszczenie" onclick="docUpload()">📄</button>
           <button class="btn primary" id="sendBtn">Wyslij</button>
         </div>
         <div class="chat-hint" id="voiceHint">Rozmowa glosowa: kliknij MOW i mow</div>
@@ -577,6 +578,35 @@ function toggleRec(){
     rec.start();
     toast('Nagrywam... kliknij ponownie, zeby rozpoznać', 'ok');
   }).catch(function(e){ toast('Mikrofon: ' + e.message, 'err'); });
+}
+function docUpload(){
+  var inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.pdf,.docx,.txt,.md,.csv,.json,.log';
+  inp.onchange = function(){
+    var f = inp.files && inp.files[0];
+    if(!f){ return; }
+    var box = document.getElementById('chatInput');
+    toast('Czytam plik: ' + f.name + '...', 'ok');
+    var reader = new FileReader();
+    reader.onload = function(){
+      fetch('/api/docs/extract', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: reader.result })
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if(!d || !d.ok){ toast('Blad: ' + ((d && d.error) || 'nieznany'), 'err'); return; }
+          var txt = String(d.text || '').slice(0, 6000);
+          toast('Wyciagnalem ' + d.chars + ' znakow (' + d.kind + ')', 'ok');
+          if(box){
+            box.value = 'Streszcz i omow ten dokument (' + f.name + '):' + String.fromCharCode(10) + String.fromCharCode(10) + txt;
+            box.focus();
+          }
+        })
+        .catch(function(e){ toast('Blad: ' + e.message, 'err'); });
+    };
+    reader.onerror = function(){ toast('Nie udalo sie wczytac pliku', 'err'); };
+    reader.readAsArrayBuffer(f);
+  };
+  inp.click();
 }
 function sendMessage(){
   var box = el("chatInput");

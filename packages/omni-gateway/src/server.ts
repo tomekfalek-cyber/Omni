@@ -1,4 +1,5 @@
 import express from 'express';
+import { extractAny } from './doc-extract.js';
 import { execFile } from 'child_process';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -652,6 +653,16 @@ export class OmniGateway {
       }
     });
 
+    this.app.post('/api/docs/extract', express.raw({ type: ['application/octet-stream', 'application/pdf', 'text/plain'], limit: '30mb' }), async (req, res) => {
+      try {
+        const buf = req.body as Buffer;
+        if (!buf || !buf.length) { res.status(400).json({ error: 'Brak pliku.' }); return; }
+        const out = extractAny(buf);
+        const text = String(out.text || '').slice(0, 200000);
+        if (!text) { res.status(400).json({ error: 'Nie udalo sie wyciagnac tekstu - moze to skan albo obraz?' }); return; }
+        res.json({ ok: true, kind: out.kind, chars: text.length, text: text });
+      } catch (error: any) { res.status(500).json({ error: error.message }); }
+    });
     this.app.post('/api/vision/ask', async (req, res) => {
       try {
         const body = req.body || {};
