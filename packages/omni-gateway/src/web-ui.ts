@@ -158,6 +158,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
           <label class="opt"><input type="radio" name="provider" value="gemini" /><div><b>Google AI Studio - Gemini</b><span>Darmowy limit Google. Klucz: aistudio.google.com/apikey</span></div></label>
           <label class="opt"><input type="radio" name="provider" value="groq" /><div><b>Groq - bardzo szybki</b><span>Llama 70B blyskawicznie. Klucz: console.groq.com/keys</span></div></label>
           <label class="opt"><input type="radio" name="provider" value="ollama" /><div><b>Lokalnie (Ollama)</b><span>Bez klucza, offline, wolniejszy i slabszy.</span></div></label>
+          <label class="opt"><input type="radio" name="provider" value="deepseek" /><div><b>DeepSeek - platny (za Twoja zgoda)</b><span>Twoj wlasny klucz z platform.deepseek.com - rozliczany za tokeny.</span></div></label>
         </div>
         <div class="card">
           <h2>2. Klucz API</h2>
