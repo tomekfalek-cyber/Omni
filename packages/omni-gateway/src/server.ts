@@ -125,7 +125,7 @@ export class OmniGateway {
       const cfg = this.config.get();
       if (!cfg.accessCode) { next(); return; }
       const p = req.path || '/';
-      if (p === '/api/login' || p === '/api/version' || p === '/health' || p === '/manifest.webmanifest' || p === '/sw.js' || p.indexOf('/icon-') === 0) { next(); return; }
+      if (p === '/api/login' || p === '/api/version' || p === '/health' || p === '/manifest.webmanifest' || p === '/sw.js' || p === '/offline' || p.indexOf('/icon-') === 0) { next(); return; }
       const cookie = String(req.headers.cookie || '');
       if (cookie.indexOf('omni_token=' + this.tokenFor(cfg.accessCode)) !== -1) { next(); return; }
       if (p.indexOf('/api/') === 0) { res.status(401).json({ error: 'Wymagany kod dostepu' }); return; }
@@ -236,12 +236,13 @@ export class OmniGateway {
       });
     }
 
+            this.app.get('/offline', (_req, res) => {
+      res.type('html').sendFile(path.join(this.assetsDir(), 'offline.html'));
+    });
+
     this.app.get('/sw.js', (_req, res) => {
-      res.type('application/javascript').send(
-        'self.addEventListener("install", () => self.skipWaiting());' +
-        'self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));' +
-        'self.addEventListener("fetch", () => {});'
-      );
+      res.setHeader('Cache-Control', 'no-cache');
+      res.type('application/javascript').sendFile(path.join(this.assetsDir(), 'sw.js'));
     });
   }
 

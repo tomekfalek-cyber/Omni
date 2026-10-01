@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang='pl'>
+<head>
+<meta charset='utf-8' />
+<meta name='viewport' content='width=device-width, initial-scale=1' />
+<title>Omni - wylaczony</title>
+<style>
+body{margin:0;background:#0b0f14;color:#e6edf6;font-family:system-ui,-apple-system,Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;padding:24px}
+.box{background:#111823;border:1px solid #1e2a3a;border-radius:16px;padding:26px;max-width:460px;text-align:center}
+h1{font-size:21px;margin:0 0 12px}
+p{color:#8ba0b8;line-height:1.6;margin:0 0 12px}
+.ok{color:#22c55e}
+</style>
+</head>
+<body>
+<div class='box'>
+<h1>Omni jest teraz wylaczony</h1>
+<p>Twoj asystent dziala na Twoim komputerze. Zeby z nim porozmawiac, <b>wlacz komputer</b>.</p>
+<p>Ta strona odswiezy sie sama za 15 sekund.</p>
+<p class='ok' id='s'>Sprawdzam...</p>
+</div>
+<script>
+setTimeout(function(){ location.href = '/'; }, 15000);
+</script>
+</body>
+</html>
