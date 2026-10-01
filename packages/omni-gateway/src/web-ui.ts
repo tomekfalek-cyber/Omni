@@ -402,6 +402,7 @@ function show(page){
 
   if(page === "status"){ loadNotifications(); var nc = document.getElementById('notifCheck'); if(nc && !nc.__omniBound){ nc.__omniBound = true; nc.addEventListener('click', checkNow); } var nr = document.getElementById('notifReadAll'); if(nr && !nr.__omniBound){ nr.__omniBound = true; nr.addEventListener('click', markAllRead); } }
   if(page === "keys"){ var kv = document.getElementById('keysVerify'); if(kv && !kv.__omniBound){ kv.__omniBound = true; kv.addEventListener('click', verifyKeys); verifyKeys(); } }
+  if(page === "apikeys"){ loadApiKeys(); var av = document.getElementById('akVerify'); if(av && !av.__omniBound){ av.__omniBound = true; av.addEventListener('click', akVerify); } }
 
   if(page === "engines"){ loadEngineOptions(); var es = document.getElementById('engSave'); if(es && !es.__omniBound){ es.__omniBound = true; es.addEventListener('click', saveEngine); } }
   if(page === "voice"){ renderVoices(); }
