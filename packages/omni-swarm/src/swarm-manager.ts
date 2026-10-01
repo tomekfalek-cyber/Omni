@@ -186,6 +186,10 @@ export class SwarmManager {
       } catch (error: any) {
         console.log('[Swarm] Proba z tool_choice=' + String(toolChoice) + ' nieudana (' + error.message + ')');
         try {
+          if (toolChoice && toolChoice !== 'auto') {
+            const nudge = messages.concat([{ role: 'user', content: 'WYWOŁAJ NARZĘDZIE TERAZ. Nie odpowiadaj z pamięci - użyj odpowiedniego narzędzia i podaj wynik z jego działania.' }]);
+            return await provider.getCompletionWithTools(nudge, tools, 'auto');
+          }
           return await provider.getCompletionWithTools(messages, tools);
         } catch (error2: any) {
           console.log('[Swarm] Natywne narzedzia niedostepne (' + error2.message + '), bezpieczny tryb tekstowy.');
