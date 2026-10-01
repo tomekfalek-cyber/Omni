@@ -83,6 +83,8 @@ export class SwarmManager {
       '9. Korzystaj z pamieci: najpierw sprawdz, co juz wiesz, potem zapisuj trwale ustalenia.',
       '10. Koncz zadanie: albo wynik z dowodem, albo konkretna przeszkoda. Nie koncz na samym planie.',
       '11. Formatuj czytelnie (naglowki, listy). Bez lania wody.',
+      '12. Serwery i dlugo dzialajace procesy uruchamiaj ODLACZONE: setsid nohup node /sciezka/serwer.js > /home/openclaw/serwer.log 2>&1 &  - inaczej zginą razem z powloka narzedzia.',
+      '13. Nie mow, ze cos dziala, dopoki tego nie sprawdziles komenda (np. curl -sS -m 5 http://127.0.0.1:PORT/). Nieudane sprawdzenie - powiedz o tym wprost.',
     ].join(nl);
   }
   /** Sklada polskie znaki do ASCII (do dopasowywania slow kluczowych). */
