@@ -108,6 +108,7 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       <div class="nav-group">Rozmowa</div>
       <button class="nav-item active" data-page="chat"><span class="ico">C</span>Czat</button>
       <div class="nav-group">Konfiguracja</div>
+      <button class="nav-item" data-page="stats"><span class="ico">Y</span>Statystyki</button>
       <button class="nav-item" data-page="memory"><span class="ico">P</span>Pamięć i skille</button>
       <button class="nav-item" data-page="apikeys"><span class="ico">A</span>Klucze API</button>
       <button class="nav-item" data-page="keys"><span class="ico">K</span>Modele i klucze API</button>
@@ -335,6 +336,11 @@ input:focus,select:focus,textarea:focus{border-color:#3b82f6}
       </div>
     </section>
 
+    <section class="page hidden" id="page-stats">
+      <div class="grid" id="statsTiles">ładuję...</div>
+      <div class="card"><h2>Aktywność (ostatnie 7 dni)</h2><div id="statsChart"></div></div>
+      <div class="row"><button class="btn" onclick="loadStats()">Odśwież</button></div>
+    </section>
     <section class="page hidden" id="page-memory">
       <div class="card">
         <h2>Pamięć długoterminowa (zasady)</h2>
@@ -417,6 +423,7 @@ function show(page){
   if(page === "keys"){ var kv = document.getElementById('keysVerify'); if(kv && !kv.__omniBound){ kv.__omniBound = true; kv.addEventListener('click', verifyKeys); verifyKeys(); } }
   if(page === "apikeys"){ loadApiKeys(); var av = document.getElementById('akVerify'); if(av && !av.__omniBound){ av.__omniBound = true; av.addEventListener('click', akVerify); } }
   if(page === "memory"){ loadMemory(); }
+  if(page === "stats"){ loadStats(); }
 
   if(page === "engines"){ loadEngineOptions(); var es = document.getElementById('engSave'); if(es && !es.__omniBound){ es.__omniBound = true; es.addEventListener('click', saveEngine); } }
   if(page === "voice"){ renderVoices(); }
@@ -778,6 +785,42 @@ function markAllRead(){
   h += '<div class="mut" id="' + id + '_st"></div>';
   h += '</div>';
   return h;
+}
+function statTile(label, value, hint){
+  return '<div class="card"><h2>' + esc(label) + '</h2><div style="font-size:26px;font-weight:700">' + esc(String(value)) + '</div><div class="mut">' + esc(hint || '') + '</div></div>';
+}
+function loadStats(){
+  return api('/api/stats').then(function(d){
+    var box = document.getElementById('statsTiles');
+    if(box){
+      var html = '';
+      html += statTile('Wiadomosci', d.messages, 'w calej historii');
+      html += statTile('Powiadomienia', d.notifications, 'z pracy w tle');
+      html += statTile('Skille', d.skills, 'procedury bota');
+      html += statTile('Zasady', d.rulesChars + ' znakow', 'pamiec dlugoterminowa');
+      html += statTile('Automatyzacje', d.automations, 'zaplanowane zadania');
+      html += statTile('Klucze API', d.keysSet + ' / ' + d.keysAll, 'skonfigurowane');
+      html += statTile('Silnik', d.engine, d.model);
+      html += statTile('Czas dzialania', d.uptimeMin + ' min', d.memMb + ' MB pamieci');
+      box.innerHTML = html;
+    }
+    var ch = document.getElementById('statsChart');
+    if(ch){
+      var days = (d && d.days) || [];
+      var max = 1;
+      for(var i=0;i<days.length;i++){ if(days[i].count > max){ max = days[i].count; } }
+      var h = '';
+      for(var j=0;j<days.length;j++){
+        var pct = Math.round((days[j].count / max) * 100);
+        h += '<div style="display:flex;align-items:center;gap:8px;margin:4px 0">';
+        h += '<div class="mut" style="width:56px">' + esc(days[j].day) + '</div>';
+        h += '<div style="flex:1;background:rgba(120,120,120,0.2);height:14px;border-radius:7px"><div style="width:' + pct + '%;background:#3b82f6;height:14px;border-radius:7px"></div></div>';
+        h += '<div style="width:34px;text-align:right">' + days[j].count + '</div>';
+        h += '</div>';
+      }
+      ch.innerHTML = h || 'Brak danych.';
+    }
+  }).catch(function(){});
 }
 function loadMemory(){
   return api('/api/memory/overview').then(function(d){

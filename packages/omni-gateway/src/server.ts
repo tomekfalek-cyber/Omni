@@ -325,6 +325,64 @@ export class OmniGateway {
         models: MODEL_PRESETS.map((m) => ({ provider: m.provider, id: m.id, label: m.label, note: m.note || '' })),
       });
     });
+    this.app.get('/api/stats', (_req, res) => {
+      const home = process.env.HOME || '/home/openclaw';
+      const readJson = (p: string): any => { try { return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null; } catch (e) { return null; } };
+      let messages = 0; const perDay: any = {};
+      const chat = readJson(path.join(home, '.omni', 'chat.json'));
+      if (chat && typeof chat === 'object') {
+        for (const k of Object.keys(chat)) {
+          const m = chat[k]; if (!m || !m.ts) { continue; }
+          messages++;
+          const d = new Date(Number(m.ts));
+          const key = String(d.getFullYear()) + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+          perDay[key] = (perDay[key] || 0) + 1;
+        }
+      }
+      const days: any[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400000);
+        const key = String(d.getFullYear()) + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        days.push({ day: key.slice(5), count: perDay[key] || 0 });
+      }
+      const notifs = readJson(path.join(home, '.omni', 'notifications.json'));
+      const autos = readJson(path.join(home, '.omni', 'automations.json'));
+      let skills = 0;
+      try { const sd = path.join(home, '.omni', 'skills'); if (fs.existsSync(sd)) { skills = fs.readdirSync(sd).filter((f) => f.slice(-3) === '.md').length; } } catch (e) { }
+      let rules = 0;
+      try { const rf = path.join(home, '.omni', 'memory', 'skills.md'); if (fs.existsSync(rf)) { rules = fs.readFileSync(rf, 'utf8').length; } } catch (e) { }
+      let keysSet = 0; let keysAll = 0;
+      let ngrokT2 = ''; let ngrokD2 = '';
+      try { const y2 = path.join(home, '.config', 'ngrok', 'ngrok.yml'); if (fs.existsSync(y2)) { const raw2 = fs.readFileSync(y2, 'utf8'); const m2 = raw2.match(/authtoken:\s*(\S+)/); if (m2) { ngrokT2 = String(m2[1]); } } } catch (e) { }
+      try { const d2 = path.join(home, '.omni', 'ngrok-domain.txt'); if (fs.existsSync(d2)) { ngrokD2 = String(fs.readFileSync(d2, 'utf8')).trim(); } } catch (e) { }
+      try {
+        keysAll = KEY_REGISTRY.length;
+        for (const k of KEY_REGISTRY) {
+          let ok = false;
+          if (k.name === 'NGROK_AUTHTOKEN') { ok = ngrokT2.length > 10; }
+          else if (k.name === 'NGROK_DOMAIN') { ok = ngrokD2.length > 3; }
+          else { try { const v = this.config.secrets.getSecret(k.name) || ''; ok = v.length > 0; } catch (e) { } }
+          if (ok) { keysSet++; }
+        }
+      } catch (e) { }
+      const mem = process.memoryUsage();
+      const up = process.uptime();
+      res.json({
+        messages: messages,
+        days: days,
+        notifications: Array.isArray(notifs) ? notifs.length : 0,
+        automations: Array.isArray(autos) ? autos.length : Object.keys(autos || {}).length,
+        skills: skills,
+        rulesChars: rules,
+        keysSet: keysSet,
+        keysAll: keysAll,
+        uptimeMin: Math.round(up / 60),
+        memMb: Math.round(mem.rss / 1048576),
+        engine: this.config.get().provider,
+        model: this.config.get().model,
+        version: VERSION,
+      });
+    });
     this.app.get('/api/memory/overview', (_req, res) => {
       const home = process.env.HOME || '/home/openclaw';
       let rules = '';
