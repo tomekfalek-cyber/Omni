@@ -3,6 +3,7 @@ import { ToolDefinition } from 'omni-core/types.js';
 import { z } from 'zod';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import * as os from 'os';
 
 export class ShellSandbox {
   private docker: Docker;
@@ -49,6 +50,14 @@ export class ShellSandbox {
         parameters: { command: 'string' },
         requiresApproval: true,
         timeoutMs: 30000,
+        maxOutputBytes: this.MAX_OUTPUT_BYTES
+      },
+      {
+        name: 'run_code',
+        description: 'Uruchamia krotki kod (Python albo Node) w izolowanym katalogu tymczasowym i zwraca wynik. Uzyj do obliczen i analizy danych, ktorych nie policzysz w pamieci. Podaj language: python lub node, oraz code.',
+        parameters: { language: 'string', code: 'string' },
+        requiresApproval: false,
+        timeoutMs: 25000,
         maxOutputBytes: this.MAX_OUTPUT_BYTES
       }
     ];
@@ -146,6 +155,29 @@ export class ShellSandbox {
         // Ignoruj, jeśli kontener już nie istnieje
       }
     }
+  }
+
+  /** Uruchamia krotki kod (Python/Node) w izolowanym katalogu tymczasowym. */
+  public async runCode(args: { language?: string; code: string }, _cwd: string): Promise<string> {
+    const schema = z.object({ language: z.string().optional(), code: z.string().min(1).max(20000) });
+    const v = schema.parse(args);
+    const lang = String(v.language || 'python').toLowerCase();
+    const isNode = lang === 'node' || lang === 'javascript' || lang === 'js';
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'omni-code-'));
+    const file = path.join(dir, isNode ? 'skrypt.mjs' : 'skrypt.py');
+    await fs.writeFile(file, v.code, 'utf8');
+    const { exec: nodeExec } = await import('child_process');
+    return await new Promise<string>((resolve, reject) => {
+      const nodeDir = path.dirname(process.execPath);
+      const basePath = process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+      const env = Object.assign({}, process.env, { PATH: basePath + ':' + nodeDir });
+      const cmd = isNode ? ('"' + process.execPath + '" "' + file + '"') : ('python3 "' + file + '"');
+      nodeExec(cmd, { cwd: dir, timeout: 20000, maxBuffer: 1024 * 1024, env: env }, (error, stdout, stderr) => {
+        const out = String(stdout || '') + String(stderr || '');
+        if (error && !out) { reject(new Error('Kod nie wykonal sie: ' + error.message)); return; }
+        resolve(out.slice(0, this.MAX_OUTPUT_BYTES));
+      });
+    });
   }
 
   private validateCommand(cmd: string, allowNetwork: boolean = false): void {
