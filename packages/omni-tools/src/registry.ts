@@ -40,6 +40,65 @@ export class ToolRegistry {
     this.registerTool(shellSandbox.getDefinitions()[0], (args, cwd) => shellSandbox.execute(args, cwd));
     this.registerTool(shellSandbox.getDefinitions()[1], (args: any, cwd: string) => shellSandbox.runCode(args, cwd));
     this.registerTool(shellSandbox.getDefinitions()[2], (args: any, cwd: string) => shellSandbox.runBackground(args, cwd));
+    // Codebase awareness: mapa projektu + szukanie symbolu jednym narzedziem.
+    this.registerTool({
+      name: 'code_map',
+      description: 'Mapa projektu do zrozumienia kodu przed zmiana: struktura katalogow, pliki kluczowe, statystyki i szukanie symbolu/tekstu. Podaj path (katalog) i opcjonalnie query.',
+      parameters: { path: 'string', query: 'string' },
+      requiresApproval: false,
+      timeoutMs: 20000,
+      maxOutputBytes: 40000,
+    }, async (args: any, cwd: string) => {
+      const base = path.resolve(cwd, String((args && args.path) || '.'));
+      const skip = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage', '__pycache__', '.cache', '.venv', 'venv']);
+      const extCount: any = {};
+      const dirs: string[] = [];
+      let files = 0;
+      const walk = (dir: string, depth: number) => {
+        if (depth > 3) { return; }
+        let entries: any[] = [];
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }) as any[]; } catch (e) { return; }
+        for (const e of entries) {
+          if (skip.has(e.name)) { continue; }
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) { dirs.push(full.replace(base, '.')); walk(full, depth + 1); }
+          else { files++; const ext = path.extname(e.name) || '(brak)'; extCount[ext] = (extCount[ext] || 0) + 1; }
+        }
+      };
+      walk(base, 0);
+      const out: string[] = [];
+      out.push('KATALOG: ' + base);
+      out.push('PLIKI: ' + files + ' | katalogi: ' + dirs.length);
+      out.push('TYPY: ' + Object.keys(extCount).sort((a, b) => extCount[b] - extCount[a]).slice(0, 12).map((k) => k + '=' + extCount[k]).join(', '));
+      out.push('STRUKTURA: ' + dirs.slice(0, 60).join(' '));
+      const keyFiles = ['package.json', 'tsconfig.json', 'README.md', 'requirements.txt', 'pyproject.toml', 'go.mod', 'Cargo.toml', 'Makefile', 'docker-compose.yml'];
+      for (const kf of keyFiles) { const p = path.join(base, kf); if (fs.existsSync(p)) { out.push('--- ' + kf + ' ---'); try { out.push(fs.readFileSync(p, 'utf8').slice(0, 800)); } catch (e) { } } }
+      const q = String((args && args.query) || '').trim();
+      if (q) {
+        const hits: string[] = [];
+        const grep = (dir: string, depth: number) => {
+          if (depth > 4 || hits.length >= 30) { return; }
+          let es: any[] = [];
+          try { es = fs.readdirSync(dir, { withFileTypes: true }) as any[]; } catch (e) { return; }
+          for (const e of es) {
+            if (skip.has(e.name) || hits.length >= 30) { continue; }
+            const full = path.join(dir, e.name);
+            if (e.isDirectory()) { grep(full, depth + 1); continue; }
+            try {
+              const txt = fs.readFileSync(full, 'utf8');
+              if (txt.indexOf(q) !== -1) {
+                const lines = txt.split(String.fromCharCode(10));
+                for (let i = 0; i < lines.length && hits.length < 30; i++) { if (lines[i].indexOf(q) !== -1) { hits.push(full.replace(base, '.') + ':' + (i + 1) + ': ' + lines[i].trim().slice(0, 140)); } }
+              }
+            } catch (e) { }
+          }
+        };
+        grep(base, 0);
+        out.push('--- SZUKANO: ' + q + ' (trafien: ' + hits.length + ') ---');
+        out.push(hits.join(String.fromCharCode(10)) || 'brak trafien');
+      }
+      return out.join(String.fromCharCode(10)).slice(0, 39000);
+    });
     // Przypomnienia: bot naprawde ustawia je z czatu (ten sam plik, ktory czyta harmonogram)
     const remFile = () => path.join(process.env.HOME || '/home/openclaw', '.omni', 'reminders.json');
     const readRem = () => { try { const f = remFile(); return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : []; } catch (e) { return []; } };
