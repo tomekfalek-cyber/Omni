@@ -403,6 +403,21 @@ export class SwarmManager {
     } catch (error) { return ''; }
   }
 
+  /** Najtrafniejsze wspomnienia (FTS5 BM25) pod konkretne pytanie. */
+  private relevantMemory(query: string, limit: number = 3): string {
+    try {
+      const hits: any[] = this.memory.search(query, limit) as any[];
+      if (!hits || !hits.length) { return ''; }
+      const lines: string[] = [];
+      for (const hit of hits) {
+        const text = String((hit && hit.content) || '').trim();
+        if (!text) { continue; }
+        lines.push('- ' + text.slice(0, 300));
+      }
+      return lines.join(String.fromCharCode(10));
+    } catch (error) { return ''; }
+  }
+
   private readKnowledge(): string {
     const nl = String.fromCharCode(10);
     try {
@@ -464,6 +479,7 @@ export class SwarmManager {
     };
 
     const hist = this.recentHistory(sessionId, 8, 3000);
+    const rel = this.relevantMemory(String(prompt), 3);
     this.memory.appendTranscript(sessionId, 'system', `Task started: ${prompt}`);
     this.memory.appendTranscript(sessionId, 'user', String(prompt).slice(0, 1200));
 
@@ -492,7 +508,7 @@ export class SwarmManager {
       for (const st of needToolStems) { if (folded.indexOf(st) !== -1) { isAction = true; break; } }
       const messages: any[] = [
         { role: 'system', content: (this.behaviorRules() + String.fromCharCode(10) + this.capabilities(cwd) + String.fromCharCode(10) + this.readKnowledge()) + String.fromCharCode(10) + 'WAZNE: gdy pytanie dotyczy faktow, kursow, wiadomosci, pogody, przepisow lub czegokolwiek z internetu - NAJPIERW wywolaj odpowiednie narzedzie. Nie odpowiadaj na takie pytania z pamieci.' },
-        { role: 'user', content: 'Zadanie: ' + prompt + (hist ? '\n\nPOPRZEDNIE WYMIANY (kontekst rozmowy):\n' + hist : '') + '\nPlan:\n' + plan },
+        { role: 'user', content: 'Zadanie: ' + prompt + (rel ? '\n\nTRAFNA WIEDZA Z PAMIECI:\n' + rel : '') + (hist ? '\n\nPOPRZEDNIE WYMIANY (kontekst rozmowy):\n' + hist : '') + '\nPlan:\n' + plan },
       ];
 
       for (let i = 0; i < task.maxIterations; i++) {
