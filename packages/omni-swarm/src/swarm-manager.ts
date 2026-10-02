@@ -889,7 +889,7 @@ export class SwarmManager {
         const runningWords = ['dziala w tle', 'dziala niezaleznie', 'nasluchuje', 'dziala na porcie', 'dostepny pod', 'przetrwa', 'serwer dziala', 'uruchomiony w tle'];
         let runningClaim = false;
         for (const rw of runningWords) { if (lowerClaim.indexOf(rw) !== -1) { runningClaim = true; break; } }
-        if ((claimed && !usedTools) || runningClaim) {
+        if ((claimed || runningClaim) && !usedTools) {
           console.log('[Swarm] Twierdzenie bez sprawdzenia - wymuszam weryfikacje narzedziami.');
           this.emit({ kind: 'writing', text: 'Sprawdzam to narzedziami...' });
           const nl3 = String.fromCharCode(10);
@@ -925,10 +925,14 @@ export class SwarmManager {
         try {
           const crit = await this.executor.getCompletion([
             { role: 'system', content: ((this as any).useCoder ? 'Jestes takze Testerem: sprawdz kod pod katem bledow i uruchom test; jesli kod nie byl uruchomiony, zaznacz to wprost. ' : '') + 'Jestes SUROWYM Krytykiem faktow. Usun lub popraw KAZDE twierdzenie bez pokrycia w wynikach narzedzi. Nie dodawaj nic od siebie i nie chwal. Zwroc WYLACZNIE poprawiona odpowiedz po polsku.' },
-            { role: 'user', content: 'Zadanie: ' + prompt + String.fromCharCode(10) + String.fromCharCode(10) + 'Odpowiedz: ' + String(draftAnswer).slice(0, 3000) },
+            { role: 'user', content: 'Zadanie: ' + prompt + String.fromCharCode(10) + String.fromCharCode(10) + 'WYNIKI NARZEDZI (dowody):' + String.fromCharCode(10) + (String(executionResult || '').slice(0, 4000) || '(brak - narzedzia nie byly uzyte)') + String.fromCharCode(10) + String.fromCharCode(10) + 'Odpowiedz do sprawdzenia:' + String.fromCharCode(10) + String(draftAnswer).slice(0, 3000) },
           ]);
           const fixed = this.stripMarkers(crit);
-          if (fixed && fixed.trim().length > 5) { draftAnswer = fixed; }
+          const criticDenied = /nie moge potwierdzic|brak dowod|nie mam dostepu do wynikow|nie mam wynikow narzedzi|nie wykonano|brak pokrycia|nie moge stwierdzic/i.test(norm(fixed || ''));
+          if (fixed && fixed.trim().length > 5) {
+            if (criticDenied && usedTools && String(executionResult || '').trim().length > 20) { console.log('[Swarm] Krytyk zanegowal odpowiedz mimo dowodow - zachowuje oryginal.'); }
+            else { draftAnswer = fixed; }
+          }
         } catch (error) { }
       }
 
