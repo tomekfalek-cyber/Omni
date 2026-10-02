@@ -428,8 +428,6 @@ export class SwarmManager {
       let st: any = {};
       try { st = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch (e) { st = {}; }
       if (Date.now() - Number(st[sessionId] || 0) < 10 * 60 * 1000) { return; }
-      st[sessionId] = Date.now();
-      try { fs.writeFileSync(statePath, JSON.stringify(st)); } catch (e) { }
       const recs: any[] = this.memory.recent(sessionId, 12) as any[];
       const lines: string[] = [];
       for (const r of recs) {
@@ -447,6 +445,8 @@ export class SwarmManager {
       const a = s.indexOf('{');
       const b = s.lastIndexOf('}');
       if (a === -1 || b <= a) { return; }
+      st[sessionId] = Date.now();
+      try { fs.writeFileSync(statePath, JSON.stringify(st)); } catch (e) { }
       const obj = JSON.parse(s.slice(a, b + 1));
       const sum = String((obj && obj.streszczenie) || '').trim();
       if (sum) { this.memory.appendTranscript(sessionId, 'summary', sum.slice(0, 300)); }
