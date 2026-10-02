@@ -403,6 +403,20 @@ export class SwarmManager {
     } catch (error) { return ''; }
   }
 
+  /** Deterministyczna odpowiedz o dzisiejsza date (bez zgadywania modelu). */
+  private tryDirectDate(prompt: string): string | null {
+    const low = this.foldPl(String(prompt || '').toLowerCase());
+    const pats = ['jaka jest data', 'jaka data', 'jaka mamy date', 'dzisiejsza data', 'jaki jest dzien', 'jaki dzien', 'ktory mamy dzien', 'jaka jest dzisiaj data', 'data dzisiaj', 'dzisiaj data', 'jaka dzisiaj data'];
+    let hit = false;
+    for (const p of pats) { if (low.indexOf(p) !== -1) { hit = true; break; } }
+    if (!hit) { return null; }
+    const d = new Date();
+    const dni = ['niedziela', 'poniedzialek', 'wtorek', 'sroda', 'czwartek', 'piatek', 'sobota'];
+    const mies = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'wrzesnia', 'pazdziernika', 'listopada', 'grudnia'];
+    const iso = d.toISOString().slice(0, 10);
+    return 'Dzisiaj jest ' + dni[d.getDay()] + ', ' + String(d.getDate()) + ' ' + mies[d.getMonth()] + ' ' + String(d.getFullYear()) + ' (ISO: ' + iso + ').';
+  }
+
   /** Rozpoznaje 'ustaw przypomnienie' w kodzie (bez decyzji modelu). */
   private tryDirectReminder(prompt: string): { text: string; at?: string; inMinutes?: number } | null {
     const raw = String(prompt || '');
@@ -520,7 +534,15 @@ export class SwarmManager {
     this.memory.appendTranscript(sessionId, 'system', `Task started: ${prompt}`);
     this.memory.appendTranscript(sessionId, 'user', String(prompt).slice(0, 1200));
 
-    // Deterministyczne przypomnienia: nie czekamy na decyzje modelu.
+    // Deterministyczna data i przypomnienia: nie czekamy na decyzje modelu.
+    const directDate = this.tryDirectDate(prompt);
+    if (directDate) {
+      task.status = 'completed';
+      task.result = directDate;
+      this.memory.appendTranscript(sessionId, 'assistant', directDate);
+      task.updatedAt = Date.now();
+      return task;
+    }
     const directRem = this.tryDirectReminder(prompt);
     if (directRem) {
       try {
@@ -558,7 +580,7 @@ export class SwarmManager {
       let isAction = false;
       for (const key of actionKeys) { if (lowerPrompt.indexOf(key) !== -1) { isAction = true; break; } }
       const folded = this.foldPl(lowerPrompt);
-      const needToolStems = ['utworz', 'napisz', 'skrypt', 'kod', 'program', 'uruchom', 'commit', 'zainstaluj', 'ile plik', 'plik', 'folder', 'katalog', 'policz', 'sprawdz', 'wypisz', 'pokaz', 'lista', 'znajdz', 'cena', 'kurs', 'walut', 'pogod', 'dzisiaj', 'aktualn', 'pobierz', 'przeczytaj', 'otworz', 'rozmiar', 'dysk', 'wersj', 'stan ', 'zawartosc', 'ile ', 'jaka ', 'jaki ', 'gdzie ', 'kiedy '];
+      const needToolStems = ['utworz', 'napisz', 'skrypt', 'kod', 'program', 'uruchom', 'commit', 'zainstaluj', 'ile plik', 'plik', 'folder', 'katalog', 'policz', 'sprawdz', 'wypisz', 'pokaz', 'lista', 'znajdz', 'cena', 'kurs', 'walut', 'pogod', 'aktualn', 'pobierz', 'przeczytaj', 'otworz', 'rozmiar', 'dysk', 'wersj', 'stan ', 'zawartosc'];
       for (const st of needToolStems) { if (folded.indexOf(st) !== -1) { isAction = true; break; } }
       const messages: any[] = [
         { role: 'system', content: (this.behaviorRules() + String.fromCharCode(10) + this.capabilities(cwd) + String.fromCharCode(10) + this.readKnowledge()) + String.fromCharCode(10) + 'WAZNE: gdy pytanie dotyczy faktow, kursow, wiadomosci, pogody, przepisow lub czegokolwiek z internetu - NAJPIERW wywolaj odpowiednie narzedzie. Nie odpowiadaj na takie pytania z pamieci.' },
