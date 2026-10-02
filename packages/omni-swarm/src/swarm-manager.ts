@@ -89,6 +89,7 @@ export class SwarmManager {
       '15. GDY NARZEDZIE ZWROCI BLAD - nie poddawaj sie. Przeanalizuj blad, zmien podejscie i sprobuj ponownie (do 3 razy). Dopiero po 3 nieudanych probach powiedz, ze sie nie udalo - i wyjasnij, co probowales.',
       '16. MYSL KROK PO KROKU: najpierw ustal, JAK sprawdzisz sukces, potem dzialaj, na koncu sprawdz. Nie zgaduj - sprawdzaj. To jest twoja najwazniejsza zasada.',
       '17. MASZ PLAN od planera. Wykonuj kroki planu PO KOLEI narzedziami. Zadanie konczysz DOPIERO po wykonaniu ostatniego kroku planu (weryfikacji). Nie pisz odpowiedzi koncowej przedwczesnie.',
+      '18. PEWNOSC: jesli nie masz pewnosci co do faktu, napisz wprost "Nie mam pewnosci" i NAJPIERW sprawdz go narzedziem. Nigdy nie podawaj niepewnego faktu jako pewny.',
     ].join(nl);
   }
   /** Sklada polskie znaki do ASCII (do dopasowywania slow kluczowych). */
@@ -403,6 +404,23 @@ export class SwarmManager {
     } catch (error) { return ''; }
   }
 
+  /** Klasyfikuje bledy narzedzi (taksonomia) i zapisuje wzorce. */
+  private classifyToolError(msg: string): string {
+    const m = String(msg || '').toLowerCase();
+    let kind = 'inne';
+    if (m.indexOf('timeout') !== -1 || m.indexOf('przekrocz') !== -1 || m.indexOf('etimedout') !== -1) { kind = 'timeout'; }
+    else if (m.indexOf('json') !== -1 || m.indexOf('argument') !== -1 || m.indexOf('schema') !== -1 || m.indexOf('required') !== -1) { kind = 'argumenty'; }
+    else if (m.indexOf('permission') !== -1 || m.indexOf('eacces') !== -1 || m.indexOf('denied') !== -1) { kind = 'uprawnienia'; }
+    else if (m.indexOf('fetch') !== -1 || m.indexOf('network') !== -1 || m.indexOf('econn') !== -1 || m.indexOf('http') !== -1) { kind = 'zewnetrzne'; }
+    try {
+      const f = path.join(os.homedir(), '.omni', 'failure-stats.json');
+      let o: any = {};
+      try { o = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { o = {}; }
+      o[kind] = (o[kind] || 0) + 1;
+      fs.writeFileSync(f, JSON.stringify(o));
+    } catch (e) { }
+    return kind;
+  }
   /** Deterministyczna odpowiedz o dzisiejsza date (bez zgadywania modelu). */
   private tryDirectDate(prompt: string): string | null {
     const low = this.foldPl(String(prompt || '').toLowerCase());
@@ -683,7 +701,7 @@ export class SwarmManager {
             messages.push({ role: 'tool', tool_call_id: call.id, content: this.compressToolOutput(text) });
             this.memory.appendTranscript(sessionId, 'tool', name + ': ' + text.slice(0, 400));
           } catch (error: any) {
-            messages.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + error.message });
+            messages.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD (' + this.classifyToolError(error.message) + '): ' + error.message });
           }
         }
         if (execNames.length === iterStartCount) { noProgress++; } else { noProgress = 0; }
@@ -802,7 +820,7 @@ export class SwarmManager {
       if (draftAnswer && String(draftAnswer).trim().length > 20) {
         try {
           const crit = await this.executor.getCompletion([
-            { role: 'system', content: 'Jestes Krytykiem. Sprawdz odpowiedz pod katem zmyslonych lub niepotwierdzonych faktow. Jesli wszystko OK, zwroc ja bez zmian. Jesli cos jest niepotwierdzone, popraw albo usun. Zwroc tylko poprawiona odpowiedz po polsku.' },
+            { role: 'system', content: 'Jestes SUROWYM Krytykiem faktow. Usun lub popraw KAZDE twierdzenie bez pokrycia w wynikach narzedzi. Nie dodawaj nic od siebie i nie chwal. Zwroc WYLACZNIE poprawiona odpowiedz po polsku.' },
             { role: 'user', content: 'Zadanie: ' + prompt + String.fromCharCode(10) + String.fromCharCode(10) + 'Odpowiedz: ' + String(draftAnswer).slice(0, 3000) },
           ]);
           const fixed = this.stripMarkers(crit);
@@ -881,7 +899,7 @@ export class SwarmManager {
   private async runPlanner(prompt: string, exact: boolean = false): Promise<string> {
     const cwd = this.workspaceCwd;
     const messages = [
-      { role: 'system' as const, content: 'Jestes Plannerem - ekspertem od rozwiazywania problemow. Zwroc plan WYLACZNIE jako JSON (bez komentarzy): {"steps":[{"id":1,"opis":"...","sprawdzenie":"...","zalezy_od":[]}]}. Zasady: kazdy krok to jedna czynnosc wykonywalna narzedziem (file_write, file_read, shell_exec, web_search, web_fetch); pole sprawdzenie mowi jak potwierdzisz sukces; ostatni krok to weryfikacja calosci; od 3 do ' + (exact ? 10 : 8) + ' krokow; zalezy_od to lista id krokow wykonanych wczesniej. Nie wywoluj narzedzi. Katalog roboczy: ' + cwd + '.' },
+      { role: 'system' as const, content: 'Jestes WYLACZNIE Plannerem: nie wykonujesz krokow i nie odpowiadasz uzytkownikowi, tylko planujesz. Zwroc plan WYLACZNIE jako JSON (bez komentarzy): {"steps":[{"id":1,"opis":"...","sprawdzenie":"...","zalezy_od":[]}]}. Zasady: kazdy krok to jedna czynnosc wykonywalna narzedziem (file_write, file_read, shell_exec, web_search, web_fetch); pole sprawdzenie mowi jak potwierdzisz sukces; ostatni krok to weryfikacja calosci; od 3 do ' + (exact ? 10 : 8) + ' krokow; zalezy_od to lista id krokow wykonanych wczesniej. Nie wywoluj narzedzi. Katalog roboczy: ' + cwd + '.' },
       { role: 'user' as const, content: prompt }
     ];
     try {
@@ -904,7 +922,7 @@ export class SwarmManager {
   }
   private async runReviewer(originalPrompt: string, plan: string, action: string, cwd: string): Promise<string> {
     const messages = [
-      { role: 'system' as const, content: 'Jesteś Reviewerem. Oceniasz odpowiedź W KONTEKŚCIE zadania użytkownika. Proste odpowiedzi na pytania ZATWIERDZAJ. Jeśli naprawdę trzeba coś poprawić, odpowiedz [[REJECTED]] i podaj konkretny powód. Przy braku zastrzeżeń odpowiedz dokładnie [[APPROVED]].' },
+      { role: 'system' as const, content: 'Jestes SUROWYM Reviewerem. Szukaj luk, bledow i twierdzen bez pokrycia. Nie chwal. Jesli odpowiedz zawiera fakt bez potwierdzenia albo nie odpowiada na zadanie, odpowiedz [[REJECTED]] i podaj JEDEN konkretny powod. Jesli naprawde nie ma zastrzezen, odpowiedz dokladnie [[APPROVED]].' },
       { role: 'user' as const, content: `Zadanie użytkownika:\n${originalPrompt}\n\nPlan:\n${plan}\n\nDo oceny:\n${action}\n\nKatalog roboczy: ${cwd}` }
     ];
     return await this.reviewer.getCompletion(messages);
