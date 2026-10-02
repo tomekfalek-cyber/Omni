@@ -265,6 +265,9 @@ export class OmniGateway {
       (this as any).lastEngineCheck = Date.now();
       const cfg = this.config.get();
       const active = String(cfg.provider || 'groq');
+      const failsPath = path.join(os.homedir(), '.omni', 'engine-fails.json');
+      let engineFails: any = {};
+      try { engineFails = JSON.parse(fs.readFileSync(failsPath, 'utf8')); } catch (e) { engineFails = {}; }
       const scheme = String.fromCharCode(66, 101, 97, 114, 101, 114, 32);
       const probe = async (id: string): Promise<{ ok: boolean; note: string }> => {
         const keyName: any = { groq: 'GROQ_API_KEY', openrouter: 'OPENROUTER_API_KEY', gemini: 'GEMINI_API_KEY', deepseek: 'DEEPSEEK_API_KEY' };
@@ -287,22 +290,58 @@ export class OmniGateway {
           return { ok: r.ok, note: 'HTTP ' + r.status };
         } catch (e: any) { return { ok: false, note: e.message }; }
       };
-      const test = force ? { ok: false, note: 'limit lub blad dostawcy w czacie' } : await probe(active);
+      const chatProbe = async (id: string, useModel?: string): Promise<{ ok: boolean; note: string }> => {
+        const keyName: any = { groq: 'GROQ_API_KEY', openrouter: 'OPENROUTER_API_KEY', gemini: 'GEMINI_API_KEY', deepseek: 'DEEPSEEK_API_KEY' };
+        const name = keyName[id];
+        if (!name) { return { ok: false, note: 'brak klucza' }; }
+        let key = '';
+        try { key = this.config.secrets.getSecret(name) || ''; } catch (e) { key = ''; }
+        if (!key || key.length < 10) { return { ok: false, note: 'brak klucza' }; }
+        const cmodel: any = { groq: 'openai/gpt-oss-20b', openrouter: 'qwen/qwen-2.5-7b-instruct:free', gemini: 'gemini-flash-latest', deepseek: 'deepseek-chat' };
+        const chosenModel = (useModel && String(useModel).trim()) || cmodel[id];
+        try {
+          const ctl = new AbortController();
+          const t = setTimeout(() => { ctl.abort(); }, 15000);
+          let r: any;
+          if (id === 'gemini') {
+            r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + chosenModel + ':generateContent?key=' + encodeURIComponent(key), {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 1 } }),
+              signal: ctl.signal,
+            });
+          } else {
+            const base: any = { groq: 'https://api.groq.com/openai/v1', openrouter: 'https://openrouter.ai/api/v1', deepseek: 'https://api.deepseek.com' };
+            r = await fetch(base[id] + '/chat/completions', {
+              method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: scheme + key },
+              body: JSON.stringify({ model: chosenModel, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1, stream: false }),
+              signal: ctl.signal,
+            });
+          }
+          clearTimeout(t);
+          return { ok: r.ok, note: 'HTTP ' + r.status };
+        } catch (e: any) { return { ok: false, note: String(e.message || e) }; }
+      };
+      const test = force ? await chatProbe(active, String(cfg.model || '')) : await probe(active);
       console.log('[Silniki] ' + active + ': ' + (test.ok ? 'dziala' : 'PROBLEM (' + test.note + ')'));
       if (test.ok) { return; }
+      engineFails[active] = Date.now();
+      try { fs.writeFileSync(failsPath, JSON.stringify(engineFails)); } catch (e) { }
+      if (Date.now() - Number((this as any).lastEngineSwitch || 0) < 180 * 1000) { console.log('[Silniki] Cooldown przelaczania - pomijam.'); return; }
       const prefer: any = { groq: 'openai/gpt-oss-120b', openrouter: 'qwen/qwen-2.5-72b-instruct:free', gemini: 'gemini-flash-latest', deepseek: 'deepseek-chat' };
       const order = ['groq', 'gemini', 'openrouter', 'deepseek'];
       for (const id of order) {
         if (id === active) { continue; }
-        const p = await probe(id);
+        if (engineFails[id] && Date.now() - engineFails[id] < 15 * 60 * 1000) { console.log('[Silniki] Pomijam ' + id + ' (swiezy blad).'); continue; }
+        const p = force ? await chatProbe(id, prefer[id]) : await probe(id);
         if (p.ok) {
           await this.config.save({ provider: id, model: prefer[id] } as any);
           this.config.applyToEnv();
+          try { this.swarm.reconfigure(); } catch (e) { }
+          (this as any).lastEngineSwitch = Date.now();
           this.addNotification('Awaryjne przelaczenie silnika', 'Silnik ' + active + ' nie odpowiadal (' + test.note + '). Przelaczylem na ' + id + ' (' + prefer[id] + ').', 'engine');
-          console.log('[Silniki] Przelaczam na ' + id + ' i restartuje usluge.');
+          console.log('[Silniki] Przelaczam na ' + id + ' (nowy silnik aktywny od razu).');
           if (this.swarm && this.swarm.busy) {
-            console.log('[Silniki] Bot jest zajety - przekladam przelaczenie o 60 s.');
-            setTimeout(() => { void this.checkEngineHealth(true); }, 60000);
+            console.log('[Silniki] Bot jest zajety - restart odlozony, ale nowy silnik juz dziala.');
             return;
           }
           execFile('systemctl', ['--user', 'restart', 'omni-gateway.service'], () => { });
