@@ -823,12 +823,26 @@ export class SwarmManager {
   }
 
   private async runEvolver(originalPrompt: string, result: string): Promise<void> {
-    // W pełnej implementacji: analizuje result i generuje plik .omni/skills/new_skill.md
+    // Evolver z weryfikacja: nowa zasada zapisywana DOPIERO po sprawdzeniu.
     const messages = [
       { role: 'system' as const, content: 'Jesteś Evolverem. Na podstawie wykonanego zadania, stwórz krótką notatkę w formacie Markdown, która może być przydatna w przyszłości jako "skill".' },
       { role: 'user' as const, content: `Zadanie: ${originalPrompt}\nWynik: ${result}` }
     ];
     const skill = await this.evolver.getCompletion(messages);
+    if (!skill || String(skill).trim().length < 20) { return; }
+    let verified = false;
+    try {
+      const check = [
+        { role: 'system' as const, content: 'Jestes Weryfikatorem wiedzy. Ocena: czy NOWA ZASADA jest poprawna, konkretna i NIE powtarza ani nie przeczy istniejacej wiedzy. Zwroc WYLACZNIE JSON: {"ok":true,"powod":"..."}.' },
+        { role: 'user' as const, content: 'ISTNIEJACA WIEDZA:' + String.fromCharCode(10) + String(this.readKnowledge() || '(brak)').slice(0, 2000) + String.fromCharCode(10) + String.fromCharCode(10) + 'NOWA ZASADA:' + String.fromCharCode(10) + String(skill).slice(0, 1500) }
+      ];
+      const verdict = await this.evolver.getCompletion(check);
+      const vs = String(verdict || '');
+      const a = vs.indexOf('{');
+      const b = vs.lastIndexOf('}');
+      if (a !== -1 && b > a) { const obj = JSON.parse(vs.slice(a, b + 1)); verified = !!(obj && obj.ok === true); if (!verified) { console.log('[Evolver] Odrzucono zasade: ' + String((obj && obj.powod) || '')); } }
+    } catch (error) { verified = false; }
+    if (!verified) { return; }
     this.memory.saveFact(`skill_${Date.now()}`, skill);
     this.saveSkill(skill);
   }
