@@ -466,6 +466,9 @@ export class SwarmManager {
 
   private async executeTaskInner(sessionId: string, prompt: string, cwd: string): Promise<Task> {
     const taskId = uuidv4();
+    const trimmedLower = String(prompt).trim().toLowerCase();
+    const exact = trimmedLower === '/dokladnie' || trimmedLower.indexOf('/dokladnie ') === 0;
+    if (exact) { prompt = String(prompt).trim().slice('/dokladnie'.length).trim(); }
     const task: Task = {
       id: taskId,
       sessionId,
@@ -474,7 +477,7 @@ export class SwarmManager {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       iterations: 0,
-      maxIterations: Number(process.env.OMNI_MAX_ITERATIONS ?? 12),
+      maxIterations: exact ? 20 : Number(process.env.OMNI_MAX_ITERATIONS ?? 12),
       currentAgent: 'planner',
     };
 
@@ -486,7 +489,7 @@ export class SwarmManager {
     try {
       // KROK 1: Planner dekomponuje zadanie
       this.emit({ kind: 'thinking', text: 'Analizuje zadanie...' });
-      const plan = await this.runPlanner(prompt);
+      const plan = await this.runPlanner(prompt, exact);
       this.memory.appendTranscript(sessionId, 'planner', `Plan: ${plan}`);
 
       // KROK 2: Executor wykonuje kroki
@@ -508,7 +511,7 @@ export class SwarmManager {
       for (const st of needToolStems) { if (folded.indexOf(st) !== -1) { isAction = true; break; } }
       const messages: any[] = [
         { role: 'system', content: (this.behaviorRules() + String.fromCharCode(10) + this.capabilities(cwd) + String.fromCharCode(10) + this.readKnowledge()) + String.fromCharCode(10) + 'WAZNE: gdy pytanie dotyczy faktow, kursow, wiadomosci, pogody, przepisow lub czegokolwiek z internetu - NAJPIERW wywolaj odpowiednie narzedzie. Nie odpowiadaj na takie pytania z pamieci.' },
-        { role: 'user', content: 'Zadanie: ' + prompt + (rel ? '\n\nTRAFNA WIEDZA Z PAMIECI:\n' + rel : '') + (hist ? '\n\nPOPRZEDNIE WYMIANY (kontekst rozmowy):\n' + hist : '') + '\nPlan:\n' + plan },
+        { role: 'user', content: 'Zadanie: ' + prompt + (rel ? '\n\nTRAFNA WIEDZA Z PAMIECI:\n' + rel : '') + (hist ? '\n\nPOPRZEDNIE WYMIANY (kontekst rozmowy):\n' + hist : '') + (exact ? '\n\nTRYB DOKLADNIE: sprawdzaj kazde twierdzenie narzedziem, nie zgaduj, podaj zrodlo.' : '') + '\nPlan:\n' + plan },
       ];
 
       for (let i = 0; i < task.maxIterations; i++) {
@@ -526,7 +529,7 @@ export class SwarmManager {
           }
         }
 
-        task.iterations = i + 1;        if (i === 0 && !needsSearch && !isAction) {
+        task.iterations = i + 1;        if (i === 0 && !exact && !needsSearch && !isAction) {
           this.emit({ kind: 'writing', text: 'Pisze odpowiedz...' });
           const plainFast: any[] = [
             { role: 'system', content: 'Jestes Omni, polski asystent. Odpowiedz krotko i konkretnie po polsku. Nie wywoluj zadnych narzedzi.' + (hist ? '\n\nPOPRZEDNIE WYMIANY (kontekst rozmowy):\n' + hist : '') },
@@ -764,14 +767,38 @@ export class SwarmManager {
       'ZASADY: nie zmyslaj danych - uzyj narzedzia. Na kursy krypto uzyj crypto_price, na biezace wydarzenia i wiadomosci uzyj news, na reszte web_search. Odpowiadaj po polsku, krotko i konkretnie.',
     ].join(NL);
   }
-  private async runPlanner(prompt: string): Promise<string> {
+  /** Zamienia JSON planera na czytelna liste krokow (z zaleznosciami). */
+  private formatPlan(raw: string): string {
+    try {
+      const s = String(raw || '');
+      const a = s.indexOf('{');
+      const b = s.lastIndexOf('}');
+      if (a === -1 || b <= a) { return s; }
+      const obj = JSON.parse(s.slice(a, b + 1));
+      const steps = Array.isArray(obj && obj.steps) ? obj.steps : [];
+      if (!steps.length) { return s; }
+      const lines: string[] = [];
+      for (const st of steps) {
+        const id = (st && st.id != null) ? String(st.id) : String(lines.length + 1);
+        const opis = String((st && (st.opis || st.op || st.step)) || '').trim();
+        if (!opis) { continue; }
+        const chk = String((st && (st.sprawdzenie || st.check)) || '').trim();
+        const dep = Array.isArray(st && st.zalezy_od) ? st.zalezy_od.join(',') : '';
+        lines.push(id + '. ' + opis + (chk ? ' [sprawdzenie: ' + chk + ']' : '') + (dep ? ' (zalezy od: ' + dep + ')' : ''));
+      }
+      return lines.length ? lines.join(String.fromCharCode(10)) : s;
+    } catch (error) { return String(raw || ''); }
+  }
+
+  private async runPlanner(prompt: string, exact: boolean = false): Promise<string> {
     const cwd = this.workspaceCwd;
     const messages = [
-      { role: 'system' as const, content: 'Jestes Plannerem - ekspertem od rozwiazywania problemow. Rozbij zadanie uzytkownika na KONKRETNE kroki wykonywalne narzedziami (file_write, file_read, shell_exec, web_search, web_fetch). Zasady: (1) przy kazdym kroku napisz JAK sprawdzisz, ze sie udal, (2) ostatni krok to ZAWSZE weryfikacja calosci, (3) od 3 do 8 krokow, (4) numeruj tak: 1. czynnosc | sprawdzenie: opis. Odpowiedz zwyklym tekstem. Nie wywoluj zadnych narzedzi. Katalog roboczy: ' + cwd + '.' },
+      { role: 'system' as const, content: 'Jestes Plannerem - ekspertem od rozwiazywania problemow. Zwroc plan WYLACZNIE jako JSON (bez komentarzy): {"steps":[{"id":1,"opis":"...","sprawdzenie":"...","zalezy_od":[]}]}. Zasady: kazdy krok to jedna czynnosc wykonywalna narzedziem (file_write, file_read, shell_exec, web_search, web_fetch); pole sprawdzenie mowi jak potwierdzisz sukces; ostatni krok to weryfikacja calosci; od 3 do ' + (exact ? 10 : 8) + ' krokow; zalezy_od to lista id krokow wykonanych wczesniej. Nie wywoluj narzedzi. Katalog roboczy: ' + cwd + '.' },
       { role: 'user' as const, content: prompt }
     ];
     try {
-      return await this.planner.getCompletion(messages);
+      const raw = await this.planner.getCompletion(messages);
+      return this.formatPlan(raw);
     } catch (error) {
       return prompt;
     }
