@@ -417,7 +417,8 @@ export class SwarmManager {
       return files.map((f: string) => {
         const raw = fs.readFileSync(path.join(dir, f), 'utf8');
         const lines = raw.split(nl);
-        const title = (lines[0] || f).replace(new RegExp('^#+ ', 'g'), '');
+        const titleLine = lines.filter((l: string) => l.indexOf('# ') === 0)[0] || f;
+        const title = String(titleLine).replace(new RegExp('^#+ ', 'g'), '');
         const whenLine = lines.filter((l: string) => l.indexOf('KIEDY:') === 0)[0] || '';
         return '- ' + title + ' (' + whenLine.replace('KIEDY: ', '') + ')';
       }).join(nl);
