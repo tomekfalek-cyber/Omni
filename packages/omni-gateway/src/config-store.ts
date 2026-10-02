@@ -172,16 +172,20 @@ export class ConfigStore {
     if (typeof patch.accessCode === 'string') next.accessCode = patch.accessCode.trim();
 
     const incoming = apiKeys || {};
+    const rejected: string[] = [];
     for (const name of Object.keys(incoming)) {
       const value = String(incoming[name] || '').trim();
-      if (value.length < 8) continue;
-      if (value.indexOf('...') !== -1) continue;
+      if (value.length < 20 || value.indexOf('...') !== -1 || value.indexOf(String.fromCharCode(8230)) !== -1) { rejected.push(name); continue; }
       await this.secrets.setSecret(name, value);
+    }
+    if (rejected.length) {
+      throw new Error('Klucz ' + rejected.join(', ') + ' wyglada na niepelny (za krotki albo zamaskowany). Wklej CALY klucz (min. 20 znakow) - inaczej wybrany silnik cofnie sie na lokalny.');
     }
 
     const providerChanged = next.provider !== this.config.provider;
     const chosen = providerInfo(next.provider);
     if (chosen.keyEnv && !this.hasKeyFor(next.provider)) {
+      console.log('[Konfiguracja] BRAK waznego klucza dla ' + next.provider + ' (wymagane >8 znakow) - zostaje na ollama.');
       // brak klucza dla wybranego dostawcy - zostan lokalnie, zeby bot dalej dzialal
       next.provider = 'ollama';
       next.model = 'qwen2.5:1.5b';
