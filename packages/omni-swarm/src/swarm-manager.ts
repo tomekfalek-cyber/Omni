@@ -12,6 +12,7 @@ export class SwarmManager {
   private executor: QwenProvider;
   private reviewer: QwenProvider;
   private evolver: QwenProvider;
+  private coder: QwenProvider;
   private memory: OmniMemory;
   public workspaceCwd: string = process.cwd();
   private tools: ToolRegistry;
@@ -33,6 +34,7 @@ export class SwarmManager {
     this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 4000 });
     this.reviewer = new QwenProvider({ provider, model: modelPro, temperature: 0.1, maxTokens: 2000 });
     this.evolver = new QwenProvider({ provider, model: modelFlash, temperature: 0.8, maxTokens: 3000 });
+    this.coder = new QwenProvider({ provider, model: process.env.OMNI_LLM_MODEL_CODER || modelPro, temperature: 0.2, maxTokens: 4000 });
     
     this.memory = new OmniMemory();
     this.tools = new ToolRegistry();
@@ -56,6 +58,8 @@ export class SwarmManager {
     this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 1400 });
     this.reviewer = new QwenProvider({ provider, model: modelMini, temperature: 0.1, maxTokens: 400 });
     this.evolver = new QwenProvider({ provider, model: modelMini, temperature: 0.8, maxTokens: 500 });
+    const defaultCoder = provider === 'groq' ? 'openai/gpt-oss-120b' : 'qwen/qwen3.8-27b:free';
+    this.coder = new QwenProvider({ provider, model: process.env.OMNI_LLM_MODEL_CODER || defaultCoder, temperature: 0.2, maxTokens: 4000 });
   }
 
   /** Krotkie zapytanie testowe do aktualnie ustawionego silnika. */
@@ -90,6 +94,8 @@ export class SwarmManager {
       '16. MYSL KROK PO KROKU: najpierw ustal, JAK sprawdzisz sukces, potem dzialaj, na koncu sprawdz. Nie zgaduj - sprawdzaj. To jest twoja najwazniejsza zasada.',
       '17. MASZ PLAN od planera. Wykonuj kroki planu PO KOLEI narzedziami. Zadanie konczysz DOPIERO po wykonaniu ostatniego kroku planu (weryfikacji). Nie pisz odpowiedzi koncowej przedwczesnie.',
       '18. PEWNOSC: jesli nie masz pewnosci co do faktu, napisz wprost "Nie mam pewnosci" i NAJPIERW sprawdz go narzedziem. Nigdy nie podawaj niepewnego faktu jako pewny.',
+      '19. TDD (kod): przy pisaniu kodu NAJPIERW zaplanuj test, potem napisz kod, potem URUCHOM test i poprawiaj, az przejdzie. Nie koncz bez uruchomienia kodu.',
+      '20. WERYFIKACJA KODU: przed oddaniem odpowiedzi o kodzie uruchom typecheck/lint/test (np. tsc --noEmit, npm test). Jesli nie mozesz - napisz wprost, co sprawdziles, a czego nie.',
     ].join(nl);
   }
   /** Sklada polskie znaki do ASCII (do dopasowywania slow kluczowych). */
@@ -191,7 +197,7 @@ export class SwarmManager {
   }
 
   private async executorTurn(messages: any[], tools: any[], toolChoice?: string): Promise<{ content: string, toolCalls: any[] }> {
-    const provider: any = this.executor;
+    const provider: any = ((this as any).useCoder && this.coder) ? this.coder : this.executor;
     if (typeof provider.getCompletionWithTools === 'function') {
       try {
         return await provider.getCompletionWithTools(messages, tools, toolChoice);
@@ -578,6 +584,11 @@ export class SwarmManager {
     const trimmedLower = String(prompt).trim().toLowerCase();
     const exact = trimmedLower === '/dokladnie' || trimmedLower.indexOf('/dokladnie ') === 0;
     if (exact) { prompt = String(prompt).trim().slice('/dokladnie'.length).trim(); }
+    const foldedTask = this.foldPl(String(prompt).toLowerCase());
+    const codingKeys = ['napisz', 'kod', 'program', 'funkcj', 'klasa', 'implement', 'refaktor', 'debug', 'bug', 'endpoint', 'api', 'test', 'skrypt', 'aplikacj', 'modul', 'komponent', 'typescript', 'javascript', 'python'];
+    let useCoder = false;
+    for (const ck of codingKeys) { if (foldedTask.indexOf(ck) !== -1) { useCoder = true; break; } }
+    (this as any).useCoder = useCoder;
     const task: Task = {
       id: taskId,
       sessionId,
@@ -763,7 +774,7 @@ export class SwarmManager {
         plain.push({ role: 'user', content: 'Napisz teraz konkretna odpowiedz dla uzytkownika po polsku. Nie wywoluj narzedzi.' });
         let streamed = '';
         try {
-          const provider: any = this.executor;
+          const provider: any = ((this as any).useCoder && this.coder) ? this.coder : this.executor;
           if (this.onToken && typeof provider.streamCompletion === 'function') {
             console.log('[Swarm] Strumieniowanie odpowiedzi...');
             for await (const chunk of provider.streamCompletion(plain)) {
@@ -943,7 +954,7 @@ export class SwarmManager {
   private async runPlanner(prompt: string, exact: boolean = false): Promise<string> {
     const cwd = this.workspaceCwd;
     const messages = [
-      { role: 'system' as const, content: 'Jestes WYLACZNIE Plannerem: nie wykonujesz krokow i nie odpowiadasz uzytkownikowi, tylko planujesz. Zwroc plan WYLACZNIE jako JSON (bez komentarzy): {"steps":[{"id":1,"opis":"...","sprawdzenie":"...","zalezy_od":[]}]}. Zasady: kazdy krok to jedna czynnosc wykonywalna narzedziem (file_write, file_read, shell_exec, web_search, web_fetch); pole sprawdzenie mowi jak potwierdzisz sukces; ostatni krok to weryfikacja calosci; od 3 do ' + (exact ? 10 : 8) + ' krokow; zalezy_od to lista id krokow wykonanych wczesniej. Nie wywoluj narzedzi. Katalog roboczy: ' + cwd + '.' },
+      { role: 'system' as const, content: 'Jestes WYLACZNIE Plannerem: nie wykonujesz krokow i nie odpowiadasz uzytkownikowi, tylko planujesz. Zwroc plan WYLACZNIE jako JSON (bez komentarzy): {"steps":[{"id":1,"opis":"...","sprawdzenie":"...","zalezy_od":[]}]}. Zasady: kazdy krok to jedna czynnosc wykonywalna narzedziem (file_write, file_read, shell_exec, web_search, web_fetch); pole sprawdzenie mowi jak potwierdzisz sukces; ostatni krok to weryfikacja calosci; od 3 do ' + (exact ? 10 : 8) + ' krokow; zalezy_od to lista id krokow wykonanych wczesniej. Nie wywoluj narzedzi. Jesli zadanie jest koderskie (pisanie/refaktor kodu), uwzglednij krok testu (napisz test albo uruchom istniejace testy) oraz krok weryfikacji (typecheck/lint). Katalog roboczy: ' + cwd + '.' },
       { role: 'user' as const, content: prompt }
     ];
     try {
