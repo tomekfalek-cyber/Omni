@@ -179,6 +179,45 @@ export class SwarmManager {
       },
       execute: async (args: any) => this.readSkill(String((args && args.name) || '').trim()),
     });
+    this.tools.register({
+      definition: {
+        name: 'project_remember',
+        description: 'Zapisuje trwaly fakt o PROJEKCIE (stack, konwencje, decyzje, pulapki) do pamieci projektu. Podaj key i value.',
+        parameters: { key: 'string', value: 'string' },
+        requiresApproval: false,
+        timeoutMs: 5000,
+        maxOutputBytes: 0,
+      },
+      execute: async (args: any) => {
+        const key = String((args && args.key) || '').trim();
+        const val = String((args && args.value) || '').trim();
+        if (!key || !val) { throw new Error('Podaj key i value.'); }
+        const f = path.join(os.homedir(), '.omni', 'memory', 'project.md');
+        fs.mkdirSync(path.dirname(f), { recursive: true });
+        const line = '- [' + new Date().toISOString().slice(0, 10) + '] ' + key + ': ' + val;
+        let prev = '';
+        try { prev = fs.readFileSync(f, 'utf8'); } catch (e) { prev = ''; }
+        if (prev.indexOf(val) !== -1) { return 'Juz zapamietane: ' + key; }
+        const sep = (prev && prev.slice(-1) !== String.fromCharCode(10)) ? String.fromCharCode(10) : '';
+        fs.writeFileSync(f, prev + sep + line + String.fromCharCode(10), 'utf8');
+        return 'Zapisano w pamieci projektu: ' + key;
+      },
+    });
+    this.tools.register({
+      definition: {
+        name: 'project_read',
+        description: 'Odczytuje pamiec projektu (stack, konwencje, decyzje, pulapki).',
+        parameters: {},
+        requiresApproval: false,
+        timeoutMs: 5000,
+        maxOutputBytes: 12000,
+      },
+      execute: async () => {
+        const f = path.join(os.homedir(), '.omni', 'memory', 'project.md');
+        try { return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').slice(-6000) : 'Pamiec projektu jest pusta.'; }
+        catch (e) { return 'Blad odczytu pamieci projektu.'; }
+      },
+    });
   }
 
   private toolSchemas(): any[] {
@@ -547,6 +586,11 @@ export class SwarmManager {
       if (fs.existsSync(profPath)) {
         const prof = fs.readFileSync(profPath, 'utf8').slice(-1500);
         if (prof.trim().length > 10) { parts.push('O UZYTKOWNIKU (pamietaj):' + nl + prof); }
+      }
+      const projPath = path.join(dir, 'project.md');
+      if (fs.existsSync(projPath)) {
+        const proj = fs.readFileSync(projPath, 'utf8').slice(-2500);
+        if (proj.trim().length > 10) { parts.push('PAMIEC PROJEKTU (stack, konwencje, decyzje, pulapki):' + nl + proj); }
       }
       const sdir = path.join(os.homedir(), '.omni', 'skills');
       if (fs.existsSync(sdir)) {
