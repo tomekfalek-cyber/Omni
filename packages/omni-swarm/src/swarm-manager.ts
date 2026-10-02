@@ -421,6 +421,49 @@ export class SwarmManager {
     } catch (e) { }
     return kind;
   }
+  /** Pamiec hierarchiczna: streszczenie sesji + ekstrakcja trwalych faktow (z dlawikiem). */
+  private async harvestMemory(sessionId: string, prompt: string, result: string): Promise<void> {
+    try {
+      const statePath = path.join(os.homedir(), '.omni', 'harvest-state.json');
+      let st: any = {};
+      try { st = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch (e) { st = {}; }
+      if (Date.now() - Number(st[sessionId] || 0) < 10 * 60 * 1000) { return; }
+      st[sessionId] = Date.now();
+      try { fs.writeFileSync(statePath, JSON.stringify(st)); } catch (e) { }
+      const recs: any[] = this.memory.recent(sessionId, 12) as any[];
+      const lines: string[] = [];
+      for (const r of recs) {
+        const role = String((r && r.role) || '');
+        if (role !== 'user' && role !== 'assistant') { continue; }
+        lines.push((role === 'user' ? 'U: ' : 'A: ') + String((r && r.content) || '').slice(0, 300));
+      }
+      const conv = ((lines.length ? lines.join(String.fromCharCode(10)) : ('Zadanie: ' + prompt + String.fromCharCode(10) + 'Wynik: ' + String(result || ''))).slice(-2500));
+      const messages = [
+        { role: 'system' as const, content: 'Wyciagasz TRWALE fakty z rozmowy. Zwroc WYLACZNIE JSON: {"streszczenie":"1 zdanie","fakty":[{"typ":"preferencja|cel|ustalenie|blad","tresc":"..."}]}. Tylko fakty trwale i wazne dla przyszlych rozmow. Jesli brak - pusta lista.' },
+        { role: 'user' as const, content: conv },
+      ];
+      const raw = await this.evolver.getCompletion(messages);
+      const s = String(raw || '');
+      const a = s.indexOf('{');
+      const b = s.lastIndexOf('}');
+      if (a === -1 || b <= a) { return; }
+      const obj = JSON.parse(s.slice(a, b + 1));
+      const sum = String((obj && obj.streszczenie) || '').trim();
+      if (sum) { this.memory.appendTranscript(sessionId, 'summary', sum.slice(0, 300)); }
+      const facts = Array.isArray(obj && obj.fakty) ? obj.fakty : [];
+      let n = 0;
+      for (const f of facts) {
+        const typ = String((f && f.typ) || 'ustalenie').slice(0, 30);
+        const tresc = String((f && f.tresc) || '').trim();
+        if (!tresc) { continue; }
+        this.memory.saveFact('hit_' + Date.now() + '_' + n, typ + ': ' + tresc.slice(0, 200));
+        n++;
+        if (n >= 6) { break; }
+      }
+      console.log('[Pamiec] Zapisano ' + n + ' faktow (sesja ' + sessionId + ')');
+    } catch (error) { }
+  }
+
   /** Deterministyczna odpowiedz o dzisiejsza date (bez zgadywania modelu). */
   private tryDirectDate(prompt: string): string | null {
     const low = this.foldPl(String(prompt || '').toLowerCase());
@@ -838,6 +881,7 @@ export class SwarmManager {
       this.memory.appendTranscript(sessionId, 'assistant', String(draftAnswer || '').slice(0, 2000));
       // Odpowiedź wykonawcy jest ważniejsza niż marudzenie reviewera.
       task.result = draftAnswer || executionResult;
+      try { await this.harvestMemory(sessionId, prompt, String(draftAnswer || executionResult || '')); } catch (error) { }
       this.memory.appendTranscript(sessionId, 'system', `Task completed: ${taskId}`);
     } catch (error: any) {
       task.status = 'failed';
