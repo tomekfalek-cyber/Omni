@@ -584,7 +584,7 @@ export class SwarmManager {
         task.iterations = i + 1;        if (i === 0 && !exact && !needsSearch && !isAction) {
           this.emit({ kind: 'writing', text: 'Pisze odpowiedz...' });
           const plainFast: any[] = [
-            { role: 'system', content: 'Jestes Omni, polski asystent. Odpowiedz krotko i konkretnie po polsku. Nie wywoluj zadnych narzedzi.' + (hist ? '\n\nPOPRZEDNIE WYMIANY (kontekst rozmowy):\n' + hist : '') },
+            { role: 'system', content: 'Jestes Omni, polski asystent. DZISIAJ JEST: ' + new Date().toISOString().slice(0, 10) + ' (nigdy nie podawaj innej daty). Odpowiedz krotko i konkretnie po polsku. Nie wywoluj zadnych narzedzi.' + (hist ? '\n\nPOPRZEDNIE WYMIANY (kontekst rozmowy):\n' + hist : '') },
             { role: 'user', content: String(prompt) },
           ];
           let streamedFast = '';
