@@ -297,7 +297,7 @@ export class OmniGateway {
         let key = '';
         try { key = this.config.secrets.getSecret(name) || ''; } catch (e) { key = ''; }
         if (!key || key.length < 10) { return { ok: false, note: 'brak klucza' }; }
-        const cmodel: any = { groq: 'openai/gpt-oss-20b', openrouter: 'qwen/qwen-2.5-7b-instruct:free', gemini: 'gemini-flash-latest', deepseek: 'deepseek-chat' };
+        const cmodel: any = { groq: 'openai/gpt-oss-20b', openrouter: 'nvidia/nemotron-3-super-120b-a12b:free', gemini: 'gemini-flash-latest', deepseek: 'deepseek-chat' };
         const chosenModel = (useModel && String(useModel).trim()) || cmodel[id];
         try {
           const ctl = new AbortController();
@@ -327,7 +327,7 @@ export class OmniGateway {
       engineFails[active] = Date.now();
       try { fs.writeFileSync(failsPath, JSON.stringify(engineFails)); } catch (e) { }
       if (Date.now() - Number((this as any).lastEngineSwitch || 0) < 180 * 1000) { console.log('[Silniki] Cooldown przelaczania - pomijam.'); return; }
-      const prefer: any = { groq: 'openai/gpt-oss-120b', openrouter: 'qwen/qwen-2.5-72b-instruct:free', gemini: 'gemini-flash-latest', deepseek: 'deepseek-chat' };
+      const prefer: any = { groq: 'openai/gpt-oss-120b', openrouter: 'nvidia/nemotron-3-super-120b-a12b:free', gemini: 'gemini-flash-latest', deepseek: 'deepseek-chat' };
       const order = ['groq', 'gemini', 'openrouter', 'deepseek'];
       for (const id of order) {
         if (id === active) { continue; }
