@@ -12,6 +12,8 @@ export class SwarmManager {
   private executor: QwenProvider;
   private reviewer: QwenProvider;
   private evolver: QwenProvider;
+  private thinker: QwenProvider;
+  private thinkModel: string = '';
   private memory: OmniMemory;
   public workspaceCwd: string = process.cwd();
   private tools: ToolRegistry;
@@ -33,6 +35,7 @@ export class SwarmManager {
     this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 4000 });
     this.reviewer = new QwenProvider({ provider, model: modelPro, temperature: 0.1, maxTokens: 2000 });
     this.evolver = new QwenProvider({ provider, model: modelFlash, temperature: 0.8, maxTokens: 3000 });
+    this.thinker = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 2500 });
     
     this.memory = new OmniMemory();
     this.tools = new ToolRegistry();
@@ -52,10 +55,19 @@ export class SwarmManager {
     const defaultMini = provider === 'groq' ? 'openai/gpt-oss-20b' : modelFlash;
     const modelMini = process.env.OMNI_LLM_MODEL_MINI || defaultMini;
 
-    this.planner = new QwenProvider({ provider, model: modelMini, temperature: 0.7, maxTokens: 700 });
-    this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 1400 });
+    // Budzety tokenow (do nadpisania w .env): umiarkowanie wieksze niz dawniej, bo za male
+    // limity obcinaly rozumowanie. Darmowe plany maja limity - zmniejsz, jesli lapiesz 429.
+    const tok = (name: string, def: number): number => {
+      const n = Number(process.env[name]);
+      return (isFinite(n) && n >= 200 && n <= 16000) ? Math.floor(n) : def;
+    };
+    const thinkModel = String(process.env.OMNI_LLM_MODEL_THINK || '').trim() || modelFlash;
+    this.thinkModel = thinkModel;
+    this.planner = new QwenProvider({ provider, model: modelMini, temperature: 0.3, maxTokens: tok('OMNI_TOK_PLANNER', 900) });
+    this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: tok('OMNI_TOK_EXECUTOR', 2200) });
     this.reviewer = new QwenProvider({ provider, model: modelMini, temperature: 0.1, maxTokens: 400 });
-    this.evolver = new QwenProvider({ provider, model: modelMini, temperature: 0.8, maxTokens: 500 });
+    this.evolver = new QwenProvider({ provider, model: modelMini, temperature: 0.5, maxTokens: 500 });
+    this.thinker = new QwenProvider({ provider, model: thinkModel, temperature: 0.3, maxTokens: tok('OMNI_TOK_THINK', this.isReasoningModel(thinkModel) ? 3500 : 2500) });
   }
 
   /** Krotkie zapytanie testowe do aktualnie ustawionego silnika. */
@@ -87,6 +99,89 @@ export class SwarmManager {
       '13. Nie mow, ze cos dziala, dopoki tego nie sprawdziles komenda (np. curl -sS -m 5 http://127.0.0.1:PORT/). Nieudane sprawdzenie - powiedz o tym wprost.',
     ].join(nl);
   }
+  /** Czy model sam rozumuje wewnetrznie (wtedy nie dokladamy sztucznego notatnika). */
+  private isReasoningModel(model: string): boolean {
+    return /reasoner|deepseek-r1|gpt-oss|qwq|qwen3|thinking|(^|[\/:\-])o[134](-|$)/i.test(String(model || ''));
+  }
+
+  /** Czy pytanie wymaga namyslu (analiza, porownanie, plan, wyjasnienie) - heurystyka bez wywolan LLM. */
+  private isDeepPrompt(prompt: string): boolean {
+    if (String(process.env.OMNI_THINK || '').trim() === 'off') { return false; }
+    const folded = this.foldPl(String(prompt || '').toLowerCase()).trim();
+    if (folded.length < 25) { return false; }
+    const stems = ['dlaczego', 'porownaj', 'roznic', 'przeanalizuj', 'analiz', 'wyjasnij', 'wytlumacz', 'jak dziala', 'zalet', 'co lepsze', 'co wybrac', 'zaplanuj', 'strategi', 'argument', 'zaproponuj', 'zdecyduj', 'czy warto', 'krok po kroku', 'optymaliz', 'zaprojektuj', 'architektur', 'podsumuj', 'uzasadnij', 'rozwaz', 'plusy', 'minusy', 'za i przeciw', 'jak najlepiej', 'jak rozwiazac', 'co sadzisz', 'problem'];
+    for (const st of stems) { if (folded.indexOf(st) !== -1) { return true; } }
+    if (folded.length > 220) { return true; }
+    const q = folded.split('?').length - 1;
+    return q >= 2;
+  }
+
+  /** Krotki profil uzytkownika z pamieci (do plannera i trybu rozumowania). */
+  private readUserProfile(max: number): string {
+    try {
+      const file = path.join(os.homedir(), '.omni', 'memory', 'user-profile.md');
+      if (!fs.existsSync(file)) { return ''; }
+      const txt = fs.readFileSync(file, 'utf8').slice(-max);
+      return txt.trim().length > 10 ? txt : '';
+    } catch (error) { return ''; }
+  }
+
+  /**
+   * Tryb rozumowania: jedno wywolanie z notatnikiem "ANALIZA" ukrytym przed uzytkownikiem
+   * (strumien rusza dopiero po znaczniku [[ODPOWIEDZ]]). Zwraca '' przy bledzie, zanim cokolwiek
+   * poszlo do uzytkownika - wtedy wolajacy wraca do starej, szybkiej sciezki.
+   */
+  private async runDeepThink(prompt: string): Promise<string> {
+    const nl = String.fromCharCode(10);
+    const MARK = '[[ODPOWIEDZ]]';
+    const reasoning = this.isReasoningModel(this.thinkModel);
+    const profile = this.readUserProfile(1200);
+    const base = 'Jestes Omni, polski asystent ogolnego przeznaczenia. Dzisiejsza data: ' + new Date().toISOString().slice(0, 10) + '.' +
+      (profile ? (nl + 'O UZYTKOWNIKU (uwzglednij, jesli pasuje do pytania):' + nl + profile) : '');
+    const rules = 'Nie wymyslaj faktow ani liczb. Jesli czegos nie wiesz albo dane moga byc nieaktualne - powiedz to wprost. Obliczenia sprawdz dwa razy.';
+    const system = reasoning
+      ? (base + nl + 'Zadanie wymaga namyslu. Przemysl je dokladnie, sprawdz swoje rozumowanie, a potem odpowiedz konkretnie i czytelnie po polsku, bez powtarzania toku myslenia. ' + rules)
+      : (base + nl + 'Zadanie wymaga namyslu. Postepuj dokladnie tak:' + nl +
+        '1) Najpierw napisz krotka sekcje ANALIZA: co dokladnie jest pytaniem, jakie sa zalozenia, 2-3 mozliwe podejscia lub odpowiedzi, ktore jest najlepsze i dlaczego, oraz sprawdzenie obliczen i faktow.' + nl +
+        '2) Potem w nowym wierszu wpisz dokladnie ' + MARK + ' i pod nim podaj gotowa odpowiedz dla uzytkownika po polsku: konkretna, uporzadkowana, bez powtarzania analizy.' + nl + rules);
+    const messages: any[] = [{ role: 'system', content: system }, { role: 'user', content: String(prompt) }];
+    const prov: any = this.thinker;
+    let full = '';
+    let released = reasoning;
+    let forwarded = 0;
+    let started = false;
+    const flush = () => {
+      let piece = full.slice(forwarded);
+      forwarded = full.length;
+      if (!started) { piece = piece.replace(/^\s+/, ''); if (!piece) { return; } started = true; }
+      if (piece && this.onToken) { this.onToken(piece); }
+    };
+    const answerOf = (): string => {
+      const at = full.indexOf(MARK);
+      return (at === -1 ? full : full.slice(at + MARK.length)).trim();
+    };
+    try {
+      if (this.onToken && typeof prov.streamCompletion === 'function') {
+        this.emit({ kind: 'thinking', text: 'Rozumuje...' });
+        for await (const chunk of prov.streamCompletion(messages)) {
+          full += chunk;
+          if (!released) {
+            const at = full.indexOf(MARK);
+            if (at !== -1) { released = true; forwarded = at + MARK.length; flush(); }
+          } else { flush(); }
+        }
+        if (!released) { forwarded = 0; flush(); }
+      } else {
+        full = await prov.getCompletion(messages);
+      }
+    } catch (error: any) {
+      console.log('[Swarm] Tryb rozumowania nieudany (' + error.message + ')');
+      const partial = started ? answerOf() : '';
+      return partial.length > 20 ? this.stripMarkers(partial) : '';
+    }
+    return this.stripMarkers(answerOf());
+  }
+
   /** Sklada polskie znaki do ASCII (do dopasowywania slow kluczowych). */
   private foldPl(s: string): string {
     const map: any = { 'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z', 'Ą': 'a', 'Ć': 'c', 'Ę': 'e', 'Ł': 'l', 'Ń': 'n', 'Ó': 'o', 'Ś': 's', 'Ź': 'z', 'Ż': 'z' };
@@ -446,13 +541,6 @@ export class SwarmManager {
     try {
       // KROK 1: Planner dekomponuje zadanie
       this.emit({ kind: 'thinking', text: 'Analizuje zadanie...' });
-      const plan = await this.runPlanner(prompt);
-      this.memory.appendTranscript(sessionId, 'planner', `Plan: ${plan}`);
-
-      // KROK 2: Executor wykonuje kroki
-      let executionResult = '';
-      let draftAnswer = '';
-      let usedTools = false;
       const toolSchemas = this.toolSchemas();
       const lowerPrompt = String(prompt).toLowerCase();
       const searchKeys = ['cen', 'kurs', 'koszt', 'ile kosztuje', 'bitcoin', 'btc', 'ethereum', 'krypto', 'walut', 'wymian', 'wiadomosc', 'wydarzen', 'aktualn', 'dzisiaj', 'dzisiejsz', 'pogod', 'prognoz', 'wynik', 'notowan'];
@@ -464,11 +552,23 @@ export class SwarmManager {
       const folded = this.foldPl(lowerPrompt);
       const needToolStems = ['utworz', 'napisz', 'skrypt', 'kod', 'program', 'uruchom', 'commit', 'zainstaluj', 'ile plik', 'plik', 'folder', 'katalog', 'policz', 'sprawdz', 'wypisz', 'pokaz', 'lista', 'znajdz', 'cena', 'kurs', 'walut', 'pogod', 'dzisiaj', 'aktualn', 'pobierz', 'przeczytaj', 'otworz', 'rozmiar', 'dysk', 'wersj', 'stan ', 'zawartosc', 'ile ', 'jaka ', 'jaki ', 'gdzie ', 'kiedy '];
       for (const st of needToolStems) { if (folded.indexOf(st) !== -1) { isAction = true; break; } }
+      const deepMode = !needsSearch && !isAction && this.isDeepPrompt(prompt);
+      let skipClaimGuard = false;
+      // Zwykla rozmowa i tryb rozumowania nie potrzebuja plannera (oszczedza wywolanie LLM).
+      const plan = (needsSearch || isAction) ? await this.runPlanner(prompt) : '';
+      if (plan) { this.memory.appendTranscript(sessionId, 'planner', `Plan: ${plan}`); }
+
+      // KROK 2: Executor wykonuje kroki
+      let executionResult = '';
+      let draftAnswer = '';
+      let usedTools = false;
       const messages: any[] = [
         { role: 'system', content: (this.behaviorRules() + String.fromCharCode(10) + this.capabilities(cwd) + String.fromCharCode(10) + this.readKnowledge()) + String.fromCharCode(10) + 'WAZNE: gdy pytanie dotyczy faktow, kursow, wiadomosci, pogody, przepisow lub czegokolwiek z internetu - NAJPIERW wywolaj odpowiednie narzedzie. Nie odpowiadaj na takie pytania z pamieci.' },
         { role: 'user', content: 'Zadanie: ' + prompt + '\nPlan:\n' + plan },
       ];
 
+      const failedCalls = new Set<string>();
+      const evidence: string[] = [];
       for (let i = 0; i < task.maxIterations; i++) {
         if (i === 0 && this.shouldUseSwarm(prompt, plan)) {
           const parts = this.splitPlan(plan, Number(String(process.env.OMNI_SWARM_WORKERS || '3')));
@@ -484,7 +584,18 @@ export class SwarmManager {
           }
         }
 
-        task.iterations = i + 1;        if (i === 0 && !needsSearch && !isAction) {
+        task.iterations = i + 1;
+        if (i === 0 && deepMode) {
+          this.emit({ kind: 'thinking', text: 'Rozumuje...' });
+          let deepText = '';
+          try { deepText = await this.runDeepThink(prompt); } catch (error) { deepText = ''; }
+          if (deepText && deepText.trim().length > 5) {
+            draftAnswer = deepText;
+            skipClaimGuard = true;
+            break;
+          }
+        }
+        if (i === 0 && !needsSearch && !isAction) {
           this.emit({ kind: 'writing', text: 'Pisze odpowiedz...' });
           const plainFast: any[] = [
             { role: 'system', content: 'Jestes Omni, polski asystent. Odpowiedz krotko i konkretnie po polsku. Nie wywoluj zadnych narzedzi.' },
@@ -543,6 +654,13 @@ export class SwarmManager {
           const name = call.function && call.function.name;
           let args: any = {};
           try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (error) { args = {}; }
+          const callKey = String(name) + '|' + JSON.stringify(args);
+          if (failedCalls.has(callKey)) {
+            // To samo wywolanie juz sie nie powiodlo - nie powtarzamy, kazemy zmienic podejscie.
+            messages.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: to samo wywolanie juz sie nie powiodlo. Zmien podejscie (inne argumenty lub inne narzedzie) albo powiedz uzytkownikowi, czego brakuje.' });
+            continue;
+          }
+          const label = String(name) + ' ' + JSON.stringify(args).slice(0, 200);
           try {
             console.log('[Swarm] Wykonuje narzedzie: ' + name);
             this.emit({ kind: 'tool', text: name });
@@ -550,8 +668,11 @@ export class SwarmManager {
             const text = typeof output === 'string' ? output : JSON.stringify(output);
             executionResult += text;
             messages.push({ role: 'tool', tool_call_id: call.id, content: text.slice(0, 8000) });
+            evidence.push(label + ' => ' + text.slice(0, 6000));
             this.memory.appendTranscript(sessionId, 'tool', name + ': ' + text.slice(0, 400));
           } catch (error: any) {
+            failedCalls.add(callKey);
+            evidence.push(label + ' => BLAD: ' + error.message);
             messages.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + error.message });
           }
         }
@@ -563,10 +684,18 @@ export class SwarmManager {
           { role: 'system', content: (this.capabilities(cwd) + String.fromCharCode(10) + this.readKnowledge()) },
           { role: 'user', content: 'Zadanie: ' + prompt },
         ];
-        for (const m of messages) {
-          if (m.role === 'tool') { plain.push({ role: 'user', content: 'Wynik narzedzia: ' + String(m.content || '').slice(0, 6000) }); }
+        if (plan && plan.length < 1200) { plain.push({ role: 'user', content: 'Plan zadania:' + String.fromCharCode(10) + plan }); }
+        if (evidence.length) {
+          for (const ev of evidence) { plain.push({ role: 'user', content: 'Wynik narzedzia: ' + ev }); }
+        } else {
+          let anyTool = false;
+          for (const m of messages) {
+            if (m.role === 'tool') { anyTool = true; plain.push({ role: 'user', content: 'Wynik narzedzia: ' + String(m.content || '').slice(0, 6000) }); }
+          }
+          // Roj botow i tekstowe wywolania narzedzi zapisuja wyniki tylko w executionResult.
+          if (!anyTool && executionResult.trim()) { plain.push({ role: 'user', content: 'Wyniki wykonanych dzialan:' + String.fromCharCode(10) + executionResult.slice(0, 8000) }); }
         }
-        plain.push({ role: 'user', content: 'Napisz teraz konkretna odpowiedz dla uzytkownika po polsku. Nie wywoluj narzedzi.' });
+        plain.push({ role: 'user', content: 'Napisz teraz konkretna odpowiedz dla uzytkownika po polsku. Nie wywoluj narzedzi. Opieraj sie wylacznie na wynikach powyzej; czego nie udalo sie sprawdzic, powiedz wprost.' });
         let streamed = '';
         try {
           const provider: any = this.executor;
@@ -634,7 +763,7 @@ export class SwarmManager {
         const runningWords = ['dziala w tle', 'dziala niezaleznie', 'nasluchuje', 'dziala na porcie', 'dostepny pod', 'przetrwa', 'serwer dziala', 'uruchomiony w tle'];
         let runningClaim = false;
         for (const rw of runningWords) { if (lowerClaim.indexOf(rw) !== -1) { runningClaim = true; break; } }
-        if ((claimed && !usedTools) || runningClaim) {
+        if (!skipClaimGuard && ((claimed && !usedTools) || runningClaim)) {
           console.log('[Swarm] Twierdzenie bez sprawdzenia - wymuszam weryfikacje narzedziami.');
           this.emit({ kind: 'writing', text: 'Sprawdzam to narzedziami...' });
           const nl3 = String.fromCharCode(10);
@@ -669,7 +798,10 @@ export class SwarmManager {
         draftAnswer = 'Nie udalo sie uzyskac odpowiedzi od silnika (' + String(process.env.OMNI_LLM_PROVIDER || 'aktywny') + '). Najczestsza przyczyna: klucz API odrzucony albo limit darmowego planu. Sprawdz zakladke Klucze API (jest przycisk Sprawdz klucze) i sprobuj ponownie.';
       }
       // KROK 4: Evolver uczy sie z zadania (opcjonalny - blad nie moze zepsuc odpowiedzi)
-      try { await this.runEvolver(prompt, executionResult); } catch (error) { }
+      // Evolver tylko po zadaniach z narzedziami (zwykla rozmowa tworzyla smieciowe notatki i zjadala limit tokenow).
+      if (usedTools || String(process.env.OMNI_EVOLVE || '').trim() === 'always') {
+        try { await this.runEvolver(prompt, executionResult); } catch (error) { }
+      }
 
       task.status = 'completed';
       // Odpowiedź wykonawcy jest ważniejsza niż marudzenie reviewera.
@@ -711,7 +843,7 @@ export class SwarmManager {
   private async runPlanner(prompt: string): Promise<string> {
     const cwd = this.workspaceCwd;
     const messages = [
-      { role: 'system' as const, content: 'Jestes Plannerem. Rozbij zadanie uzytkownika na maksymalnie 4 proste kroki. Odpowiedz zwyklym tekstem. Nie wywoluj zadnych narzedzi. Katalog roboczy: ' + cwd + '.' },
+      { role: 'system' as const, content: 'Jestes Plannerem. Rozbij zadanie uzytkownika na maksymalnie 4 proste, konkretne kroki, kazdy w osobnym wierszu, od najwazniejszego do ostatniego. Odpowiedz zwyklym tekstem. Nie wywoluj zadnych narzedzi. Katalog roboczy: ' + cwd + '.' + (this.readUserProfile(600) ? (String.fromCharCode(10) + 'Kontekst o uzytkowniku:' + String.fromCharCode(10) + this.readUserProfile(600)) : '') },
       { role: 'user' as const, content: prompt }
     ];
     try {
