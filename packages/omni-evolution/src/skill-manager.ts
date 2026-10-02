@@ -202,17 +202,66 @@ export class SkillManager {
   /**
    * Znajduje najlepsze skills dla danego zadania.
    */
+  /** Tokenizacja: male litery, bez diakrytykow, po znakach niealfanumerycznych. */
+  private tokenize(text: string): string[] {
+    const map: Record<string, string> = { 'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z' };
+    const low = String(text || '').toLowerCase().replace(/[ąćęłńóśźż]/g, (c) => map[c] || c);
+    return low.split(/[^a-z0-9]+/).filter((t) => t.length > 1);
+  }
+
+  /** BM25 po tresci skilli (zamiast prostego includes + successRate). */
   public findRelevantSkills(taskDescription: string, limit: number = 3): Skill[] {
-    const skills = this.findSkills(taskDescription);
-    
-    // Sortuj według success rate i usage count
-    return skills
-      .sort((a, b) => {
-        const scoreA = a.successRate * Math.log(a.usageCount + 1);
-        const scoreB = b.successRate * Math.log(b.usageCount + 1);
-        return scoreB - scoreA;
-      })
-      .slice(0, limit);
+    const skills = this.getAllSkills();
+    if (!skills.length) { return []; }
+    const docs = skills.map((s) => this.tokenize(s.name + ' ' + s.description + ' ' + s.tags.join(' ') + ' ' + s.content));
+    const N = docs.length;
+    const avgLen = (docs.reduce((a, d) => a + d.length, 0) / N) || 1;
+    const df: Record<string, number> = {};
+    for (const d of docs) {
+      const seen: Record<string, boolean> = {};
+      for (const t of d) { if (!seen[t]) { seen[t] = true; df[t] = (df[t] || 0) + 1; } }
+    }
+    const k1 = 1.5;
+    const b = 0.75;
+    const q = this.tokenize(taskDescription);
+    const scored = skills.map((skill, i) => {
+      const d = docs[i];
+      const tf: Record<string, number> = {};
+      for (const t of d) { tf[t] = (tf[t] || 0) + 1; }
+      let score = 0;
+      for (const term of q) {
+        const f = tf[term] || 0;
+        if (!f) { continue; }
+        const idf = Math.log(1 + (N - (df[term] || 0) + 0.5) / ((df[term] || 0) + 0.5));
+        score += idf * (f * (k1 + 1)) / (f + k1 * (1 - b + b * (d.length / avgLen)));
+      }
+      score = score * (0.7 + 0.3 * (Number(skill.successRate) || 1));
+      return { skill, score };
+    });
+    scored.sort((a, b2) => b2.score - a.score);
+    const hit = scored.filter((x) => x.score > 0).map((x) => x.skill);
+    const pool = hit.length ? hit : scored.map((x) => x.skill);
+    return pool.slice(0, limit);
+  }
+
+  /** Prompt do reranku (mini-model wybiera najlepszych kandydatow z puli BM25). */
+  public buildRerankPrompt(taskDescription: string, candidates: Skill[]): string {
+    const lines = candidates.map((s, i) => (i + 1) + '. ' + s.name + ' - ' + String(s.description || '').slice(0, 120));
+    return 'Zadanie: ' + taskDescription + String.fromCharCode(10) + 'Kandydaci:' + String.fromCharCode(10) + lines.join(String.fromCharCode(10)) + String.fromCharCode(10) + 'Zwroc WYLACZNIE numery najlepiej pasujacych (np. 2,5) albo 0 gdy zaden nie pasuje.';
+  }
+
+  /** Rerank: BM25 top-K -> mini-model wskazuje najlepsze. Bez modelu zwraca BM25. */
+  public async findRelevantSkillsReranked(taskDescription: string, limit: number, reranker?: (prompt: string) => Promise<string>): Promise<Skill[]> {
+    const pool = this.findRelevantSkills(taskDescription, Math.max(limit * 3, 6));
+    if (!reranker || pool.length <= limit) { return pool.slice(0, limit); }
+    try {
+      const out = await reranker(this.buildRerankPrompt(taskDescription, pool));
+      const nums = String(out || '').match(/[0-9]+/g) || [];
+      const picked: Skill[] = [];
+      for (const n of nums) { const idx = parseInt(n, 10) - 1; if (idx >= 0 && idx < pool.length && picked.indexOf(pool[idx]) === -1) { picked.push(pool[idx]); } if (picked.length >= limit) { break; } }
+      if (picked.length) { return picked; }
+      return pool.slice(0, limit);
+    } catch (error) { return pool.slice(0, limit); }
   }
 
   /**
