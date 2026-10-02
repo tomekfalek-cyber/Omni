@@ -85,6 +85,9 @@ export class SwarmManager {
       '11. Formatuj czytelnie (naglowki, listy). Bez lania wody.',
       '12. Serwery i dlugo dzialajace procesy uruchamiaj ODLACZONE: setsid nohup node /sciezka/serwer.js > /home/openclaw/serwer.log 2>&1 &  - inaczej zginą razem z powloka narzedzia.',
       '13. Nie mow, ze cos dziala, dopoki tego nie sprawdziles komenda (np. curl -sS -m 5 http://127.0.0.1:PORT/). Nieudane sprawdzenie - powiedz o tym wprost.',
+      '14. ZLOZONE ZADANIE ROZBIJ NA KROKI i wykonuj po kolei. Po kazdym kroku sprawdz wynik, zanim przejdziesz dalej.',
+      '15. GDY NARZEDZIE ZWROCI BLAD - nie poddawaj sie. Przeanalizuj blad, zmien podejscie i sprobuj ponownie (do 3 razy). Dopiero po 3 nieudanych probach powiedz, ze sie nie udalo - i wyjasnij, co probowales.',
+      '16. MYSL KROK PO KROKU: najpierw ustal, JAK sprawdzisz sukces, potem dzialaj, na koncu sprawdz. Nie zgaduj - sprawdzaj. To jest twoja najwazniejsza zasada.',
     ].join(nl);
   }
   /** Sklada polskie znaki do ASCII (do dopasowywania slow kluczowych). */
@@ -437,7 +440,7 @@ export class SwarmManager {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       iterations: 0,
-      maxIterations: Number(process.env.OMNI_MAX_ITERATIONS ?? 5),
+      maxIterations: Number(process.env.OMNI_MAX_ITERATIONS ?? 12),
       currentAgent: 'planner',
     };
 
