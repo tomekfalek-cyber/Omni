@@ -690,6 +690,7 @@ export class SwarmManager {
       let usedTools = false;
       let forceContinue = 0;
       let noProgress = 0;
+      let fastAnswered = false;
       const execNames: string[] = [];
       const toolSchemas = this.toolSchemas();
       const lowerPrompt = String(prompt).toLowerCase();
@@ -747,6 +748,7 @@ export class SwarmManager {
           }
           const cleanedFast = this.stripMarkers(streamedFast);
           if (cleanedFast) { draftAnswer = cleanedFast; }
+          fastAnswered = true;
           break;
         }
 
@@ -919,7 +921,7 @@ export class SwarmManager {
         console.log('[Swarm] Straz weryfikacji nieudana: ' + error.message);
       }
       // TOP4: obowiazkowy self-critique (Krytyk) przed oddaniem odpowiedzi.
-      if (draftAnswer && String(draftAnswer).trim().length > 20) {
+      if (!fastAnswered && draftAnswer && String(draftAnswer).trim().length > 20) {
         try {
           const crit = await this.executor.getCompletion([
             { role: 'system', content: ((this as any).useCoder ? 'Jestes takze Testerem: sprawdz kod pod katem bledow i uruchom test; jesli kod nie byl uruchomiony, zaznacz to wprost. ' : '') + 'Jestes SUROWYM Krytykiem faktow. Usun lub popraw KAZDE twierdzenie bez pokrycia w wynikach narzedzi. Nie dodawaj nic od siebie i nie chwal. Zwroc WYLACZNIE poprawiona odpowiedz po polsku.' },
@@ -934,13 +936,13 @@ export class SwarmManager {
         draftAnswer = 'Nie udalo sie uzyskac odpowiedzi od silnika (' + String(process.env.OMNI_LLM_PROVIDER || 'aktywny') + '). Najczestsza przyczyna: klucz API odrzucony albo limit darmowego planu. Sprawdz zakladke Klucze API (jest przycisk Sprawdz klucze) i sprobuj ponownie.';
       }
       // KROK 4: Evolver uczy sie z zadania (opcjonalny - blad nie moze zepsuc odpowiedzi)
-      try { await this.runEvolver(prompt, executionResult); } catch (error) { }
+      if (!fastAnswered) { try { await this.runEvolver(prompt, executionResult); } catch (error) { } }
 
       task.status = 'completed';
       this.memory.appendTranscript(sessionId, 'assistant', String(draftAnswer || '').slice(0, 2000));
       // Odpowiedź wykonawcy jest ważniejsza niż marudzenie reviewera.
       task.result = draftAnswer || executionResult;
-      try { await this.harvestMemory(sessionId, prompt, String(draftAnswer || executionResult || '')); } catch (error) { }
+      if (!fastAnswered) { try { await this.harvestMemory(sessionId, prompt, String(draftAnswer || executionResult || '')); } catch (error) { } }
       this.memory.appendTranscript(sessionId, 'system', `Task completed: ${taskId}`);
     } catch (error: any) {
       task.status = 'failed';
