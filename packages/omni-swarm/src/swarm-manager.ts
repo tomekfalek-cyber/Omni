@@ -332,7 +332,7 @@ export class SwarmManager {
           try {
             const output = await this.tools.executeTool(name, args, cwd);
             const text = typeof output === 'string' ? output : JSON.stringify(output);
-            messages.push({ role: 'tool', tool_call_id: call.id, content: text.slice(0, 8000) });
+            messages.push({ role: 'tool', tool_call_id: call.id, content: this.compressToolOutput(text) });
           } catch (e: any) {
             messages.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + e.message });
           }
@@ -424,6 +424,17 @@ export class SwarmManager {
     if (inMinutes !== undefined) { res.inMinutes = inMinutes; }
     if (at !== undefined) { res.at = at; }
     return res;
+  }
+
+  /** Kompresja dlugich wynikow narzedzi (chroni kontekst bez kosztu tokenow). */
+  private compressToolOutput(text: string, limit: number = 2500): string {
+    const s = String(text || '');
+    if (s.length <= limit) { return s; }
+    const headLen = Math.floor(limit * 0.6);
+    const tailLen = Math.floor(limit * 0.35);
+    const head = s.slice(0, headLen);
+    const tail = s.slice(s.length - tailLen);
+    return head + String.fromCharCode(10) + '[...pominieto ' + String(s.length - headLen - tailLen) + ' znakow...]' + String.fromCharCode(10) + tail;
   }
 
   /** Najtrafniejsze wspomnienia (FTS5 BM25) pod konkretne pytanie. */
@@ -536,6 +547,7 @@ export class SwarmManager {
       let draftAnswer = '';
       let usedTools = false;
       let forceContinue = 0;
+      let noProgress = 0;
       const execNames: string[] = [];
       const toolSchemas = this.toolSchemas();
       const lowerPrompt = String(prompt).toLowerCase();
@@ -554,6 +566,7 @@ export class SwarmManager {
       ];
 
       for (let i = 0; i < task.maxIterations; i++) {
+        const iterStartCount = execNames.length;
         if (i === 0 && this.shouldUseSwarm(prompt, plan)) {
           const parts = this.splitPlan(plan, Number(String(process.env.OMNI_SWARM_WORKERS || '3')));
           if (parts.length >= 2) {
@@ -645,12 +658,14 @@ export class SwarmManager {
             execNames.push(String(name));
             const text = typeof output === 'string' ? output : JSON.stringify(output);
             executionResult += text;
-            messages.push({ role: 'tool', tool_call_id: call.id, content: text.slice(0, 8000) });
+            messages.push({ role: 'tool', tool_call_id: call.id, content: this.compressToolOutput(text) });
             this.memory.appendTranscript(sessionId, 'tool', name + ': ' + text.slice(0, 400));
           } catch (error: any) {
             messages.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + error.message });
           }
         }
+        if (execNames.length === iterStartCount) { noProgress++; } else { noProgress = 0; }
+        if (noProgress >= 2) { console.log('[Swarm] EARLY STOP: brak postepu przez 2 iteracje.'); break; }
       }
 
       if (usedTools || !draftAnswer) {
@@ -660,7 +675,7 @@ export class SwarmManager {
           { role: 'user', content: 'Zadanie: ' + prompt + (hist ? '\n\nPOPRZEDNIE WYMIANY (kontekst rozmowy):\n' + hist : '') },
         ];
         for (const m of messages) {
-          if (m.role === 'tool') { plain.push({ role: 'user', content: 'Wynik narzedzia: ' + String(m.content || '').slice(0, 6000) }); }
+          if (m.role === 'tool') { plain.push({ role: 'user', content: 'Wynik narzedzia: ' + this.compressToolOutput(String(m.content || '')) }); }
         }
         plain.push({ role: 'user', content: 'Napisz teraz konkretna odpowiedz dla uzytkownika po polsku. Nie wywoluj narzedzi.' });
         let streamed = '';
@@ -761,6 +776,18 @@ export class SwarmManager {
       } catch (error: any) {
         console.log('[Swarm] Straz weryfikacji nieudana: ' + error.message);
       }
+      // TOP4: obowiazkowy self-critique (Krytyk) przed oddaniem odpowiedzi.
+      if (draftAnswer && String(draftAnswer).trim().length > 20) {
+        try {
+          const crit = await this.executor.getCompletion([
+            { role: 'system', content: 'Jestes Krytykiem. Sprawdz odpowiedz pod katem zmyslonych lub niepotwierdzonych faktow. Jesli wszystko OK, zwroc ja bez zmian. Jesli cos jest niepotwierdzone, popraw albo usun. Zwroc tylko poprawiona odpowiedz po polsku.' },
+            { role: 'user', content: 'Zadanie: ' + prompt + String.fromCharCode(10) + String.fromCharCode(10) + 'Odpowiedz: ' + String(draftAnswer).slice(0, 3000) },
+          ]);
+          const fixed = this.stripMarkers(crit);
+          if (fixed && fixed.trim().length > 5) { draftAnswer = fixed; }
+        } catch (error) { }
+      }
+
       if (!draftAnswer || !String(draftAnswer).trim()) {
         draftAnswer = 'Nie udalo sie uzyskac odpowiedzi od silnika (' + String(process.env.OMNI_LLM_PROVIDER || 'aktywny') + '). Najczestsza przyczyna: klucz API odrzucony albo limit darmowego planu. Sprawdz zakladke Klucze API (jest przycisk Sprawdz klucze) i sprobuj ponownie.';
       }
