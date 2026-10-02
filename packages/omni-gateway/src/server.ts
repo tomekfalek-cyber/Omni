@@ -297,7 +297,7 @@ export class OmniGateway {
         let key = '';
         try { key = this.config.secrets.getSecret(name) || ''; } catch (e) { key = ''; }
         if (!key || key.length < 10) { return { ok: false, note: 'brak klucza' }; }
-        const cmodel: any = { groq: 'openai/gpt-oss-20b', openrouter: 'nvidia/nemotron-3-super-120b-a12b:free', gemini: 'gemini-flash-latest', deepseek: 'deepseek-chat' };
+        const cmodel: any = { groq: 'openai/gpt-oss-20b', openrouter: 'nvidia/nemotron-3-super-120b-a12b:free', gemini: 'gemini-flash-latest', deepseek: 'deepseek-flash' };
         const chosenModel = (useModel && String(useModel).trim()) || cmodel[id];
         try {
           const ctl = new AbortController();
@@ -327,7 +327,7 @@ export class OmniGateway {
       engineFails[active] = Date.now();
       try { fs.writeFileSync(failsPath, JSON.stringify(engineFails)); } catch (e) { }
       if (Date.now() - Number((this as any).lastEngineSwitch || 0) < 180 * 1000) { console.log('[Silniki] Cooldown przelaczania - pomijam.'); return; }
-      const prefer: any = { groq: 'openai/gpt-oss-120b', openrouter: 'nvidia/nemotron-3-super-120b-a12b:free', gemini: 'gemini-flash-latest', deepseek: 'deepseek-chat' };
+      const prefer: any = { groq: 'openai/gpt-oss-120b', openrouter: 'nvidia/nemotron-3-super-120b-a12b:free', gemini: 'gemini-flash-latest', deepseek: 'deepseek-v4-pro' };
       const order = ['groq', 'gemini', 'openrouter', 'deepseek'];
       for (const id of order) {
         if (id === active) { continue; }
@@ -886,6 +886,8 @@ export class OmniGateway {
         const patch: any = {};
         patch[name] = value;
         await this.config.save({}, patch);
+        this.config.applyToEnv();
+        try { this.swarm.reconfigure(); console.log('[Klucze] Przeladowano silniki po zapisie klucza: ' + name); } catch (e) { }
         this.startTelegram();
         res.json({ ok: true, name: name });
       } catch (error: any) { res.status(500).json({ error: error.message }); }

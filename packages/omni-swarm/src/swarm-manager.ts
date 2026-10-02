@@ -34,7 +34,7 @@ export class SwarmManager {
     this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 4000 });
     this.reviewer = new QwenProvider({ provider, model: modelPro, temperature: 0.1, maxTokens: 2000 });
     this.evolver = new QwenProvider({ provider, model: modelFlash, temperature: 0.8, maxTokens: 3000 });
-    this.coder = new QwenProvider({ provider, model: process.env.OMNI_LLM_MODEL_CODER || modelPro, temperature: 0.2, maxTokens: 4000 });
+    this.coder = new QwenProvider({ provider, model: process.env.OMNI_LLM_MODEL_CODER || modelFlash, temperature: 0.2, maxTokens: 4000 });
     
     this.memory = new OmniMemory();
     this.tools = new ToolRegistry();
@@ -58,7 +58,8 @@ export class SwarmManager {
     this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 1400 });
     this.reviewer = new QwenProvider({ provider, model: modelMini, temperature: 0.1, maxTokens: 400 });
     this.evolver = new QwenProvider({ provider, model: modelMini, temperature: 0.8, maxTokens: 500 });
-    const defaultCoder = provider === 'groq' ? 'openai/gpt-oss-120b' : 'qwen/qwen3.8-27b:free';
+    const coderByProvider: any = { groq: 'openai/gpt-oss-120b', deepseek: 'deepseek-v4-pro', openrouter: 'qwen/qwen3.8-27b:free', gemini: 'gemini-flash-latest' };
+    const defaultCoder = coderByProvider[provider] || modelFlash;
     this.coder = new QwenProvider({ provider, model: process.env.OMNI_LLM_MODEL_CODER || defaultCoder, temperature: 0.2, maxTokens: 4000 });
   }
 
@@ -236,15 +237,17 @@ export class SwarmManager {
   }
 
   private async executorTurn(messages: any[], tools: any[], toolChoice?: string): Promise<{ content: string, toolCalls: any[] }> {
+    let choice = toolChoice;
+    if (choice === 'required' && /thinking|reason|deepseek-v4-pro|deepseek-reasoner/i.test(String(process.env.OMNI_LLM_MODEL || ''))) { choice = 'auto'; }
     const provider: any = ((this as any).useCoder && this.coder) ? this.coder : this.executor;
     if (typeof provider.getCompletionWithTools === 'function') {
       try {
-        return await provider.getCompletionWithTools(messages, tools, toolChoice);
+        return await provider.getCompletionWithTools(messages, tools, choice);
       } catch (error: any) {
         console.log('[Swarm] Proba z tool_choice=' + String(toolChoice) + ' nieudana (' + error.message + ')');
         if (this.onEngineFailure && /429|rate limit|quota|limit token|tokenow|resource_exhausted|exhausted|overload|unavailable|503|401|invalid|authentication|unauthorized/i.test(String(error.message || ''))) { try { this.onEngineFailure(); } catch (e) { } }
         try {
-          if (toolChoice && toolChoice !== 'auto') {
+          if (choice && choice !== 'auto') {
             const nudge = messages.concat([{ role: 'user', content: 'WYWOŁAJ NARZĘDZIE TERAZ. Nie odpowiadaj z pamięci - użyj odpowiedniego narzędzia i podaj wynik z jego działania.' }]);
             return await provider.getCompletionWithTools(nudge, tools, 'auto');
           }
