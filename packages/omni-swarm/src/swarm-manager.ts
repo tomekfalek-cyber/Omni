@@ -385,6 +385,24 @@ export class SwarmManager {
       return fs.readFileSync(file, 'utf8').slice(0, 6000);
     } catch (error) { return 'Blad odczytu skilla.'; }
   }
+  /** Ostatnie wymiany z sesji (ciaglosc rozmowy: "to", "tamten plik"). */
+  private recentHistory(sessionId: string, exchanges: number = 8, maxChars: number = 3000): string {
+    try {
+      const recs: any[] = this.memory.recent(sessionId, exchanges * 2) as any[];
+      const lines: string[] = [];
+      for (const rec of recs) {
+        const role = String((rec && rec.role) || '');
+        if (role !== 'user' && role !== 'assistant') { continue; }
+        const text = String((rec && rec.content) || '').trim();
+        if (!text) { continue; }
+        lines.push((role === 'user' ? 'Uzytkownik: ' : 'Omni: ') + text.slice(0, 600));
+      }
+      let out = lines.join(String.fromCharCode(10));
+      if (out.length > maxChars) { out = out.slice(out.length - maxChars); }
+      return out;
+    } catch (error) { return ''; }
+  }
+
   private readKnowledge(): string {
     const nl = String.fromCharCode(10);
     try {
@@ -445,7 +463,9 @@ export class SwarmManager {
       currentAgent: 'planner',
     };
 
+    const hist = this.recentHistory(sessionId, 8, 3000);
     this.memory.appendTranscript(sessionId, 'system', `Task started: ${prompt}`);
+    this.memory.appendTranscript(sessionId, 'user', String(prompt).slice(0, 1200));
 
     try {
       // KROK 1: Planner dekomponuje zadanie
@@ -472,7 +492,7 @@ export class SwarmManager {
       for (const st of needToolStems) { if (folded.indexOf(st) !== -1) { isAction = true; break; } }
       const messages: any[] = [
         { role: 'system', content: (this.behaviorRules() + String.fromCharCode(10) + this.capabilities(cwd) + String.fromCharCode(10) + this.readKnowledge()) + String.fromCharCode(10) + 'WAZNE: gdy pytanie dotyczy faktow, kursow, wiadomosci, pogody, przepisow lub czegokolwiek z internetu - NAJPIERW wywolaj odpowiednie narzedzie. Nie odpowiadaj na takie pytania z pamieci.' },
-        { role: 'user', content: 'Zadanie: ' + prompt + '\nPlan:\n' + plan },
+        { role: 'user', content: 'Zadanie: ' + prompt + (hist ? '\n\nPOPRZEDNIE WYMIANY (kontekst rozmowy):\n' + hist : '') + '\nPlan:\n' + plan },
       ];
 
       for (let i = 0; i < task.maxIterations; i++) {
@@ -493,7 +513,7 @@ export class SwarmManager {
         task.iterations = i + 1;        if (i === 0 && !needsSearch && !isAction) {
           this.emit({ kind: 'writing', text: 'Pisze odpowiedz...' });
           const plainFast: any[] = [
-            { role: 'system', content: 'Jestes Omni, polski asystent. Odpowiedz krotko i konkretnie po polsku. Nie wywoluj zadnych narzedzi.' },
+            { role: 'system', content: 'Jestes Omni, polski asystent. Odpowiedz krotko i konkretnie po polsku. Nie wywoluj zadnych narzedzi.' + (hist ? '\n\nPOPRZEDNIE WYMIANY (kontekst rozmowy):\n' + hist : '') },
             { role: 'user', content: String(prompt) },
           ];
           let streamedFast = '';
@@ -539,7 +559,9 @@ export class SwarmManager {
             continue;
           }
           const cleaned = this.stripMarkers(response.content);
-          const needDoing = ['skrypt','plik','kod','program','uruchom','utworz','napisz','zainstaluj','commit','zbuduj','stworz','aplikacj','projekt','refaktor','zaimplementuj'].some((k) => folded.indexOf(k) !== -1);
+          const actionVerbs = ['napisz','utworz','stworz','zbuduj','zrob ','przygotuj','zaimplementuj','zainstaluj','uruchom','zapisz','skonfiguruj','dodaj','zrefaktoruj'];
+          const actionNouns = ['skrypt','plik','kod','program','aplikacj','serwer','stron','folder','modul'];
+          const needDoing = actionVerbs.some((k) => folded.indexOf(k) !== -1) && actionNouns.some((k) => folded.indexOf(k) !== -1);
           if (needDoing && forceContinue < 3 && (!usedTools || (execNames.indexOf('file_write') === -1 && execNames.indexOf('shell_exec') === -1))) {
             forceContinue++;
             console.log('[Swarm] STRAZ WYKONANIA: wymuszam kontynuacje (' + forceContinue + '/3)');
@@ -577,7 +599,7 @@ export class SwarmManager {
         this.emit({ kind: 'writing', text: 'Pisze odpowiedz...' });
         const plain: any[] = [
           { role: 'system', content: (this.capabilities(cwd) + String.fromCharCode(10) + this.readKnowledge()) },
-          { role: 'user', content: 'Zadanie: ' + prompt },
+          { role: 'user', content: 'Zadanie: ' + prompt + (hist ? '\n\nPOPRZEDNIE WYMIANY (kontekst rozmowy):\n' + hist : '') },
         ];
         for (const m of messages) {
           if (m.role === 'tool') { plain.push({ role: 'user', content: 'Wynik narzedzia: ' + String(m.content || '').slice(0, 6000) }); }
@@ -688,6 +710,7 @@ export class SwarmManager {
       try { await this.runEvolver(prompt, executionResult); } catch (error) { }
 
       task.status = 'completed';
+      this.memory.appendTranscript(sessionId, 'assistant', String(draftAnswer || '').slice(0, 2000));
       // Odpowiedź wykonawcy jest ważniejsza niż marudzenie reviewera.
       task.result = draftAnswer || executionResult;
       this.memory.appendTranscript(sessionId, 'system', `Task completed: ${taskId}`);
