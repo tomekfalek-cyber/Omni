@@ -88,6 +88,7 @@ export class SwarmManager {
       '14. ZLOZONE ZADANIE ROZBIJ NA KROKI i wykonuj po kolei. Po kazdym kroku sprawdz wynik, zanim przejdziesz dalej.',
       '15. GDY NARZEDZIE ZWROCI BLAD - nie poddawaj sie. Przeanalizuj blad, zmien podejscie i sprobuj ponownie (do 3 razy). Dopiero po 3 nieudanych probach powiedz, ze sie nie udalo - i wyjasnij, co probowales.',
       '16. MYSL KROK PO KROKU: najpierw ustal, JAK sprawdzisz sukces, potem dzialaj, na koncu sprawdz. Nie zgaduj - sprawdzaj. To jest twoja najwazniejsza zasada.',
+      '17. MASZ PLAN od planera. Wykonuj kroki planu PO KOLEI narzedziami. Zadanie konczysz DOPIERO po wykonaniu ostatniego kroku planu (weryfikacji). Nie pisz odpowiedzi koncowej przedwczesnie.',
     ].join(nl);
   }
   /** Sklada polskie znaki do ASCII (do dopasowywania slow kluczowych). */
@@ -456,6 +457,8 @@ export class SwarmManager {
       let executionResult = '';
       let draftAnswer = '';
       let usedTools = false;
+      let forceContinue = 0;
+      const execNames: string[] = [];
       const toolSchemas = this.toolSchemas();
       const lowerPrompt = String(prompt).toLowerCase();
       const searchKeys = ['cen', 'kurs', 'koszt', 'ile kosztuje', 'bitcoin', 'btc', 'ethereum', 'krypto', 'walut', 'wymian', 'wiadomosc', 'wydarzen', 'aktualn', 'dzisiaj', 'dzisiejsz', 'pogod', 'prognoz', 'wynik', 'notowan'];
@@ -536,6 +539,15 @@ export class SwarmManager {
             continue;
           }
           const cleaned = this.stripMarkers(response.content);
+          const needDoing = ['skrypt','plik','kod','program','uruchom','utworz','napisz','zainstaluj','commit','zbuduj','stworz','aplikacj','projekt','refaktor','zaimplementuj'].some((k) => folded.indexOf(k) !== -1);
+          if (needDoing && forceContinue < 3 && (!usedTools || (execNames.indexOf('file_write') === -1 && execNames.indexOf('shell_exec') === -1))) {
+            forceContinue++;
+            console.log('[Swarm] STRAZ WYKONANIA: wymuszam kontynuacje (' + forceContinue + '/3)');
+            this.emit({ kind: 'thinking', text: 'Kontynuuje wykonywanie zadania...' });
+            messages.push({ role: 'assistant', content: response.content || '' });
+            messages.push({ role: 'user', content: 'NIE SKONCZYLES ZADANIA. Twoj plan: ' + plan + ' Wykonaj TERAZ kolejny krok planu, uzywajac narzedzi (np. file_write, shell_exec). Nie pisz odpowiedzi koncowej, dopoki nie wykonasz ostatniego kroku planu i nie sprawdzisz wyniku.' });
+            continue;
+          }
           if (cleaned) { draftAnswer = cleaned; }
           break;
         }
@@ -550,6 +562,7 @@ export class SwarmManager {
             console.log('[Swarm] Wykonuje narzedzie: ' + name);
             this.emit({ kind: 'tool', text: name });
             const output = await this.tools.executeTool(name, args, cwd);
+            execNames.push(String(name));
             const text = typeof output === 'string' ? output : JSON.stringify(output);
             executionResult += text;
             messages.push({ role: 'tool', tool_call_id: call.id, content: text.slice(0, 8000) });
@@ -715,7 +728,7 @@ export class SwarmManager {
   private async runPlanner(prompt: string): Promise<string> {
     const cwd = this.workspaceCwd;
     const messages = [
-      { role: 'system' as const, content: 'Jestes Plannerem. Rozbij zadanie uzytkownika na maksymalnie 4 proste kroki. Odpowiedz zwyklym tekstem. Nie wywoluj zadnych narzedzi. Katalog roboczy: ' + cwd + '.' },
+      { role: 'system' as const, content: 'Jestes Plannerem - ekspertem od rozwiazywania problemow. Rozbij zadanie uzytkownika na KONKRETNE kroki wykonywalne narzedziami (file_write, file_read, shell_exec, web_search, web_fetch). Zasady: (1) przy kazdym kroku napisz JAK sprawdzisz, ze sie udal, (2) ostatni krok to ZAWSZE weryfikacja calosci, (3) od 3 do 8 krokow, (4) numeruj tak: 1. czynnosc | sprawdzenie: opis. Odpowiedz zwyklym tekstem. Nie wywoluj zadnych narzedzi. Katalog roboczy: ' + cwd + '.' },
       { role: 'user' as const, content: prompt }
     ];
     try {
