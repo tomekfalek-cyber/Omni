@@ -541,11 +541,11 @@ export class SwarmManager {
       if (fs.existsSync(profPath)) {
         const prof = fs.readFileSync(profPath, 'utf8').slice(-1500);
         if (prof.trim().length > 10) { parts.push('O UZYTKOWNIKU (pamietaj):' + nl + prof); }
+      }
       const sdir = path.join(os.homedir(), '.omni', 'skills');
       if (fs.existsSync(sdir)) {
         const idx = this.listSkills();
         if (idx && idx.indexOf('Brak zapisanych') === -1) { parts.push('TWOJE SKILLE (procedury - uzyj skill_get, gdy zadanie pasuje):' + nl + idx); }
-      }
       }
       return parts.join(nl);
     } catch (error) { return ''; }
