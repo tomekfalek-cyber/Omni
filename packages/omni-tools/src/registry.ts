@@ -39,6 +39,7 @@ export class ToolRegistry {
     // Rejestracja Shell Sandbox
     this.registerTool(shellSandbox.getDefinitions()[0], (args, cwd) => shellSandbox.execute(args, cwd));
     this.registerTool(shellSandbox.getDefinitions()[1], (args: any, cwd: string) => shellSandbox.runCode(args, cwd));
+    this.registerTool(shellSandbox.getDefinitions()[2], (args: any, cwd: string) => shellSandbox.runBackground(args, cwd));
     // Przypomnienia: bot naprawde ustawia je z czatu (ten sam plik, ktory czyta harmonogram)
     const remFile = () => path.join(process.env.HOME || '/home/openclaw', '.omni', 'reminders.json');
     const readRem = () => { try { const f = remFile(); return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : []; } catch (e) { return []; } };

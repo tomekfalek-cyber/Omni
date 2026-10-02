@@ -59,6 +59,14 @@ export class ShellSandbox {
         requiresApproval: false,
         timeoutMs: 25000,
         maxOutputBytes: this.MAX_OUTPUT_BYTES
+      },
+      {
+        name: 'run_background',
+        description: 'Uruchamia dlugotrwaly proces w tle, odlaczony od sesji (np. serwer, aplikacje). Nie czeka na koniec i przezywa zamkniecie czatu. Zwraca PID i sciezke logu. Po uruchomieniu sprawdz komenda, czy naprawde dziala.',
+        parameters: { command: 'string' },
+        requiresApproval: false,
+        timeoutMs: 10000,
+        maxOutputBytes: this.MAX_OUTPUT_BYTES
       }
     ];
   }
@@ -178,6 +186,20 @@ export class ShellSandbox {
         resolve(out.slice(0, this.MAX_OUTPUT_BYTES));
       });
     });
+  }
+
+  /** Uruchamia dlugotrwaly proces ODLCZONY (przezywa koniec sesji). */
+  public async runBackground(args: { command: string }, cwd: string): Promise<string> {
+    const schema = z.object({ command: z.string().min(1).max(2000) });
+    const v = schema.parse(args);
+    this.validateCommand(v.command, true);
+    const { spawn } = await import('child_process');
+    const logFile = path.join(os.homedir(), '.omni', 'bg.log');
+    const fd = await fs.open(logFile, 'a');
+    const child = spawn('setsid', ['bash', '-lc', v.command], { cwd: cwd, detached: true, stdio: ['ignore', fd.fd, fd.fd], env: process.env });
+    child.unref();
+    await fd.close();
+    return 'Uruchomiono w tle (PID ' + String(child.pid) + '). Log: ' + logFile + '. Sprawdz dzialanie komenda (np. curl -sS -m 5 http://127.0.0.1:PORT/).';
   }
 
   private validateCommand(cmd: string, allowNetwork: boolean = false): void {

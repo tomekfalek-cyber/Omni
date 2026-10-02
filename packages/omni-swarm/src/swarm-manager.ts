@@ -403,6 +403,29 @@ export class SwarmManager {
     } catch (error) { return ''; }
   }
 
+  /** Rozpoznaje 'ustaw przypomnienie' w kodzie (bez decyzji modelu). */
+  private tryDirectReminder(prompt: string): { text: string; at?: string; inMinutes?: number } | null {
+    const raw = String(prompt || '');
+    const low = this.foldPl(raw.toLowerCase());
+    if (low.indexOf('przypomn') === -1) { return null; }
+    let inMinutes: number | undefined;
+    let at: string | undefined;
+    let m = low.match(/za\s+(\d+)\s*minut/);
+    if (m) { inMinutes = parseInt(m[1], 10); }
+    if (inMinutes === undefined) { const g = low.match(/za\s+(\d+)\s*godzin/); if (g) { inMinutes = parseInt(g[1], 10) * 60; } }
+    if (inMinutes === undefined && low.indexOf('za godzine') !== -1) { inMinutes = 60; }
+    if (inMinutes === undefined && at === undefined) { const hm = low.match(/o\s+(\d{1,2})[:.](\d{2})/); if (hm) { const d = new Date(); d.setHours(parseInt(hm[1], 10), parseInt(hm[2], 10), 0, 0); if (d.getTime() < Date.now()) { d.setDate(d.getDate() + 1); } at = d.toISOString(); } }
+    if (inMinutes === undefined && at === undefined && low.indexOf('jutro') !== -1) { const jm = low.match(/jutro(?:\s+o\s+)?(\d{1,2})(?:[:.](\d{2}))?/); const d = new Date(); d.setDate(d.getDate() + 1); if (jm) { d.setHours(parseInt(jm[1], 10), jm[2] ? parseInt(jm[2], 10) : 0, 0, 0); } else { d.setHours(9, 0, 0, 0); } at = d.toISOString(); }
+    if (inMinutes === undefined && at === undefined) { return null; }
+    let text = raw;
+    text = text.replace(/przypomnij(?:\s+mi)?/i, '').replace(/ustaw\s+przypomnienie/i, '').replace(/za\s+\d+\s*minut\w*/i, '').replace(/za\s+\d+\s*godzin\w*/i, '').replace(/za\s+godzin\w*/i, '').replace(/jutro/i, '').replace(/o\s+\d{1,2}[:.]\d{2}/i, '').trim();
+    if (!text || text.length < 2) { text = raw; }
+    const res: any = { text };
+    if (inMinutes !== undefined) { res.inMinutes = inMinutes; }
+    if (at !== undefined) { res.at = at; }
+    return res;
+  }
+
   /** Najtrafniejsze wspomnienia (FTS5 BM25) pod konkretne pytanie. */
   private relevantMemory(query: string, limit: number = 3): string {
     try {
@@ -485,6 +508,22 @@ export class SwarmManager {
     const rel = this.relevantMemory(String(prompt), 3);
     this.memory.appendTranscript(sessionId, 'system', `Task started: ${prompt}`);
     this.memory.appendTranscript(sessionId, 'user', String(prompt).slice(0, 1200));
+
+    // Deterministyczne przypomnienia: nie czekamy na decyzje modelu.
+    const directRem = this.tryDirectReminder(prompt);
+    if (directRem) {
+      try {
+        const out = await this.tools.executeTool('reminder_set', directRem, cwd);
+        task.status = 'completed';
+        task.result = String(typeof out === 'string' ? out : JSON.stringify(out));
+        this.memory.appendTranscript(sessionId, 'assistant', task.result);
+      } catch (error: any) {
+        task.status = 'failed';
+        task.error = 'Nie udalo sie ustawic przypomnienia: ' + error.message;
+      }
+      task.updatedAt = Date.now();
+      return task;
+    }
 
     try {
       // KROK 1: Planner dekomponuje zadanie
