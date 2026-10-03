@@ -828,7 +828,11 @@ export class SwarmManager {
           }
         }
 
-        task.iterations = i + 1;        if (i === 0 && !exact && !needsSearch && !isAction) {
+        task.iterations = i + 1;
+        const toolIntentKeys = ['obraz', 'grafika', 'grafik', 'obrazek', 'narysuj', 'rysunek', 'ilustracj', 'zdjec', 'foto', 'logo', 'ikon', 'plakat', 'generuj', 'przypomn', 'przypomni', 'wyslij', 'mail', 'email'];
+        let needsTool = false;
+        for (const tk of toolIntentKeys) { if (String(prompt).toLowerCase().indexOf(tk) !== -1) { needsTool = true; break; } }
+        if (i === 0 && !exact && !needsSearch && !isAction && !needsTool) {
           this.emit({ kind: 'writing', text: 'Pisze odpowiedz...' });
           const plainFast: any[] = [
             { role: 'system', content: 'Jestes Omni, polski asystent. DZISIAJ JEST: ' + new Date().toISOString().slice(0, 10) + ' (nigdy nie podawaj innej daty). Odpowiedz krotko i konkretnie po polsku. Nie wywoluj zadnych narzedzi.' + (hist ? '\n\nPOPRZEDNIE WYMIANY (kontekst rozmowy):\n' + hist : '') },
