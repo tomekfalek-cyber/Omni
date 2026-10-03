@@ -73,6 +73,19 @@ export class SwarmManager {
   }
 
   /** Zasady dzialania - wspolne dla wszystkich sciezek (jak u asystenta OpenClaw). */
+  /** Sciezka do pliku pamieci projektu dla danego katalogu roboczego. */
+  private projectMemoryFile(cwd: string): string {
+    const safe = String(cwd || 'default').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(-60) || 'default';
+    return path.join(os.homedir(), '.omni', 'memory', 'projects', safe + '.md');
+  }
+  /** Czyta pamiec projektu (per katalog roboczy). */
+  private readProjectMemory(cwd: string): string {
+    try {
+      const f = this.projectMemoryFile(cwd);
+      if (!fs.existsSync(f)) { return ''; }
+      return fs.readFileSync(f, 'utf8').slice(-4000);
+    } catch (e) { return ''; }
+  }
   private behaviorRules(): string {
     const nl = String.fromCharCode(10);
     return [
@@ -127,6 +140,32 @@ export class SwarmManager {
       msgs.push({ role: 'user', content: 'Kod nie przeszedl. POPRAW plik(i) narzedziem file_write, uruchom ponownie i pokaz nowy wynik (pierwsza linia "WYNIK: OK" albo "WYNIK: BLAD").' });
     }
     return report;
+  }
+  /** Przeglad seniorski: ocen jakosc kodu i popraw realne problemy, potem uruchom testy. */
+  private async codeReviewLoop(prompt: string, cwd: string): Promise<string> {
+    const NLx = String.fromCharCode(10);
+    const toolSchemas = this.toolSchemas();
+    const msgs: any[] = [
+      { role: 'system', content: 'Jestes SENIOR DEVELOPEREM z 20-letnim doswiadczeniem. Przeczytaj kod w katalogu roboczym (file_list, file_read). Ocen go pod katem: przypadki brzegowe, czytelnosc, nazwy, struktura, bezpieczenstwo, wydajnosc. Jesli znajdziesz REALNE problemy - POPRAW je narzedziem file_write i URUCHOM testy ponownie (shell_exec). Jesli kod jest dobry, odpowiedz dokladnie: "KOD: DOBRY". Nie zmieniaj dzialajacego kodu bez powodu.' },
+      { role: 'user', content: 'Zadanie: ' + prompt + NLx + 'Katalog roboczy: ' + cwd },
+    ];
+    const r1 = await this.executorTurn(msgs, toolSchemas, 'auto');
+    const calls = r1.toolCalls || [];
+    if (!calls.length) { return String(r1.content || ''); }
+    msgs.push({ role: 'assistant', content: r1.content || null, tool_calls: calls });
+    for (const call of calls) {
+      const nm = call.function && call.function.name;
+      let ar: any = {};
+      try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
+      try {
+        const outp = await this.tools.executeTool(nm, ar, cwd);
+        msgs.push({ role: 'tool', tool_call_id: call.id, content: String(typeof outp === 'string' ? outp : JSON.stringify(outp)).slice(0, 6000) });
+      } catch (e: any) {
+        msgs.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + e.message });
+      }
+    }
+    const r2 = await this.executorTurn(msgs, toolSchemas, 'auto');
+    return String(r2.content || r1.content || '');
   }
   /** Sklada polskie znaki do ASCII (do dopasowywania slow kluczowych). */
   private foldPl(s: string): string {
@@ -222,7 +261,7 @@ export class SwarmManager {
         const key = String((args && args.key) || '').trim();
         const val = String((args && args.value) || '').trim();
         if (!key || !val) { throw new Error('Podaj key i value.'); }
-        const f = path.join(os.homedir(), '.omni', 'memory', 'project.md');
+        const f = this.projectMemoryFile((this as any).activeCwd || this.workspaceCwd);
         fs.mkdirSync(path.dirname(f), { recursive: true });
         const line = '- [' + new Date().toISOString().slice(0, 10) + '] ' + key + ': ' + val;
         let prev = '';
@@ -243,7 +282,7 @@ export class SwarmManager {
         maxOutputBytes: 12000,
       },
       execute: async () => {
-        const f = path.join(os.homedir(), '.omni', 'memory', 'project.md');
+        const f = this.projectMemoryFile((this as any).activeCwd || this.workspaceCwd);
         try { return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').slice(-6000) : 'Pamiec projektu jest pusta.'; }
         catch (e) { return 'Blad odczytu pamieci projektu.'; }
       },
@@ -360,6 +399,7 @@ export class SwarmManager {
   /** Czy zadanie jest na tyle zlozone, by uruchomic roj rownoleglych botow. */
   private shouldUseSwarm(prompt: string, plan: string): boolean {
     if (String(process.env.OMNI_SWARM || '').trim() === 'off') { return false; }
+    if ((this as any).useCoder) { return false; }
     const lower = String(prompt || '').toLowerCase();
     const keys = ['zbuduj', 'aplikacj', 'projekt', 'refaktor', 'przygotuj', 'kilka plikow', 'wiele plikow', 'zaimplementuj', 'stworz aplikacje', 'napisz aplikacje'];
     let hit = false;
@@ -658,6 +698,7 @@ export class SwarmManager {
 
   private async executeTaskInner(sessionId: string, prompt: string, cwd: string): Promise<Task> {
     const taskId = uuidv4();
+    (this as any).activeCwd = cwd;
     const trimmedLower = String(prompt).trim().toLowerCase();
     const exact = trimmedLower === '/dokladnie' || trimmedLower.indexOf('/dokladnie ') === 0;
     if (exact) { prompt = String(prompt).trim().slice('/dokladnie'.length).trim(); }
@@ -957,7 +998,10 @@ export class SwarmManager {
           console.log('[Swarm] Petla TDD: test -> poprawka -> retest');
           const tddReport = await this.codeTestFixLoop(prompt, cwd);
           if (tddReport && tddReport.trim().length > 5) { executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'TDD: ' + tddReport; }
-        } catch (error: any) { console.log('[Swarm] Petla TDD nieudana: ' + error.message); }
+          console.log('[Swarm] Przeglad seniorski kodu...');
+          const review = await this.codeReviewLoop(prompt, cwd);
+          if (review && review.trim().length > 5) { executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'PRZEGLAD SENIORA: ' + review; }
+        } catch (error: any) { console.log('[Swarm] Petla TDD/przeglad nieudane: ' + error.message); }
       }
       // TOP4: self-critique (Krytyk) - tylko przy realnym ryzyku (kod albo uzyte narzedzia).
       if (!fastAnswered && draftAnswer && String(draftAnswer).trim().length > 20 && (useCoder || usedTools)) {
@@ -1008,6 +1052,7 @@ export class SwarmManager {
       'Katalog roboczy: ' + cwd + '.',
       'MASZ NARZEDZIA - uzywaj ich zamiast mowic, ze czegos nie potrafisz:',
       tools,
+      (this.readProjectMemory(cwd) ? 'PAMIEC PROJEKTU (ustalenia z wczesniejszych sesji - korzystaj, nie pytaj ponownie):' + NL + this.readProjectMemory(cwd) : 'PAMIEC PROJEKTU: pusta (zapisuj ustalenia narzedziem project_remember)'),
       'MASZ DOSTEP DO INTERNETU (web_search, web_fetch). Mozesz sprawdzac biezace informacje, wiadomosci i strony. NIE twierdz, ze nie wiesz co sie dzialo po 2024 roku - po prostu wyszukaj.',
       'MASZ PAMIEC TRWALA (memory_save, memory_search) - zapisuj wazne ustalenia i preferencje uzytkownika.',
       'MASZ ROZMOWE GLOSOWA: uzytkownik moze mowic zamiast pisac (przycisk z ikona mikrofonu w czacie).',
