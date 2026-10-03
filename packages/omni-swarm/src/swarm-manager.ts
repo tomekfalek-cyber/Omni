@@ -77,27 +77,56 @@ export class SwarmManager {
     const nl = String.fromCharCode(10);
     return [
       'ZASADY DZIALANIA (obowiazuja zawsze):',
-      '1. Badz konkretny. Odpowiadaj po polsku, krotko i rzeczowo, bez wstepow typu swietne pytanie.',
-      '2. Zanim odpowiesz o faktach, plikach, cenach, pogodzie albo stanie czegokolwiek - UZYJ NARZEDZIA i sprawdz. Nie zgaduj.',
-      '3. Przy zadaniach wieloetapowych: najpierw krotko zaplanuj, potem wykonaj, na koncu SPRAWDZ wynik (uruchom test, odczytaj plik, sprawdz kod HTTP).',
-      '4. Nigdy nie mow, ze cos zostalo zrobione, jesli nie masz dowodu (wynik komendy, sciezka pliku, kod HTTP). Brak dowodu = powiedz wprost, czego brakuje.',
-      '5. Jesli narzedzie zawiedzie dwa razy, zmien podejscie i powiedz o tym. Nie powtarzaj tej samej nieudanej proby.',
-      '6. Nie wymyslaj ograniczen, ktorych nie masz: masz internet, pamiec, narzedzia i dzisiejsza date. Jesli czegos nie mozesz - powiedz dokladnie czego i dlaczego.',
-      '7. Praca lokalna jest DOZWOLONA i nie wymaga pytania: zapisuj pliki, uruchamiaj komendy i testy, commituj w lokalnym repo - po prostu to zrob i pokaz wynik. Pytaj TYLKO o dzialania na zewnatrz: wyslanie wiadomosci, publikacja, push do CUDZEGO repozytorium.',
-      '8. Nie uruchamiaj destrukcyjnych komend bez zgody.',
-      '9. Korzystaj z pamieci: najpierw sprawdz, co juz wiesz, potem zapisuj trwale ustalenia.',
-      '10. Koncz zadanie: albo wynik z dowodem, albo konkretna przeszkoda. Nie koncz na samym planie.',
-      '11. Formatuj czytelnie (naglowki, listy). Bez lania wody.',
-      '12. Serwery i dlugo dzialajace procesy uruchamiaj ODLACZONE: setsid nohup node /sciezka/serwer.js > /home/openclaw/serwer.log 2>&1 &  - inaczej zginą razem z powloka narzedzia.',
-      '13. Nie mow, ze cos dziala, dopoki tego nie sprawdziles komenda (np. curl -sS -m 5 http://127.0.0.1:PORT/). Nieudane sprawdzenie - powiedz o tym wprost.',
-      '14. ZLOZONE ZADANIE ROZBIJ NA KROKI i wykonuj po kolei. Po kazdym kroku sprawdz wynik, zanim przejdziesz dalej.',
-      '15. GDY NARZEDZIE ZWROCI BLAD - nie poddawaj sie. Przeanalizuj blad, zmien podejscie i sprobuj ponownie (do 3 razy). Dopiero po 3 nieudanych probach powiedz, ze sie nie udalo - i wyjasnij, co probowales.',
-      '16. MYSL KROK PO KROKU: najpierw ustal, JAK sprawdzisz sukces, potem dzialaj, na koncu sprawdz. Nie zgaduj - sprawdzaj. To jest twoja najwazniejsza zasada.',
-      '17. MASZ PLAN od planera. Wykonuj kroki planu PO KOLEI narzedziami. Zadanie konczysz DOPIERO po wykonaniu ostatniego kroku planu (weryfikacji). Nie pisz odpowiedzi koncowej przedwczesnie.',
-      '18. PEWNOSC: jesli nie masz pewnosci co do faktu, napisz wprost "Nie mam pewnosci" i NAJPIERW sprawdz go narzedziem. Nigdy nie podawaj niepewnego faktu jako pewny.',
-      '19. TDD (kod): przy pisaniu kodu NAJPIERW zaplanuj test, potem napisz kod, potem URUCHOM test i poprawiaj, az przejdzie. Nie koncz bez uruchomienia kodu.',
-      '20. WERYFIKACJA KODU: przed oddaniem odpowiedzi o kodzie uruchom typecheck/lint/test (np. tsc --noEmit, npm test). Jesli nie mozesz - napisz wprost, co sprawdziles, a czego nie.',
+      '1. Badz konkretny: po polsku, krotko, rzeczowo. Bez wstepow typu swietne pytanie.',
+      '2. Zanim odpowiesz o faktach, plikach, cenach, pogodzie albo stanie czegokolwiek - UZYJ NARZEDZIA. Nie zgaduj.',
+      '3. KAZDE twierdzenie o wykonanej pracy musi miec dowod (wynik komendy, sciezka pliku, kod HTTP). Brak dowodu = powiedz wprost, czego brakuje.',
+      '4. MYSL KROK PO KROKU: najpierw ustal, JAK sprawdzisz sukces, potem dzialaj, na koncu sprawdz. To twoja najwazniejsza zasada.',
+      '5. Praca lokalna jest DOZWOLONA bez pytania: zapisuj pliki, uruchamiaj komendy i testy, commituj w lokalnym repo. Pytaj TYLKO o dzialania na zewnatrz (wyslanie wiadomosci, publikacja, push do CUDZEGO repo). Nie uruchamiaj destrukcyjnych komend bez zgody.',
+      '6. GDY NARZEDZIE ZWROCI BLAD: przeanalizuj blad i ZMIEN podejscie. NIGDY nie powtarzaj tej samej nieudanej komendy - po 2 takich samych bledach zmien narzedzie/argument albo powiedz wprost, co blokuje.',
+      '7. Nie zakladaj, ze biblioteki sa zainstalowane. Uzywaj standardowej biblioteki (np. unittest zamiast pytest), a jesli naprawde potrzebujesz pakietu - najpierw sprawdz, czy jest, potem zainstaluj.',
+      '8. MASZ PLAN od planera - wykonuj kroki PO KOLEI narzedziami. Nie pisz odpowiedzi koncowej przedwczesnie.',
+      '9. Kod (TDD): najpierw test, potem kod, potem URUCHOM test i poprawiaj, az przejdzie. Nie koncz bez uruchomienia kodu. Przed oddaniem uruchom sprawdzenie skladni/typow (np. python3 -m py_compile, tsc --noEmit).',
+      '10. Serwery i dlugo dzialajace procesy uruchamiaj ODLACZONE: setsid nohup node /sciezka/serwer.js > /home/openclaw/serwer.log 2>&1 & - inaczej zginą razem z powloka narzedzia.',
+      '11. Nie mow, ze cos dziala, dopoki nie sprawdziles komenda (np. curl -sS -m 5 http://127.0.0.1:PORT/).',
+      '12. Zlozone zadanie rozbij na kroki i po kazdym sprawdz wynik. Koncz albo wynikiem z dowodem, albo konkretna przeszkoda.',
+      '13. Masz internet, pamiec, narzedzia i dzisiejsza date - nie wymyslaj ograniczen. Niepewny fakt najpierw sprawdz narzedziem.',
+      '14. Formatuj czytelnie (naglowki, listy). Bez lania wody.',
     ].join(nl);
+  }
+  /** Petla TDD: uruchom kod/test, a przy bledzie popraw i uruchom ponownie (test -> poprawka -> retest). */
+  private async codeTestFixLoop(prompt: string, cwd: string): Promise<string> {
+    const NLx = String.fromCharCode(10);
+    const toolSchemas = this.toolSchemas();
+    let report = '';
+    const msgs: any[] = [
+      { role: 'system', content: 'Jestes Testerem kodu. URUCHOM wlasnie napisany kod lub test komenda (shell_exec albo run_code). Jesli testu nie ma, napisz krotki test i uruchom go. Zwroc DOKLADNIE: pierwsza linia "WYNIK: OK" albo "WYNIK: BLAD", a potem krotki powod. Wynik MUSI pochodzic z prawdziwego uruchomienia - nie zmyslaj.' },
+      { role: 'user', content: 'Zadanie: ' + prompt + NLx + 'Katalog roboczy: ' + cwd },
+    ];
+    for (let round = 0; round < 2; round++) {
+      const r1 = await this.executorTurn(msgs, toolSchemas, 'auto');
+      const calls = r1.toolCalls || [];
+      if (calls.length) {
+        msgs.push({ role: 'assistant', content: r1.content || null, tool_calls: calls });
+        for (const call of calls) {
+          const nm = call.function && call.function.name;
+          let ar: any = {};
+          try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
+          try {
+            const outp = await this.tools.executeTool(nm, ar, cwd);
+            msgs.push({ role: 'tool', tool_call_id: call.id, content: String(typeof outp === 'string' ? outp : JSON.stringify(outp)).slice(0, 6000) });
+          } catch (e: any) {
+            msgs.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + e.message });
+          }
+        }
+      }
+      const r2 = await this.executorTurn(msgs, toolSchemas, 'auto');
+      report = String(r2.content || '');
+      if (/WYNIK:\s*OK/i.test(report)) { return report; }
+      if (!calls.length) { break; }
+      msgs.push({ role: 'assistant', content: report });
+      msgs.push({ role: 'user', content: 'Kod nie przeszedl. POPRAW plik(i) narzedziem file_write, uruchom ponownie i pokaz nowy wynik (pierwsza linia "WYNIK: OK" albo "WYNIK: BLAD").' });
+    }
+    return report;
   }
   /** Sklada polskie znaki do ASCII (do dopasowywania slow kluczowych). */
   private foldPl(s: string): string {
@@ -636,6 +665,8 @@ export class SwarmManager {
     const codingKeys = ['napisz', 'kod', 'program', 'funkcj', 'klasa', 'implement', 'refaktor', 'debug', 'bug', 'endpoint', 'api', 'test', 'skrypt', 'aplikacj', 'modul', 'komponent', 'typescript', 'javascript', 'python'];
     let useCoder = false;
     for (const ck of codingKeys) { if (foldedTask.indexOf(ck) !== -1) { useCoder = true; break; } }
+    const codeExtras = ['python', 'javascript', 'typescript', 'funkcj', 'metod', 'modul', 'bibliotek', 'algorytm', 'regex', ' sql', 'html', 'css', 'komponent', 'zoptymalizuj', 'napraw', 'debug', 'przetestuj', 'testy', 'blad', 'stworz', 'zbuduj', 'zapytani'];
+    for (const ck of codeExtras) { if (foldedTask.indexOf(ck) !== -1) { useCoder = true; break; } }
     (this as any).useCoder = useCoder;
     const task: Task = {
       id: taskId,
@@ -920,8 +951,16 @@ export class SwarmManager {
       } catch (error: any) {
         console.log('[Swarm] Straz weryfikacji nieudana: ' + error.message);
       }
-      // TOP4: obowiazkowy self-critique (Krytyk) przed oddaniem odpowiedzi.
-      if (!fastAnswered && draftAnswer && String(draftAnswer).trim().length > 20) {
+      // PETLA TDD: przy kodzie uruchom test i poprawiaj, az przejdzie (test -> poprawka -> retest).
+      if (useCoder && usedTools) {
+        try {
+          console.log('[Swarm] Petla TDD: test -> poprawka -> retest');
+          const tddReport = await this.codeTestFixLoop(prompt, cwd);
+          if (tddReport && tddReport.trim().length > 5) { executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'TDD: ' + tddReport; }
+        } catch (error: any) { console.log('[Swarm] Petla TDD nieudana: ' + error.message); }
+      }
+      // TOP4: self-critique (Krytyk) - tylko przy realnym ryzyku (kod albo uzyte narzedzia).
+      if (!fastAnswered && draftAnswer && String(draftAnswer).trim().length > 20 && (useCoder || usedTools)) {
         try {
           const crit = await this.executor.getCompletion([
             { role: 'system', content: ((this as any).useCoder ? 'Jestes takze Testerem: sprawdz kod pod katem bledow i uruchom test; jesli kod nie byl uruchomiony, zaznacz to wprost. ' : '') + 'Jestes SUROWYM Krytykiem faktow. Usun lub popraw KAZDE twierdzenie bez pokrycia w wynikach narzedzi. Nie dodawaj nic od siebie i nie chwal. Zwroc WYLACZNIE poprawiona odpowiedz po polsku.' },
