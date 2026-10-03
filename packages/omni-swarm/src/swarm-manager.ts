@@ -86,6 +86,37 @@ export class SwarmManager {
       return fs.readFileSync(f, 'utf8').slice(-4000);
     } catch (e) { return ''; }
   }
+  /** Zapamietuje male pliki projektu przed zadaniem koderskim (do cofniecia nieudanych zmian). */
+  private snapshotProject(cwd: string): void {
+    try {
+      const files = fs.readdirSync(cwd).filter((n: string) => /\.(py|js|ts|tsx|jsx|json|md|txt|sh|html|css|sql|yml|yaml)$/i.test(n));
+      const tmp = path.join(os.homedir(), '.omni', 'backups', Date.now().toString(36));
+      fs.mkdirSync(tmp, { recursive: true });
+      let total = 0; const copied: string[] = [];
+      for (const n of files) {
+        try {
+          const p = path.join(cwd, n);
+          const st = fs.statSync(p);
+          if (!st.isFile() || st.size > 200000) { continue; }
+          total += st.size; if (total > 3000000) { break; }
+          fs.copyFileSync(p, path.join(tmp, n)); copied.push(n);
+        } catch (e) { }
+      }
+      fs.writeFileSync(path.join(tmp, '_meta.json'), JSON.stringify({ cwd, files: copied }));
+      (this as any).codeBackupDir = tmp;
+    } catch (e) { (this as any).codeBackupDir = null; }
+  }
+  /** Przywraca pliki projektu z ostatniego snapshotu (cofa nieudane zmiany). */
+  private restoreProject(): string[] {
+    const tmp = (this as any).codeBackupDir; (this as any).codeBackupDir = null;
+    if (!tmp) { return []; }
+    try {
+      const meta = JSON.parse(fs.readFileSync(path.join(tmp, '_meta.json'), 'utf8'));
+      const restored: string[] = [];
+      for (const n of (meta.files || [])) { try { fs.copyFileSync(path.join(tmp, n), path.join(meta.cwd, n)); restored.push(n); } catch (e) { } }
+      return restored;
+    } catch (e) { return []; }
+  }
   private behaviorRules(): string {
     const nl = String.fromCharCode(10);
     return [
@@ -709,6 +740,7 @@ export class SwarmManager {
     const codeExtras = ['python', 'javascript', 'typescript', 'funkcj', 'metod', 'modul', 'bibliotek', 'algorytm', 'regex', ' sql', 'html', 'css', 'komponent', 'zoptymalizuj', 'napraw', 'debug', 'przetestuj', 'testy', 'blad', 'stworz', 'zbuduj', 'zapytani'];
     for (const ck of codeExtras) { if (foldedTask.indexOf(ck) !== -1) { useCoder = true; break; } }
     (this as any).useCoder = useCoder;
+    if (useCoder) { this.snapshotProject(cwd); }
     const task: Task = {
       id: taskId,
       sessionId,
@@ -999,13 +1031,20 @@ export class SwarmManager {
           console.log('[Swarm] Petla TDD: test -> poprawka -> retest');
           const tddReport = await this.codeTestFixLoop(prompt, cwd);
           if (tddReport && tddReport.trim().length > 5) { executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'TDD: ' + tddReport; }
-          if (!/^PASS_FIRST/.test(tddReport || '')) {
-            this.emit({ kind: 'writing', text: 'Przeglad seniorski kodu...' });
-            console.log('[Swarm] Przeglad seniorski kodu...');
-            const review = await this.codeReviewLoop(prompt, cwd);
-            if (review && review.trim().length > 5) { executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'PRZEGLAD SENIORA: ' + review; }
+          if (/^FAIL/.test(tddReport || '')) {
+            const restored = this.restoreProject();
+            if (restored.length) { executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'WYCOFANO nieudane zmiany w plikach: ' + restored.join(', '); console.log('[Swarm] Wycofano nieudane zmiany: ' + restored.join(', ')); }
+            this.emit({ kind: 'writing', text: 'Testy nie przeszly - wycofano zmiany w plikach.' });
           } else {
-            console.log('[Swarm] Testy przeszly od razu - pomijam przeglad seniora (szybciej).');
+            (this as any).codeBackupDir = null;
+            if (!/^PASS_FIRST/.test(tddReport || '')) {
+              this.emit({ kind: 'writing', text: 'Przeglad seniorski kodu...' });
+              console.log('[Swarm] Przeglad seniorski kodu...');
+              const review = await this.codeReviewLoop(prompt, cwd);
+              if (review && review.trim().length > 5) { executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'PRZEGLAD SENIORA: ' + review; }
+            } else {
+              console.log('[Swarm] Testy przeszly od razu - pomijam przeglad seniora (szybciej).');
+            }
           }
         } catch (error: any) { console.log('[Swarm] Petla TDD/przeglad nieudane: ' + error.message); }
       }
@@ -1098,7 +1137,7 @@ export class SwarmManager {
   private async runPlanner(prompt: string, exact: boolean = false): Promise<string> {
     const cwd = this.workspaceCwd;
     const messages = [
-      { role: 'system' as const, content: ((this as any).useCoder ? 'Jestes takze Architektem: przed krokami ustal strukture plikow i modulow oraz interfejsy. ' : '') + 'Jestes WYLACZNIE Plannerem: nie wykonujesz krokow i nie odpowiadasz uzytkownikowi, tylko planujesz. Zwroc plan WYLACZNIE jako JSON (bez komentarzy): {"steps":[{"id":1,"opis":"...","sprawdzenie":"...","zalezy_od":[]}]}. Zasady: kazdy krok to jedna czynnosc wykonywalna narzedziem (file_write, file_read, shell_exec, web_search, web_fetch); pole sprawdzenie mowi jak potwierdzisz sukces; ostatni krok to weryfikacja calosci; od 3 do ' + (exact ? 10 : 8) + ' krokow; zalezy_od to lista id krokow wykonanych wczesniej. Nie wywoluj narzedzi. Jesli zadanie jest koderskie (pisanie/refaktor kodu), uwzglednij krok testu (napisz test albo uruchom istniejace testy) oraz krok weryfikacji (typecheck/lint). Katalog roboczy: ' + cwd + '.' },
+      { role: 'system' as const, content: ((this as any).useCoder ? 'Jestes takze Architektem: zaplanuj KOLEJNOSC plikow wg zaleznosci - najpierw moduly bez zaleznosci, potem te, ktore je importuja; w kazdym kroku podaj plik i od czego zalezy. ' : '') + 'Jestes WYLACZNIE Plannerem: nie wykonujesz krokow i nie odpowiadasz uzytkownikowi, tylko planujesz. Zwroc plan WYLACZNIE jako JSON (bez komentarzy): {"steps":[{"id":1,"opis":"...","sprawdzenie":"...","zalezy_od":[]}]}. Zasady: kazdy krok to jedna czynnosc wykonywalna narzedziem (file_write, file_read, shell_exec, web_search, web_fetch); pole sprawdzenie mowi jak potwierdzisz sukces; ostatni krok to weryfikacja calosci; od 3 do ' + (exact ? 10 : 8) + ' krokow; zalezy_od to lista id krokow wykonanych wczesniej. Nie wywoluj narzedzi. Jesli zadanie jest koderskie (pisanie/refaktor kodu), uwzglednij krok testu (napisz test albo uruchom istniejace testy) oraz krok weryfikacji (typecheck/lint). Katalog roboczy: ' + cwd + '.' },
       { role: 'user' as const, content: prompt }
     ];
     try {
