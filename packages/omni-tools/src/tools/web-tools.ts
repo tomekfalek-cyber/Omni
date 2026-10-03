@@ -204,15 +204,25 @@ export class WebTools {
   public async image(args: { prompt: string }): Promise<string> {
     const prompt = String((args && args.prompt) || '').trim();
     if (!prompt) { throw new Error('Podaj opis obrazka.'); }
-    const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=1024&height=1024&nologo=true';
-    const res = await fetch(url, { headers: { 'User-Agent': 'OmniBot/1.2' } });
-    if (!res.ok) { throw new Error('Generator obrazow zwrocil blad ' + res.status); }
-    const buf = Buffer.from(await res.arrayBuffer());
     const dir = path.join(os.homedir(), '.omni', 'images');
     fs.mkdirSync(dir, { recursive: true });
-    const name = 'img_' + Date.now() + '.jpg';
-    fs.writeFileSync(path.join(dir, name), buf);
-    return 'Wygenerowalem obrazek. Wpisz w odpowiedzi dokladnie: /image/' + name + ' - panel wyswietli go uzytkownikowi.';
+    const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36';
+    let lastErr = '';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const seed = Math.floor(Math.random() * 1000000);
+        const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=1024&height=1024&nologo=true&seed=' + seed;
+        const res = await fetch(url, { headers: { 'User-Agent': UA } });
+        if (!res.ok) { lastErr = 'HTTP ' + res.status; await new Promise((r) => setTimeout(r, 1500)); continue; }
+        const buf = Buffer.from(await res.arrayBuffer());
+        const ct = String(res.headers.get('content-type') || '');
+        if (buf.length < 1000 || ct.indexOf('image') === -1) { lastErr = 'puste/nieobraz (' + buf.length + ' B, ' + ct + ')'; await new Promise((r) => setTimeout(r, 1500)); continue; }
+        const name = 'img_' + Date.now() + '.jpg';
+        fs.writeFileSync(path.join(dir, name), buf);
+        return 'Wygenerowalem obrazek. Wpisz w odpowiedzi dokladnie: /image/' + name + ' - panel wyswietli go uzytkownikowi.';
+      } catch (e: any) { lastErr = e.message; await new Promise((r) => setTimeout(r, 1500)); }
+    }
+    throw new Error('Generator obrazow nie odpowiedzial poprawnie (' + lastErr + '). Darmowy plan Pollinations bywa chwilowo niedostepny - sprobuj ponownie za chwile.');
   }
 
   public imagesDir(): string { return path.join(os.homedir(), '.omni', 'images'); }
