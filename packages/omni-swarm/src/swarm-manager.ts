@@ -134,12 +134,12 @@ export class SwarmManager {
       }
       const r2 = await this.executorTurn(msgs, toolSchemas, 'auto');
       report = String(r2.content || '');
-      if (/WYNIK:\s*OK/i.test(report)) { return report; }
+      if (/WYNIK:\s*OK/i.test(report)) { return (round === 0 ? 'PASS_FIRST' : 'PASS_AFTER_FIX') + String.fromCharCode(10) + report; }
       if (!calls.length) { break; }
       msgs.push({ role: 'assistant', content: report });
       msgs.push({ role: 'user', content: 'Kod nie przeszedl. POPRAW plik(i) narzedziem file_write, uruchom ponownie i pokaz nowy wynik (pierwsza linia "WYNIK: OK" albo "WYNIK: BLAD").' });
     }
-    return report;
+    return 'FAIL' + String.fromCharCode(10) + report;
   }
   /** Przeglad seniorski: ocen jakosc kodu i popraw realne problemy, potem uruchom testy. */
   private async codeReviewLoop(prompt: string, cwd: string): Promise<string> {
@@ -717,7 +717,7 @@ export class SwarmManager {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       iterations: 0,
-      maxIterations: exact ? 20 : Number(process.env.OMNI_MAX_ITERATIONS ?? 12),
+      maxIterations: exact ? 20 : (useCoder ? (String(prompt).length > 300 ? Number(process.env.OMNI_MAX_ITERATIONS ?? 12) : 7) : Number(process.env.OMNI_MAX_ITERATIONS ?? 12)),
       currentAgent: 'planner',
     };
 
@@ -995,12 +995,18 @@ export class SwarmManager {
       // PETLA TDD: przy kodzie uruchom test i poprawiaj, az przejdzie (test -> poprawka -> retest).
       if (useCoder && usedTools) {
         try {
+          this.emit({ kind: 'writing', text: 'Uruchamiam testy (TDD)...' });
           console.log('[Swarm] Petla TDD: test -> poprawka -> retest');
           const tddReport = await this.codeTestFixLoop(prompt, cwd);
           if (tddReport && tddReport.trim().length > 5) { executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'TDD: ' + tddReport; }
-          console.log('[Swarm] Przeglad seniorski kodu...');
-          const review = await this.codeReviewLoop(prompt, cwd);
-          if (review && review.trim().length > 5) { executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'PRZEGLAD SENIORA: ' + review; }
+          if (!/^PASS_FIRST/.test(tddReport || '')) {
+            this.emit({ kind: 'writing', text: 'Przeglad seniorski kodu...' });
+            console.log('[Swarm] Przeglad seniorski kodu...');
+            const review = await this.codeReviewLoop(prompt, cwd);
+            if (review && review.trim().length > 5) { executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'PRZEGLAD SENIORA: ' + review; }
+          } else {
+            console.log('[Swarm] Testy przeszly od razu - pomijam przeglad seniora (szybciej).');
+          }
         } catch (error: any) { console.log('[Swarm] Petla TDD/przeglad nieudane: ' + error.message); }
       }
       // TOP4: self-critique (Krytyk) - tylko przy realnym ryzyku (kod albo uzyte narzedzia).
