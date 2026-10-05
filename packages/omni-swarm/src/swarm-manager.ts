@@ -57,8 +57,8 @@ export class SwarmManager {
     const strongModel = process.env.OMNI_LLM_MODEL_PLAN || process.env.OMNI_LLM_MODEL_CODER || ({ groq: 'openai/gpt-oss-120b', deepseek: 'deepseek-v4-pro', openrouter: 'qwen/qwen3.8-27b:free', gemini: 'gemini-flash-latest' } as any)[provider] || modelFlash;
     this.planner = new QwenProvider({ provider, model: strongModel, temperature: 0.4, maxTokens: 1400 });
     this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 1400 });
-    this.reviewer = new QwenProvider({ provider, model: modelMini, temperature: 0.1, maxTokens: 400 });
-    this.evolver = new QwenProvider({ provider, model: modelMini, temperature: 0.8, maxTokens: 500 });
+    this.reviewer = new QwenProvider({ provider, model: strongModel, temperature: 0.1, maxTokens: 1200 });
+    this.evolver = new QwenProvider({ provider, model: strongModel, temperature: 0.6, maxTokens: 900 });
     const coderByProvider: any = { groq: 'openai/gpt-oss-120b', deepseek: 'deepseek-v4-pro', openrouter: 'qwen/qwen3.8-27b:free', gemini: 'gemini-flash-latest' };
     const defaultCoder = coderByProvider[provider] || modelFlash;
     this.coder = new QwenProvider({ provider, model: process.env.OMNI_LLM_MODEL_CODER || defaultCoder, temperature: 0.2, maxTokens: 4000 });
@@ -145,6 +145,7 @@ export class SwarmManager {
       '13. Masz internet, pamiec, narzedzia i dzisiejsza date - nie wymyslaj ograniczen. Niepewny fakt najpierw sprawdz narzedziem.',
       '14. Formatuj czytelnie (naglowki, listy). Bez lania wody.',
       '15. ZMIANY SYSTEMOWE: zanim zmienisz konfiguracje/usluge/plik systemowy - NAJPIERW sprawdz obecny stan (odczyt), zrob kopie, zaplanuj, zmien, a potem SPRAWDZ dzialanie (curl/ps/log/hash). Nigdy nie nadpisuj konfiguracji bez kopii.',
+      '16. WYBIERAJ WLASCIWE NARZEDZIE: procesy -> proc_inspect, porty -> net_summary, logi -> log_tail, hash pliku -> file_hash, mapa kodu -> code_map, Jira -> jira_*. NIE uzywaj shell_exec, gdy istnieje dedykowane narzedzie.',
     ].join(nl);
   }
   /** Petla TDD: uruchom kod/test, a przy bledzie popraw i uruchom ponownie (test -> poprawka -> retest). */
