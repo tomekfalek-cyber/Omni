@@ -1080,7 +1080,7 @@ export class SwarmManager {
         for (const m of messages) {
           if (m.role === 'tool') { plain.push({ role: 'user', content: 'Wynik narzedzia: ' + this.compressToolOutput(String(m.content || '')) }); }
         }
-        plain.push({ role: 'user', content: 'Napisz teraz konkretna odpowiedz dla uzytkownika po polsku. Nie wywoluj narzedzi.' });
+        plain.push({ role: 'user', content: 'Napisz teraz konkretna odpowiedz dla uzytkownika po polsku, NA PODSTAWIE WYNIKOW NARZEDZI powyzej. Jesli czegos nie udalo sie wykonac - powiedz to wprost i podaj konkretna blokade.' });
         let streamed = '';
         try {
           const provider: any = (((this as any).useCoder || (this as any).useStrong) && this.coder) ? this.coder : this.executor;
@@ -1211,7 +1211,25 @@ export class SwarmManager {
             { role: 'user', content: 'ZADANIE: ' + prompt + String.fromCharCode(10) + String.fromCharCode(10) + 'ODPOWIEDZ: ' + String(draftAnswer).slice(0, 2000) },
           ]);
           const verdict = String(refl || '').trim();
-          if (/^BRAK/i.test(verdict)) { console.log('[Swarm] Refleksja: ' + verdict.slice(0, 140)); executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'REFLEKSJA (braki): ' + verdict; }
+          if (/^BRAK/i.test(verdict)) {
+            console.log('[Swarm] Refleksja: ' + verdict.slice(0, 140) + ' -> wymuszam dokonczenie');
+            executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'REFLEKSJA (braki): ' + verdict;
+            this.emit({ kind: 'writing', text: 'Dokanczam zadanie...' });
+            for (let round = 0; round < 3; round++) {
+              const cont: any[] = messages.concat([{ role: 'user', content: 'ZADANIE NIE JEST SKONCZONE (refleksja: ' + verdict.slice(0, 200) + '). DOKONCZ je TERAZ narzedziami - nie tlumacz sie i nie koncz samym tekstem. Wykonaj brakujace kroki (file_write/shell_exec) i uruchom testy.' }]);
+              const r2 = await this.executorTurn(cont, toolSchemas, 'auto');
+              const tc = r2.toolCalls || [];
+              if (!tc.length) { const c2 = this.stripMarkers(r2.content); if (c2 && c2.trim().length > 5) { draftAnswer = c2; } break; }
+              cont.push({ role: 'assistant', content: r2.content || null, tool_calls: tc });
+              for (const call of tc) {
+                const nm2 = call.function && call.function.name;
+                let ar2: any = {}; try { ar2 = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar2 = {}; }
+                try { const o = await this.tools.executeTool(nm2, ar2, cwd); const t = typeof o === 'string' ? o : JSON.stringify(o); executionResult += t; cont.push({ role: 'tool', tool_call_id: call.id, content: this.compressToolOutput(t) }); this.memory.appendTranscript(sessionId, 'tool', nm2 + ': ' + t.slice(0, 300)); }
+                catch (e: any) { cont.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + e.message }); }
+              }
+            }
+            console.log('[Swarm] Kontynuacja po refleksji: zakonczona');
+          }
           else { console.log('[Swarm] Refleksja: OK'); }
         } catch (error) { }
       }
