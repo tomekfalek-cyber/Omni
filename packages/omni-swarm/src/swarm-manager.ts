@@ -146,6 +146,7 @@ export class SwarmManager {
       '14. Formatuj czytelnie (naglowki, listy). Bez lania wody.',
       '15. ZMIANY SYSTEMOWE: zanim zmienisz konfiguracje/usluge/plik systemowy - NAJPIERW sprawdz obecny stan (odczyt), zrob kopie, zaplanuj, zmien, a potem SPRAWDZ dzialanie (curl/ps/log/hash). Nigdy nie nadpisuj konfiguracji bez kopii.',
       '16. WYBIERAJ WLASCIWE NARZEDZIE: procesy -> proc_inspect, porty -> net_summary, logi -> log_tail, hash pliku -> file_hash, mapa kodu -> code_map, Jira -> jira_*. NIE uzywaj shell_exec, gdy istnieje dedykowane narzedzie.',
+      '17. DIAGNOZA JAK DETEKTYW: gdy cos zawiedzie (blad komendy/narzedzia) - (1) PRZECZYTAJ dokladnie TRESC bledu, (2) postaw JEDNA hipoteze przyczyny, (3) sprawdz ja jednym odczytem/testem, (4) dopiero potem zmieniaj. Nie naprawiaj po omacku.',
     ].join(nl);
   }
   /** Petla TDD: uruchom kod/test, a przy bledzie popraw i uruchom ponownie (test -> poprawka -> retest). */
@@ -626,9 +627,40 @@ export class SwarmManager {
       }
       let out = lines.join(String.fromCharCode(10));
       if (out.length > maxChars) { out = out.slice(out.length - maxChars); }
+      const sum = this.readSessionSummary(sessionId);
+      if (sum) { out = 'STRESZCZENIE WCZESNIEJSZEJ ROZMOWY:' + String.fromCharCode(10) + sum + String.fromCharCode(10) + String.fromCharCode(10) + 'OSTATNIE WYMIANY:' + String.fromCharCode(10) + out; }
       return out;
     } catch (error) { return ''; }
   }
+  /** Aktualizuje zwiezle streszczenie dlugiej rozmowy (ciaglosc kontekstu). */
+  private async updateSessionSummary(sessionId: string): Promise<void> {
+    try {
+      const recs: any[] = this.memory.recent(sessionId, 200) as any[];
+      const turns = recs.filter((r: any) => r && (r.role === 'user' || r.role === 'assistant') && String(r.content || '').trim());
+      if (turns.length < 12) { return; }
+      const older = turns.slice(0, turns.length - 8);
+      const text = older.map((r: any) => (r.role === 'user' ? 'U: ' : 'O: ') + String(r.content || '').slice(0, 300)).join(String.fromCharCode(10));
+      if (text.length < 400) { return; }
+      const sum = await this.executor.getCompletion([
+        { role: 'system', content: 'Streszczasz rozmowe zwiezle (max 6 punktow): ustalenia, decyzje, wazne fakty o uzytkowniku i projekcie. Bez wstepow, bez powtorzen.' },
+        { role: 'user', content: text.slice(0, 8000) },
+      ]);
+      const s = String(sum || '').trim();
+      if (s.length < 20) { return; }
+      const dir = path.join(os.homedir(), '.omni', 'summaries');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, sessionId.replace(/[^a-zA-Z0-9_-]/g, '_') + '.md'), s.slice(0, 2000), 'utf8');
+      console.log('[Pamiec] Zaktualizowano streszczenie rozmowy (' + s.length + ' znakow)');
+    } catch (error) { }
+  }
+  /** Czyta streszczenie rozmowy (jesli jest). */
+  private readSessionSummary(sessionId: string): string {
+    try {
+      const f = path.join(os.homedir(), '.omni', 'summaries', sessionId.replace(/[^a-zA-Z0-9_-]/g, '_') + '.md');
+      return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').slice(-1500) : '';
+    } catch (e) { return ''; }
+  }
+
 
   /** Klasyfikuje bledy narzedzi (taksonomia) i zapisuje wzorce. */
   private classifyToolError(msg: string): string {
@@ -1204,6 +1236,7 @@ export class SwarmManager {
       }
       // KROK 4: Evolver uczy sie z zadania (opcjonalny - blad nie moze zepsuc odpowiedzi)
       if (!fastAnswered) { try { await this.runEvolver(prompt, executionResult); } catch (error) { } }
+      try { await this.updateSessionSummary(sessionId); } catch (error) { }
 
       task.status = 'completed';
       this.memory.appendTranscript(sessionId, 'assistant', String(draftAnswer || '').slice(0, 2000));
