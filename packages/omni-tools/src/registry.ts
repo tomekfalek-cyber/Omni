@@ -7,6 +7,10 @@ import { GitTools } from './tools/git-tools.js';
 import { ShellSandbox } from './tools/shell-sandbox.js';
 import { WebTools } from './tools/web-tools.js';
 import { IntegrationTools } from './tools/integration-tools.js';
+import * as crypto from 'crypto';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+const execFileP = promisify(execFile);
 
 export class ToolRegistry {
   private tools: Map<string, {
@@ -144,6 +148,66 @@ export class ToolRegistry {
     this.registerTool(webTools.getDefinitions()[2], (args) => webTools.crypto(args));
     this.registerTool(webTools.getDefinitions()[3], (args) => webTools.news(args));
     this.registerTool(webTools.getDefinitions()[4], (args) => webTools.image(args));
+
+    // Narzedzia diagnostyczne READ-ONLY (bez zmian w systemie).
+    this.registerTool({
+      name: 'log_tail',
+      description: 'Pokazuje ostatnie linie pliku logu (read-only). Parametry: path (sciezka), lines (ile, max 200).',
+      parameters: { path: 'string', lines: 'number' },
+      requiresApproval: false, timeoutMs: 8000, maxOutputBytes: 20000,
+    }, async (args: any) => {
+      const p = String((args && args.path) || '').trim();
+      if (!p) { throw new Error('Podaj sciezke pliku logu.'); }
+      const n = Math.min(Math.max(1, Number((args && args.lines) || 50)), 200);
+      const st = fs.statSync(p);
+      const start = Math.max(0, st.size - 262144);
+      const fd = fs.openSync(p, 'r');
+      const buf = Buffer.alloc(st.size - start);
+      fs.readSync(fd, buf, 0, buf.length, start);
+      fs.closeSync(fd);
+      const lines = buf.toString('utf8').split(String.fromCharCode(10));
+      return 'Ostatnie ' + n + ' linii z ' + p + ':' + String.fromCharCode(10) + lines.slice(-n).join(String.fromCharCode(10));
+    });
+    this.registerTool({
+      name: 'proc_inspect',
+      description: 'Lista procesow (read-only): PID, CPU%, RAM%, czas, komenda. Parametr: filter (opcjonalny fragment nazwy).',
+      parameters: { filter: 'string' },
+      requiresApproval: false, timeoutMs: 8000, maxOutputBytes: 20000,
+    }, async (args: any) => {
+      const filter = String((args && args.filter) || '').trim();
+      const rr = await execFileP('ps', ['-eo', 'pid,pcpu,pmem,etime,args', '--sort=-pcpu'], { timeout: 6000, maxBuffer: 2000000 });
+      const all = String(rr.stdout).split(String.fromCharCode(10));
+      const rest = all.slice(1).filter((l) => !filter || l.toLowerCase().indexOf(filter.toLowerCase()) !== -1);
+      return 'Procesy' + (filter ? ' (filtr: ' + filter + ')' : '') + ':' + String.fromCharCode(10) + all[0] + String.fromCharCode(10) + rest.slice(0, 40).join(String.fromCharCode(10));
+    });
+    this.registerTool({
+      name: 'net_summary',
+      description: 'Stan sieci i nasluchujacych portow (read-only): ss -tuln lub netstat.',
+      parameters: {},
+      requiresApproval: false, timeoutMs: 8000, maxOutputBytes: 20000,
+    }, async () => {
+      let out = '';
+      try { const rr = await execFileP('ss', ['-tuln'], { timeout: 6000, maxBuffer: 1000000 }); out = String(rr.stdout); }
+      catch (e) { const rr2 = await execFileP('netstat', ['-tuln'], { timeout: 6000, maxBuffer: 1000000 }); out = String(rr2.stdout); }
+      return 'Nasluchujace porty/sockety (read-only):' + String.fromCharCode(10) + out.slice(0, 19000);
+    });
+    this.registerTool({
+      name: 'file_hash',
+      description: 'Liczy SHA-256 pliku (read-only). Parametr: path.',
+      parameters: { path: 'string' },
+      requiresApproval: false, timeoutMs: 15000, maxOutputBytes: 2000,
+    }, async (args: any) => {
+      const p = String((args && args.path) || '').trim();
+      if (!p) { throw new Error('Podaj sciezke pliku.'); }
+      const st = fs.statSync(p);
+      const h = crypto.createHash('sha256');
+      const fd = fs.openSync(p, 'r');
+      const buf = Buffer.alloc(65536);
+      let n = 0;
+      do { n = fs.readSync(fd, buf, 0, buf.length, null); if (n > 0) { h.update(buf.subarray(0, n)); } } while (n > 0);
+      fs.closeSync(fd);
+      return 'SHA-256 ' + p + ' (' + st.size + ' B): ' + h.digest('hex');
+    });
 
     // Integracje: GitHub, Telegram, e-mail, WhatsApp
     const integrations = new IntegrationTools();

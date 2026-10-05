@@ -338,7 +338,7 @@ export class SwarmManager {
   private async executorTurn(messages: any[], tools: any[], toolChoice?: string): Promise<{ content: string, toolCalls: any[] }> {
     let choice = toolChoice;
     if (choice === 'required' && /thinking|reason|deepseek-v4-pro|deepseek-reasoner/i.test(String(process.env.OMNI_LLM_MODEL || ''))) { choice = 'auto'; }
-    const provider: any = ((this as any).useCoder && this.coder) ? this.coder : this.executor;
+    const provider: any = (((this as any).useCoder || (this as any).useStrong) && this.coder) ? this.coder : this.executor;
     if (typeof provider.getCompletionWithTools === 'function') {
       try {
         return await provider.getCompletionWithTools(messages, tools, choice);
@@ -739,6 +739,9 @@ export class SwarmManager {
     for (const ck of codingKeys) { if (foldedTask.indexOf(ck) !== -1) { useCoder = true; break; } }
     const codeExtras = ['python', 'javascript', 'typescript', 'funkcj', 'metod', 'modul', 'bibliotek', 'algorytm', 'regex', ' sql', 'html', 'css', 'komponent', 'zoptymalizuj', 'napraw', 'debug', 'przetestuj', 'testy', 'blad', 'stworz', 'zbuduj', 'zapytani'];
     for (const ck of codeExtras) { if (foldedTask.indexOf(ck) !== -1) { useCoder = true; break; } }
+    const sysExtras = ['shell', 'log', 'proces', 'port', 'serwer', 'siec', 'network', 'diagnoz', 'debug', 'crash', 'wyciek', 'nasluch', 'cpu', 'ram', 'dysk', 'systemd', 'uslug', 'firewall', 'konfiguracj'];
+    (this as any).useStrong = useCoder;
+    for (const sk of sysExtras) { if (foldedTask.indexOf(sk) !== -1) { (this as any).useStrong = true; break; } }
     (this as any).useCoder = useCoder;
     if (useCoder) { this.snapshotProject(cwd); }
     const task: Task = {
@@ -785,7 +788,15 @@ export class SwarmManager {
     try {
       // KROK 1: Planner dekomponuje zadanie
       this.emit({ kind: 'thinking', text: 'Analizuje zadanie...' });
-      const plan = await this.runPlanner(prompt, exact);
+      let codeCtx = '';
+      if (useCoder) {
+        try {
+          const cm = await this.tools.executeTool('code_map', { path: '.', query: '' }, cwd);
+          codeCtx = String(typeof cm === 'string' ? cm : JSON.stringify(cm)).slice(0, 4000);
+          console.log('[Swarm] code_map: kontekst projektu ' + codeCtx.length + ' znakow');
+        } catch (error: any) { codeCtx = ''; }
+      }
+      const plan = await this.runPlanner(codeCtx ? ('KONTEKST PROJEKTU (mapa kodu - uwzglednij strukture i zaleznosci plikow):' + String.fromCharCode(10) + codeCtx + String.fromCharCode(10) + String.fromCharCode(10) + prompt) : prompt, exact);
       this.memory.appendTranscript(sessionId, 'planner', `Plan: ${plan}`);
 
       // KROK 2: Executor wykonuje kroki
@@ -829,7 +840,7 @@ export class SwarmManager {
         }
 
         task.iterations = i + 1;
-        const toolIntentKeys = ['obraz', 'grafika', 'grafik', 'obrazek', 'narysuj', 'rysunek', 'ilustracj', 'zdjec', 'foto', 'logo', 'ikon', 'plakat', 'generuj', 'przypomn', 'przypomni', 'wyslij', 'mail', 'email'];
+        const toolIntentKeys = ['obraz', 'grafika', 'grafik', 'obrazek', 'narysuj', 'rysunek', 'ilustracj', 'zdjec', 'foto', 'logo', 'ikon', 'plakat', 'generuj', 'przypomn', 'przypomni', 'wyslij', 'mail', 'email', 'log', 'proces', 'port', 'serwer', 'diagnoz', 'shell', 'siec', 'nasluch', 'cpu', 'ram', 'dysk', 'systemd', 'firewall'];
         let needsTool = false;
         for (const tk of toolIntentKeys) { if (String(prompt).toLowerCase().indexOf(tk) !== -1) { needsTool = true; break; } }
         if (i === 0 && !exact && !needsSearch && !isAction && !needsTool) {
@@ -932,7 +943,7 @@ export class SwarmManager {
         plain.push({ role: 'user', content: 'Napisz teraz konkretna odpowiedz dla uzytkownika po polsku. Nie wywoluj narzedzi.' });
         let streamed = '';
         try {
-          const provider: any = ((this as any).useCoder && this.coder) ? this.coder : this.executor;
+          const provider: any = (((this as any).useCoder || (this as any).useStrong) && this.coder) ? this.coder : this.executor;
           if (this.onToken && typeof provider.streamCompletion === 'function') {
             console.log('[Swarm] Strumieniowanie odpowiedzi...');
             for await (const chunk of provider.streamCompletion(plain)) {
