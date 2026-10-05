@@ -162,6 +162,7 @@ export class SwarmManager {
       '15. ZMIANY SYSTEMOWE: zanim zmienisz konfiguracje/usluge/plik systemowy - NAJPIERW sprawdz obecny stan (odczyt), zrob kopie, zaplanuj, zmien, a potem SPRAWDZ dzialanie (curl/ps/log/hash). Nigdy nie nadpisuj konfiguracji bez kopii.',
       '16. WYBIERAJ WLASCIWE NARZEDZIE: procesy -> proc_inspect, porty -> net_summary, logi -> log_tail, hash pliku -> file_hash, mapa kodu -> code_map, Jira -> jira_*. NIE uzywaj shell_exec, gdy istnieje dedykowane narzedzie.',
       '17. DIAGNOZA JAK DETEKTYW: gdy cos zawiedzie (blad komendy/narzedzia) - (1) PRZECZYTAJ dokladnie TRESC bledu, (2) postaw JEDNA hipoteze przyczyny, (3) sprawdz ja jednym odczytem/testem, (4) dopiero potem zmieniaj. Nie naprawiaj po omacku.',
+      '18. CLI (argparse): argumenty zaczynajace sie od "-" (np. wyrazenie "-5+3" albo sciezka "-plik") sa traktowane jak OPCJE. Pisz CLI odpornie: uzyj nargs=argparse.REMAINDER albo obslugi "--", i waliduj wejscie zamiast sie wywalac.',
     ].join(nl);
   }
   /** Petla TDD: uruchom kod/test, a przy bledzie popraw i uruchom ponownie (test -> poprawka -> retest). */
