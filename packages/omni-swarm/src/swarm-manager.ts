@@ -840,7 +840,17 @@ export class SwarmManager {
           console.log('[Swarm] code_map: kontekst projektu ' + codeCtx.length + ' znakow');
         } catch (error: any) { codeCtx = ''; }
       }
-      const plan = await this.runPlanner(codeCtx ? ('KONTEKST PROJEKTU (mapa kodu - uwzglednij strukture i zaleznosci plikow):' + String.fromCharCode(10) + codeCtx + String.fromCharCode(10) + String.fromCharCode(10) + prompt) : prompt, exact);
+      let sysCtx = '';
+      if ((this as any).useStrong && !useCoder) {
+        try {
+          const ports = await this.tools.executeTool('net_summary', {}, cwd);
+          const procs = await this.tools.executeTool('proc_inspect', { filter: '' }, cwd);
+          sysCtx = 'STAN SYSTEMU (odczyt przed planem):' + String.fromCharCode(10) + '--- PORTY ---' + String.fromCharCode(10) + String(ports).slice(0, 1500) + String.fromCharCode(10) + '--- PROCESY (top wg CPU) ---' + String.fromCharCode(10) + String(procs).slice(0, 2000);
+          console.log('[Swarm] inspect systemu: ' + sysCtx.length + ' znakow');
+        } catch (error: any) { sysCtx = ''; }
+      }
+      const planCtx = codeCtx ? ('KONTEKST PROJEKTU (mapa kodu - uwzglednij strukture i zaleznosci plikow):' + String.fromCharCode(10) + codeCtx) : sysCtx;
+      const plan = await this.runPlanner(planCtx ? (planCtx + String.fromCharCode(10) + String.fromCharCode(10) + prompt) : prompt, exact);
       this.memory.appendTranscript(sessionId, 'planner', `Plan: ${plan}`);
 
       // KROK 2: Executor wykonuje kroki
