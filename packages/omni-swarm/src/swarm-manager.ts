@@ -279,6 +279,15 @@ export class SwarmManager {
     });
     this.tools.register({
       definition: {
+        name: 'skill_check',
+        description: 'Self-test skilli: sprawdza poprawnosc procedur (frontmatter, tresc) i raportuje braki.',
+        parameters: {},
+        requiresApproval: false, timeoutMs: 8000, maxOutputBytes: 8000,
+      },
+      execute: async () => this.skillSelfTest(),
+    });
+    this.tools.register({
+      definition: {
         name: 'skill_get',
         description: 'Odczytuje pelna procedure (skill) po nazwie.',
         parameters: { name: 'string' },
@@ -554,6 +563,28 @@ export class SwarmManager {
     fs.writeFileSync(this.skillPath(name), body, 'utf8');
   }
 
+  /** Self-test skilli: sprawdza poprawnosc procedur (frontmatter + tresc). */
+  private skillSelfTest(): string {
+    try {
+      const dir = path.join(os.homedir(), '.omni', 'skills');
+      if (!fs.existsSync(dir)) { return 'Brak katalogu skilli.'; }
+      const files = fs.readdirSync(dir).filter((f: string) => /\.md$/i.test(f) && !/^readme\.md$/i.test(f) && !/^_/.test(f));
+      const good: string[] = []; const bad: string[] = [];
+      for (const f of files) {
+        const txt = fs.readFileSync(path.join(dir, f), 'utf8');
+        const m = txt.match(/^---\s*\n([\s\S]*?)\n---/);
+        const fm = m ? m[1] : '';
+        const hasId = /(^|\n)id:\s*\S/.test(fm);
+        const hasName = /(^|\n)name:\s*\S/.test(fm);
+        const hasDesc = /(^|\n)description:\s*\S/.test(fm);
+        const body = txt.replace(/^---[\s\S]*?---/, '').trim();
+        const hasKiedy = /KIEDY:/i.test(txt);
+        if (hasId && hasName && hasDesc && body.length > 30) { good.push(f + (hasKiedy ? '' : ' (brak KIEDY)')); }
+        else { bad.push(f + ' [brak: ' + [!hasId && 'id', !hasName && 'name', !hasDesc && 'description', body.length <= 30 && 'tresc'].filter(Boolean).join(', ') + ']'); }
+      }
+      return 'SELF-TEST SKILLI: ' + good.length + '/' + files.length + ' OK' + String.fromCharCode(10) + 'Poprawne: ' + good.join(', ') + (bad.length ? String.fromCharCode(10) + 'Do poprawy: ' + bad.join('; ') : '');
+    } catch (e: any) { return 'Blad self-testu skilli: ' + e.message; }
+  }
   private listSkills(): string {
     const nl = String.fromCharCode(10);
     try {
@@ -963,23 +994,36 @@ export class SwarmManager {
         }
 
         messages.push({ role: 'assistant', content: response.content || null, tool_calls: toolCalls });
-        for (const call of toolCalls) {
-          usedTools = true;
+        // #4 PARALLEL TOOLS: read-only narzedzia ida rownolegle, zapisy po kolei (bezpiecznie).
+        const safeRead = new Set(['file_read', 'file_list', 'git_status', 'git_diff', 'web_search', 'web_fetch', 'crypto_price', 'news', 'code_map', 'proc_inspect', 'net_summary', 'log_tail', 'file_hash', 'memory_search', 'project_read', 'env_read', 'skill_list', 'skill_get', 'reminder_list', 'jira_search', 'jira_get_issue', 'jira_boards', 'jira_sprints', 'jira_report', 'github_api']);
+        const parsed = toolCalls.map((call: any) => {
           const name = call.function && call.function.name;
           let args: any = {};
           try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (error) { args = {}; }
-          try {
-            console.log('[Swarm] Wykonuje narzedzie: ' + name);
-            this.emit({ kind: 'tool', text: name });
-            const output = await this.tools.executeTool(name, args, cwd);
-            execNames.push(String(name));
-            const text = typeof output === 'string' ? output : JSON.stringify(output);
-            executionResult += text;
-            messages.push({ role: 'tool', tool_call_id: call.id, content: this.compressToolOutput(text) });
-            this.memory.appendTranscript(sessionId, 'tool', name + ': ' + text.slice(0, 400));
-          } catch (error: any) {
-            messages.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD (' + this.classifyToolError(error.message) + '): ' + error.message });
-          }
+          return { call: call, name: String(name), args: args };
+        });
+        const results: any[] = new Array(parsed.length);
+        const readIdx: number[] = []; const serIdx: number[] = [];
+        parsed.forEach((p: any, idx: number) => { (safeRead.has(p.name) ? readIdx : serIdx).push(idx); });
+        if (readIdx.length > 1) {
+          console.log('[Swarm] Rownolegle narzedzia (' + readIdx.length + '): ' + readIdx.map((i: number) => parsed[i].name).join(', '));
+          this.emit({ kind: 'thinking', text: 'Rownolegle narzedzia: ' + readIdx.length });
+          await Promise.all(readIdx.map(async (idx: number) => {
+            const p = parsed[idx];
+            try { this.emit({ kind: 'tool', text: p.name }); const output = await this.tools.executeTool(p.name, p.args, cwd); results[idx] = { ok: true, name: p.name, text: typeof output === 'string' ? output : JSON.stringify(output) }; }
+            catch (error: any) { results[idx] = { ok: false, name: p.name, text: 'BLAD (' + this.classifyToolError(error.message) + '): ' + error.message }; }
+          }));
+        } else { for (const idx of readIdx) { const p = parsed[idx]; try { this.emit({ kind: 'tool', text: p.name }); const output = await this.tools.executeTool(p.name, p.args, cwd); results[idx] = { ok: true, name: p.name, text: typeof output === 'string' ? output : JSON.stringify(output) }; } catch (error: any) { results[idx] = { ok: false, name: p.name, text: 'BLAD (' + this.classifyToolError(error.message) + '): ' + error.message }; } } }
+        for (const idx of serIdx) {
+          const p = parsed[idx];
+          try { console.log('[Swarm] Wykonuje narzedzie: ' + p.name); this.emit({ kind: 'tool', text: p.name }); const output = await this.tools.executeTool(p.name, p.args, cwd); results[idx] = { ok: true, name: p.name, text: typeof output === 'string' ? output : JSON.stringify(output) }; }
+          catch (error: any) { results[idx] = { ok: false, name: p.name, text: 'BLAD (' + this.classifyToolError(error.message) + '): ' + error.message }; }
+        }
+        for (let idx = 0; idx < parsed.length; idx++) {
+          const p = parsed[idx]; const r = results[idx] || { ok: false, name: p.name, text: 'BLAD: brak wyniku' };
+          usedTools = true;
+          if (r.ok) { execNames.push(r.name); executionResult += r.text; messages.push({ role: 'tool', tool_call_id: p.call.id, content: this.compressToolOutput(r.text) }); this.memory.appendTranscript(sessionId, 'tool', r.name + ': ' + r.text.slice(0, 400)); }
+          else { messages.push({ role: 'tool', tool_call_id: p.call.id, content: r.text }); }
         }
         if (execNames.length === iterStartCount) { noProgress++; } else { noProgress = 0; }
         if (noProgress >= 2) { console.log('[Swarm] EARLY STOP: brak postepu przez 2 iteracje.'); break; }
