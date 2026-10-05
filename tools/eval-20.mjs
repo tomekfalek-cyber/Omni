@@ -1,4 +1,6 @@
 import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
 function fold(s){
   const m = { 'ą':'a','ć':'c','ę':'e','ł':'l','ń':'n','ó':'o','ś':'s','ź':'z','ż':'z' };
   return String(s).toLowerCase().replace(/[ąćęłńóśźż]/g, function(c){ return m[c] || c; });
@@ -35,7 +37,8 @@ const CASES = [
   { q: 'Ile plikow .md jest w katalogu /home/openclaw?', kw: ['6','liczb','plik'] }
 ];
 (async function(){
-  const lg = await post('/api/login', { code:'69776977' });
+  const panelCode = process.env.OMNI_CODE || fs.readFileSync(os.homedir() + '/.omni/panel-code', 'utf8').trim();
+  const lg = await post('/api/login', { code: panelCode });
   const ck = (lg.headers['set-cookie']||[]).map(function(s){ return s.split(';')[0]; }).join('; ');
   let ok = 0;
   for (let i=0;i<CASES.length;i++){

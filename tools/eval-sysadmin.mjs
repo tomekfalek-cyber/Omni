@@ -1,4 +1,6 @@
 import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
 function fold(s){ const m={ 'ą':'a','ć':'c','ę':'e','ł':'l','ń':'n','ó':'o','ś':'s','ź':'z','ż':'z' }; return String(s).toLowerCase().replace(/[ąćęłńóśźż]/g, function(c){ return m[c]||c; }); }
 function post(path, body, cookie){ return new Promise(function(res, rej){ const data=JSON.stringify(body); const req=http.request({ host:'127.0.0.1', port:7800, path:path, method:'POST', headers: Object.assign({ 'Content-Type':'application/json', 'Content-Length':Buffer.byteLength(data) }, cookie?{Cookie:cookie}:{}) }, function(r){ let b=''; r.on('data', function(c){ b+=c; }); r.on('end', function(){ res({ code:r.statusCode, headers:r.headers, body:b }); }); }); req.on('error', rej); req.write(data); req.end(); }); }
 const CASES = [
@@ -16,7 +18,8 @@ const CASES = [
   { q: 'Wymien procesy node dzialajace na tej maszynie.', kw: ['node'] }
 ];
 (async function(){
-  const lg = await post('/api/login', { code: process.env.OMNI_CODE || '69776977' });
+  const panelCode = process.env.OMNI_CODE || fs.readFileSync(os.homedir() + '/.omni/panel-code', 'utf8').trim();
+  const lg = await post('/api/login', { code: panelCode });
   const ck = (lg.headers['set-cookie']||[]).map(function(s){ return s.split(';')[0]; }).join('; ');
   let ok = 0; const results = [];
   for (let i=0;i<CASES.length;i++){
