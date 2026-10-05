@@ -56,8 +56,8 @@ export const MODEL_PRESETS: ModelPreset[] = [
   { provider: 'groq', id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B (Groq)', note: 'Najmocniejszy na Groq' },
   { provider: 'groq', id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B (Groq)', note: 'Szybki i madry' },
   { provider: 'groq', id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B (Groq)', note: 'Blyskawiczny' },
-  { provider: 'deepseek', id: 'deepseek-chat', label: 'DeepSeek Chat (płatny)', note: 'Tani i mocny - kod i rozmowa' },
-  { provider: 'deepseek', id: 'deepseek-reasoner', label: 'DeepSeek Reasoner (płatny)', note: 'Rozumowanie krok po kroku' },
+  { provider: 'deepseek', id: 'deepseek-flash', label: 'DeepSeek Flash (płatny)', note: 'Szybki i tani - rozmowa' },
+  { provider: 'deepseek', id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro (płatny)', note: 'Najmocniejszy - kod, rozumowanie, analiza' },
   { provider: 'ollama', id: 'qwen2.5:1.5b', label: 'Qwen 2.5 1.5B - lokalny', note: 'Offline, slabszy' },
   { provider: 'ollama', id: 'qwen2.5:7b', label: 'Qwen 2.5 7B - lokalny', note: 'Wymaga ok. 5 GB RAM' },
 ];
