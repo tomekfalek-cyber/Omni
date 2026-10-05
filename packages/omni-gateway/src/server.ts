@@ -111,6 +111,7 @@ export class OmniGateway {
       this.startBackgroundWork();
       this.startTelegram();
       this.seedSkills();
+      try { if (String(this.config.get().provider || '') === 'ollama') { console.log('[Silniki] UWAGA: dziala LOKALNY Ollama (slaby model) - ustaw mocniejszy silnik w panelu (DeepSeek/OpenRouter).'); } } catch (err) { }
     });
   }
 

@@ -874,10 +874,18 @@ export class SwarmManager {
       let sysCtx = '';
       if ((this as any).useStrong && !useCoder) {
         try {
-          const ports = await this.tools.executeTool('net_summary', {}, cwd);
-          const procs = await this.tools.executeTool('proc_inspect', { filter: '' }, cwd);
-          sysCtx = 'STAN SYSTEMU (odczyt przed planem):' + String.fromCharCode(10) + '--- PORTY ---' + String.fromCharCode(10) + String(ports).slice(0, 1500) + String.fromCharCode(10) + '--- PROCESY (top wg CPU) ---' + String.fromCharCode(10) + String(procs).slice(0, 2000);
-          console.log('[Swarm] inspect systemu: ' + sysCtx.length + ' znakow');
+          const nl2 = String.fromCharCode(10);
+          const wantsLog = /log|blad|awari|crash|error|exception|traceback|wyjatek|stack/i.test(String(prompt));
+          const tasks: Promise<any>[] = [
+            this.tools.executeTool('net_summary', {}, cwd),
+            this.tools.executeTool('proc_inspect', { filter: '' }, cwd),
+          ];
+          if (wantsLog) { tasks.push(this.tools.executeTool('log_tail', { path: path.join(cwd, 'gateway.log'), lines: 30 }, cwd).catch(() => '')); }
+          const res = await Promise.all(tasks);
+          const ports = res[0]; const procs = res[1]; const logTail = res[2];
+          sysCtx = 'STAN SYSTEMU (odczyt przed planem):' + nl2 + '--- PORTY ---' + nl2 + String(ports).slice(0, 1500) + nl2 + '--- PROCESY (top wg CPU) ---' + nl2 + String(procs).slice(0, 2000);
+          if (logTail) { sysCtx += nl2 + '--- LOG (ostatnie linie) ---' + nl2 + String(logTail).slice(0, 1500); }
+          console.log('[Swarm] inspect systemu: ' + sysCtx.length + ' znakow' + (wantsLog ? ' (z logiem)' : ''));
         } catch (error: any) { sysCtx = ''; }
       }
       const planCtx = codeCtx ? ('KONTEKST PROJEKTU (mapa kodu - uwzglednij strukture i zaleznosci plikow):' + String.fromCharCode(10) + codeCtx) : sysCtx;
