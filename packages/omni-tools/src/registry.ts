@@ -249,6 +249,14 @@ export class ToolRegistry {
         if (toolName === 'email_send') { return integrations.email(args); }
         if (toolName === 'git_push') { return integrations.push(args, cwd); }
         if (toolName === 'github_create_repo') { return integrations.createRepo(args, cwd); }
+        if (toolName === 'jira_search') { return integrations.jiraSearch(args); }
+        if (toolName === 'jira_get_issue') { return integrations.jiraGet(args); }
+        if (toolName === 'jira_create_issue') { return integrations.jiraCreate(args); }
+        if (toolName === 'jira_update_issue') { return integrations.jiraUpdate(args); }
+        if (toolName === 'jira_comment') { return integrations.jiraComment(args); }
+        if (toolName === 'jira_boards') { return integrations.jiraBoards(args); }
+        if (toolName === 'jira_sprints') { return integrations.jiraSprints(args); }
+        if (toolName === 'jira_report') { return integrations.jiraReport(args); }
         return integrations.whatsapp(args);
       });
     }

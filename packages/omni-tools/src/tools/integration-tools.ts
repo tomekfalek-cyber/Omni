@@ -13,6 +13,7 @@ const REQUIRED: Record<string, string[]> = {
   telegram: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'],
   email: ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM'],
   whatsapp: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_WHATSAPP_FROM', 'TWILIO_WHATSAPP_TO'],
+  jira: ['JIRA_URL', 'JIRA_EMAIL', 'JIRA_API_TOKEN'],
 };
 
 export class IntegrationTools {
@@ -25,18 +26,133 @@ export class IntegrationTools {
       { name: 'email_send', description: 'Wysyla e-mail przez SMTP.', parameters: { to: 'string', subject: 'string', body: 'string' }, requiresApproval: true, timeoutMs: 40000, maxOutputBytes: 3000 },
       { name: 'whatsapp_send', description: 'Wysyla wiadomosc WhatsApp przez Twilio.', parameters: { text: 'string' }, requiresApproval: true, timeoutMs: 35000, maxOutputBytes: 3000 },
       { name: 'git_push', description: 'Wypycha lokalne repozytorium na GitHub (git push).', parameters: { branch: 'string' }, requiresApproval: false, timeoutMs: 120000, maxOutputBytes: 6000 },
-      { name: 'github_create_repo', description: 'Tworzy nowe repozytorium na GitHubie i wypycha do niego projekt.', parameters: { name: 'string', private: 'string' }, requiresApproval: true, timeoutMs: 120000, maxOutputBytes: 6000 }
+      { name: 'github_create_repo', description: 'Tworzy nowe repozytorium na GitHubie i wypycha do niego projekt.', parameters: { name: 'string', private: 'string' }, requiresApproval: true, timeoutMs: 120000, maxOutputBytes: 6000 },
+      { name: 'jira_search', description: 'Jira: szuka zadan jezykiem JQL (np. "project = ABC AND status != Done"). Parametry: jql, limit, fields.', parameters: { jql: 'string', limit: 'number', fields: 'string' }, requiresApproval: false, timeoutMs: 25000, maxOutputBytes: 30000 },
+      { name: 'jira_get_issue', description: 'Jira: szczegoly zadania po kluczu (np. ABC-123).', parameters: { key: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 20000 },
+      { name: 'jira_create_issue', description: 'Jira: zaklada nowe zadanie (Task/Story/Bug). Parametry: project, summary, type, description, priority, labels, assignee.', parameters: { project: 'string', summary: 'string', type: 'string', description: 'string', priority: 'string', labels: 'string', assignee: 'string' }, requiresApproval: false, timeoutMs: 25000, maxOutputBytes: 4000 },
+      { name: 'jira_update_issue', description: 'Jira: aktualizuje zadanie (pola) i/lub zmienia status (transition, np. "In Progress").', parameters: { key: 'string', summary: 'string', priority: 'string', assignee: 'string', labels: 'string', transition: 'string' }, requiresApproval: false, timeoutMs: 25000, maxOutputBytes: 4000 },
+      { name: 'jira_comment', description: 'Jira: dodaje komentarz do zadania.', parameters: { key: 'string', text: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 3000 },
+      { name: 'jira_boards', description: 'Jira: lista tablic agile (board) w Jira.', parameters: {}, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 10000 },
+      { name: 'jira_sprints', description: 'Jira: lista sprintow tablicy. Parametry: boardId, state (active,future,closed).', parameters: { boardId: 'string', state: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 10000 },
+      { name: 'jira_report', description: 'Jira: agreguje dane z JQL do raportu (liczby wg statusu, osoby, typu, priorytetu).', parameters: { jql: 'string' }, requiresApproval: false, timeoutMs: 30000, maxOutputBytes: 20000 },
     ];
   }
 
   public status(): Array<{ id: string, name: string, ready: boolean, missing: string[] }> {
-    const names: Record<string, string> = { github: 'GitHub', telegram: 'Telegram', email: 'E-mail (SMTP)', whatsapp: 'WhatsApp (Twilio)' };
+    const names: Record<string, string> = { github: 'GitHub', telegram: 'Telegram', email: 'E-mail (SMTP)', whatsapp: 'WhatsApp (Twilio)', jira: 'Jira (Atlassian)' };
     const out: Array<{ id: string, name: string, ready: boolean, missing: string[] }> = [];
     for (const id of Object.keys(REQUIRED)) {
       const missing = REQUIRED[id].filter((k) => !env(k));
       out.push({ id: id, name: names[id] || id, ready: missing.length === 0, missing: missing });
     }
     return out;
+  }
+
+  // ---- JIRA (Atlassian Cloud) ----
+  private jiraAuth(): { base: string, headers: any } {
+    const base = env('JIRA_URL').replace(/\/+$/, '');
+    const email = env('JIRA_EMAIL');
+    const token = env('JIRA_API_TOKEN');
+    if (!base || !email || !token) { throw new Error('Brak danych Jira (JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN). Dodaj je w zakladce Integracje.'); }
+    const auth = Buffer.from(email + ':' + token).toString('base64');
+    return { base: base, headers: { Authorization: 'Basic ' + auth, Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'OmniBot' } };
+  }
+  private async jiraFetch(path: string, method: string, body?: any): Promise<any> {
+    const a = this.jiraAuth();
+    const res = await fetch(a.base + path, { method: method, headers: a.headers, body: body ? JSON.stringify(body) : undefined });
+    const text = await res.text();
+    let json: any = null; try { json = JSON.parse(text); } catch (e) { json = null; }
+    if (!res.ok) { throw new Error('Jira ' + res.status + ': ' + (json && json.errorMessages ? json.errorMessages.join('; ') : text.slice(0, 300))); }
+    return json === null ? text : json;
+  }
+  public async jiraSearch(args: any): Promise<string> {
+    const jql = String((args && args.jql) || '').trim() || 'order by updated DESC';
+    const limit = Math.min(Math.max(1, Number((args && args.limit) || 30)), 100);
+    const fields = String((args && args.fields) || 'summary,status,assignee,priority,issuetype,updated');
+    const data = await this.jiraFetch('/rest/api/2/search?jql=' + encodeURIComponent(jql) + '&maxResults=' + limit + '&fields=' + encodeURIComponent(fields), 'GET');
+    const issues = (data.issues || []).map((i: any) => { const f = i.fields || {}; return { key: i.key, summary: f.summary, status: f.status && f.status.name, type: f.issuetype && f.issuetype.name, priority: f.priority && f.priority.name, assignee: (f.assignee && (f.assignee.displayName || f.assignee.name)) || null }; });
+    return JSON.stringify({ jql: jql, total: data.total, zwrocono: issues.length, issues: issues }, null, 2);
+  }
+  public async jiraGet(args: any): Promise<string> {
+    const key = String((args && args.key) || '').trim();
+    if (!key) { throw new Error('Podaj klucz zadania (np. PROJ-123).'); }
+    const data = await this.jiraFetch('/rest/api/2/issue/' + encodeURIComponent(key) + '?fields=summary,description,status,assignee,reporter,priority,issuetype,created,updated,labels,comment,parent', 'GET');
+    const f = data.fields || {};
+    const desc = typeof f.description === 'string' ? f.description : (f.description ? '(opis ADF - szczegoly w Jira)' : '');
+    return JSON.stringify({ key: data.key, summary: f.summary, type: f.issuetype && f.issuetype.name, status: f.status && f.status.name, assignee: f.assignee && f.assignee.displayName, reporter: f.reporter && f.reporter.displayName, priority: f.priority && f.priority.name, labels: f.labels, parent: f.parent && f.parent.key, description: desc, komentarze: ((f.comment && f.comment.comments) || []).length }, null, 2);
+  }
+  public async jiraCreate(args: any): Promise<string> {
+    const project = String((args && args.project) || '').trim();
+    const summary = String((args && args.summary) || '').trim();
+    const type = String((args && args.type) || 'Task').trim();
+    const description = String((args && args.description) || '').trim();
+    const priority = String((args && args.priority) || '').trim();
+    const assignee = String((args && args.assignee) || '').trim();
+    const labels = String((args && args.labels) || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+    if (!project || !summary) { throw new Error('Podaj project (klucz projektu) i summary.'); }
+    const fields: any = { project: { key: project }, summary: summary, issuetype: { name: type } };
+    if (description) { fields.description = description; }
+    if (priority) { fields.priority = { name: priority }; }
+    if (labels.length) { fields.labels = labels; }
+    if (assignee) { fields.assignee = { name: assignee }; }
+    const data = await this.jiraFetch('/rest/api/2/issue', 'POST', { fields: fields });
+    return 'Utworzono zadanie: ' + data.key + ' -> ' + this.jiraAuth().base + '/browse/' + data.key;
+  }
+  public async jiraUpdate(args: any): Promise<string> {
+    const key = String((args && args.key) || '').trim();
+    if (!key) { throw new Error('Podaj key zadania.'); }
+    const fields: any = {};
+    if (args && args.summary) { fields.summary = String(args.summary); }
+    if (args && args.priority) { fields.priority = { name: String(args.priority) }; }
+    if (args && args.assignee) { fields.assignee = { name: String(args.assignee) }; }
+    if (args && args.labels) { fields.labels = String(args.labels).split(',').map((s: string) => s.trim()).filter(Boolean); }
+    let msg = 'Zaktualizowano ' + key;
+    if (Object.keys(fields).length) { await this.jiraFetch('/rest/api/2/issue/' + encodeURIComponent(key), 'PUT', { fields: fields }); }
+    if (args && args.transition) {
+      const t = await this.jiraFetch('/rest/api/2/issue/' + encodeURIComponent(key) + '/transitions', 'GET');
+      const wanted = String(args.transition).toLowerCase();
+      const tr = (t.transitions || []).find((x: any) => String(x.name).toLowerCase() === wanted || String(x.id) === wanted);
+      if (!tr) { throw new Error('Nie znaleziono przejscia "' + args.transition + '". Dostepne: ' + (t.transitions || []).map((x: any) => x.name).join(', ')); }
+      await this.jiraFetch('/rest/api/2/issue/' + encodeURIComponent(key) + '/transitions', 'POST', { transition: { id: tr.id } });
+      msg += ' + przejscie na "' + tr.name + '"';
+    }
+    return msg;
+  }
+  public async jiraComment(args: any): Promise<string> {
+    const key = String((args && args.key) || '').trim();
+    const body = String((args && args.text) || '').trim();
+    if (!key || !body) { throw new Error('Podaj key i text.'); }
+    await this.jiraFetch('/rest/api/2/issue/' + encodeURIComponent(key) + '/comment', 'POST', { body: body });
+    return 'Dodano komentarz do ' + key;
+  }
+  public async jiraBoards(_args: any): Promise<string> {
+    const data = await this.jiraFetch('/rest/agile/1.0/board?maxResults=50', 'GET');
+    const boards = (data.values || []).map((b: any) => ({ id: b.id, name: b.name, type: b.type, project: b.location && b.location.projectKey }));
+    return JSON.stringify({ boards: boards }, null, 2);
+  }
+  public async jiraSprints(args: any): Promise<string> {
+    const boardId = String((args && args.boardId) || '').trim();
+    if (!boardId) { throw new Error('Podaj boardId (z narzedzia jira_boards).'); }
+    const state = String((args && args.state) || 'active,future').trim();
+    const data = await this.jiraFetch('/rest/agile/1.0/board/' + encodeURIComponent(boardId) + '/sprint?state=' + encodeURIComponent(state) + '&maxResults=50', 'GET');
+    const sprints = (data.values || []).map((s: any) => ({ id: s.id, name: s.name, state: s.state, start: s.startDate, end: s.endDate }));
+    return JSON.stringify({ sprints: sprints }, null, 2);
+  }
+  public async jiraReport(args: any): Promise<string> {
+    const jql = String((args && args.jql) || '').trim();
+    if (!jql) { throw new Error('Podaj jql, np. "project = ABC AND sprint in openSprints()".'); }
+    const data = await this.jiraFetch('/rest/api/2/search?jql=' + encodeURIComponent(jql) + '&maxResults=100&fields=status,assignee,priority,issuetype', 'GET');
+    const issues = data.issues || [];
+    const byStatus: any = {}; const byAssignee: any = {}; const byType: any = {}; const byPriority: any = {};
+    for (const i of issues) {
+      const f = i.fields || {};
+      const st = (f.status && f.status.name) || '-';
+      const as = (f.assignee && f.assignee.displayName) || 'Nieprzypisane';
+      const ty = (f.issuetype && f.issuetype.name) || '-';
+      const pr = (f.priority && f.priority.name) || '-';
+      byStatus[st] = (byStatus[st] || 0) + 1; byAssignee[as] = (byAssignee[as] || 0) + 1; byType[ty] = (byType[ty] || 0) + 1; byPriority[pr] = (byPriority[pr] || 0) + 1;
+    }
+    return JSON.stringify({ jql: jql, total: data.total, przebadano: issues.length, wgStatusu: byStatus, wgOsoby: byAssignee, wgTypu: byType, wgPriorytetu: byPriority }, null, 2);
   }
 
   public async github(args: any): Promise<string> {

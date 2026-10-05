@@ -34,6 +34,9 @@ export const KEY_REGISTRY = [
   { name: 'NGROK_AUTHTOKEN', label: 'ngrok - token (staly adres)', desc: 'Token z dashboard.ngrok.com - daje adres, ktory sie NIE zmienia po restarcie', group: 'Adres i zdalny dostep' },
   { name: 'NGROK_DOMAIN', label: 'ngrok - zarezerwowana domena', desc: 'np. exclude-jaunt-subarctic.ngrok-free.dev (Dashboard ngrok -> Domains)', group: 'Adres i zdalny dostep' },
   { name: 'TELEGRAM_CHAT_ID', label: 'Telegram - Twoj chat ID', desc: 'Napisz do bota - odpowie Ci Twoim chat ID', group: 'Integracje' },
+  { name: 'JIRA_URL', label: 'Jira - adres', desc: 'np. https://twojafirma.atlassian.net', group: 'Integracje' },
+  { name: 'JIRA_EMAIL', label: 'Jira - e-mail konta', desc: 'E-mail, ktorym logujesz sie do Atlassian', group: 'Integracje' },
+  { name: 'JIRA_API_TOKEN', label: 'Jira - token API', desc: 'id.atlassian.com/manage-profile/security/api-tokens', group: 'Integracje' },
 ];
 
 export class OmniGateway {
