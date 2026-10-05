@@ -77,6 +77,36 @@ export class ToolRegistry {
       out.push('STRUKTURA: ' + dirs.slice(0, 60).join(' '));
       const keyFiles = ['package.json', 'tsconfig.json', 'README.md', 'requirements.txt', 'pyproject.toml', 'go.mod', 'Cargo.toml', 'Makefile', 'docker-compose.yml'];
       for (const kf of keyFiles) { const p = path.join(base, kf); if (fs.existsSync(p)) { out.push('--- ' + kf + ' ---'); try { out.push(fs.readFileSync(p, 'utf8').slice(0, 800)); } catch (e) { } } }
+      // A3: glebsza swiadomosc codebase - symbole (funkcje/klasy) i importy.
+      const symExts = new Set(['.py', '.js', '.ts', '.tsx', '.jsx', '.mjs', '.cjs']);
+      const symLines: string[] = [];
+      let scanned = 0;
+      const scanSyms = (dir: string, depth: number) => {
+        if (depth > 3 || scanned >= 40 || symLines.length >= 200) { return; }
+        let es: any[] = [];
+        try { es = fs.readdirSync(dir, { withFileTypes: true }) as any[]; } catch (e) { return; }
+        for (const e of es) {
+          if (skip.has(e.name) || scanned >= 40 || symLines.length >= 200) { continue; }
+          const full2 = path.join(dir, e.name);
+          if (e.isDirectory()) { scanSyms(full2, depth + 1); continue; }
+          if (!symExts.has(path.extname(e.name))) { continue; }
+          scanned++;
+          try {
+            const txt = fs.readFileSync(full2, 'utf8').slice(0, 20000);
+            const ls = txt.split(String.fromCharCode(10));
+            const syms: string[] = []; const imps: string[] = [];
+            for (const ln of ls) {
+              const t = ln.trim();
+              const m = t.match(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/) || t.match(/^(?:export\s+)?class\s+([A-Za-z0-9_$]+)/) || t.match(/^def\s+([A-Za-z0-9_]+)/) || t.match(/^(?:export\s+)?const\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?\(/);
+              if (m) { syms.push(m[1]); continue; }
+              if (/^(?:import\s|from\s+[A-Za-z0-9_.]+\s+import\s)/.test(t)) { imps.push(t.slice(0, 70)); }
+            }
+            if (syms.length || imps.length) { symLines.push(full2.replace(base, '.') + ': ' + (syms.length ? '[' + syms.slice(0, 12).join(', ') + ']' : '') + (imps.length ? '  <- ' + imps.slice(0, 3).join(' ; ') : '')); }
+          } catch (e) { }
+        }
+      };
+      scanSyms(base, 0);
+      if (symLines.length) { out.push('--- SYMBOLE (funkcje/klasy/importy) ---'); out.push.apply(out, symLines); }
       const q = String((args && args.query) || '').trim();
       if (q) {
         const hits: string[] = [];
