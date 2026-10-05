@@ -54,7 +54,8 @@ export class SwarmManager {
     const defaultMini = provider === 'groq' ? 'openai/gpt-oss-20b' : modelFlash;
     const modelMini = process.env.OMNI_LLM_MODEL_MINI || defaultMini;
 
-    this.planner = new QwenProvider({ provider, model: modelMini, temperature: 0.7, maxTokens: 700 });
+    const strongModel = process.env.OMNI_LLM_MODEL_PLAN || process.env.OMNI_LLM_MODEL_CODER || ({ groq: 'openai/gpt-oss-120b', deepseek: 'deepseek-v4-pro', openrouter: 'qwen/qwen3.8-27b:free', gemini: 'gemini-flash-latest' } as any)[provider] || modelFlash;
+    this.planner = new QwenProvider({ provider, model: strongModel, temperature: 0.4, maxTokens: 1400 });
     this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 1400 });
     this.reviewer = new QwenProvider({ provider, model: modelMini, temperature: 0.1, maxTokens: 400 });
     this.evolver = new QwenProvider({ provider, model: modelMini, temperature: 0.8, maxTokens: 500 });
@@ -1168,6 +1169,18 @@ export class SwarmManager {
             }
           }
         } catch (error: any) { console.log('[Swarm] Petla TDD/przeglad nieudane: ' + error.message); }
+      }
+      // REFLEKSJA: czy odpowiedz faktycznie rozwiazuje zadanie uzytkownika?
+      if (!fastAnswered && draftAnswer && String(draftAnswer).trim().length > 40) {
+        try {
+          const refl = await this.executor.getCompletion([
+            { role: 'system', content: 'Jestes Reflektorem. Patrzysz na ZADANIE i ODPOWIEDZ. Zwroc WYLACZNIE jedno: "OK" (odpowiedz rozwiazuje zadanie) albo "BRAK: <czego brakuje, 1 zdanie>". Nie przepisuj odpowiedzi, nie dodawaj nic wiecej.' },
+            { role: 'user', content: 'ZADANIE: ' + prompt + String.fromCharCode(10) + String.fromCharCode(10) + 'ODPOWIEDZ: ' + String(draftAnswer).slice(0, 2000) },
+          ]);
+          const verdict = String(refl || '').trim();
+          if (/^BRAK/i.test(verdict)) { console.log('[Swarm] Refleksja: ' + verdict.slice(0, 140)); executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'REFLEKSJA (braki): ' + verdict; }
+          else { console.log('[Swarm] Refleksja: OK'); }
+        } catch (error) { }
       }
       // TOP4: self-critique (Krytyk) - tylko przy realnym ryzyku (kod albo uzyte narzedzia).
       if (!fastAnswered && draftAnswer && String(draftAnswer).trim().length > 20 && (useCoder || usedTools)) {
