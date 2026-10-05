@@ -98,19 +98,34 @@ export class SwarmManager {
   /** Zapamietuje male pliki projektu przed zadaniem koderskim (do cofniecia nieudanych zmian). */
   private snapshotProject(cwd: string): void {
     try {
-      const files = fs.readdirSync(cwd).filter((n: string) => /\.(py|js|ts|tsx|jsx|json|md|txt|sh|html|css|sql|yml|yaml)$/i.test(n));
+      const exts = /\.(py|js|ts|tsx|jsx|json|md|txt|sh|html|css|sql|yml|yaml)$/i;
+      const skip = new Set(['node_modules', '.git', 'dist', 'build', '__pycache__', '.venv', 'venv', '.cache', 'coverage']);
       const tmp = path.join(os.homedir(), '.omni', 'backups', Date.now().toString(36));
       fs.mkdirSync(tmp, { recursive: true });
       let total = 0; const copied: string[] = [];
-      for (const n of files) {
-        try {
-          const p = path.join(cwd, n);
-          const st = fs.statSync(p);
-          if (!st.isFile() || st.size > 200000) { continue; }
-          total += st.size; if (total > 3000000) { break; }
-          fs.copyFileSync(p, path.join(tmp, n)); copied.push(n);
-        } catch (e) { }
-      }
+      const walk = (dir: string, rel: string, depth: number) => {
+        if (depth > 3 || total > 3000000 || copied.length > 400) { return; }
+        let entries: any[] = [];
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }) as any[]; } catch (e) { return; }
+        for (const en of entries) {
+          if (total > 3000000 || copied.length > 400) { break; }
+          if (skip.has(en.name)) { continue; }
+          const full = path.join(dir, en.name);
+          const r = rel ? rel + '/' + en.name : en.name;
+          if (en.isDirectory()) { walk(full, r, depth + 1); continue; }
+          if (!exts.test(en.name)) { continue; }
+          try {
+            const st = fs.statSync(full);
+            if (!st.isFile() || st.size > 200000) { continue; }
+            total += st.size;
+            const dst = path.join(tmp, r);
+            fs.mkdirSync(path.dirname(dst), { recursive: true });
+            fs.copyFileSync(full, dst);
+            copied.push(r);
+          } catch (e) { }
+        }
+      };
+      walk(cwd, '', 0);
       fs.writeFileSync(path.join(tmp, '_meta.json'), JSON.stringify({ cwd, files: copied }));
       (this as any).codeBackupDir = tmp;
     } catch (e) { (this as any).codeBackupDir = null; }
@@ -122,7 +137,7 @@ export class SwarmManager {
     try {
       const meta = JSON.parse(fs.readFileSync(path.join(tmp, '_meta.json'), 'utf8'));
       const restored: string[] = [];
-      for (const n of (meta.files || [])) { try { fs.copyFileSync(path.join(tmp, n), path.join(meta.cwd, n)); restored.push(n); } catch (e) { } }
+      for (const n of (meta.files || [])) { try { const dst = path.join(meta.cwd, n); fs.mkdirSync(path.dirname(dst), { recursive: true }); fs.copyFileSync(path.join(tmp, n), dst); restored.push(n); } catch (e) { } }
       return restored;
     } catch (e) { return []; }
   }
