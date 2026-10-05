@@ -107,7 +107,30 @@ export class OmniGateway {
       console.log('[Gateway] Panel, klucze API i OAuth gotowe.');
       this.startBackgroundWork();
       this.startTelegram();
+      this.seedSkills();
     });
+  }
+
+  /** Kopiuje skille z repo (.omni/skills) do runtime (~/.omni/skills), jesli ich tam nie ma. */
+  private seedSkills(): void {
+    try {
+      const cand = [
+        path.resolve(path.dirname(process.argv[1] || ''), '..', '..', '..', '.omni', 'skills'),
+        path.resolve(process.cwd(), '.omni', 'skills'),
+        path.resolve(process.cwd(), '..', '.omni', 'skills'),
+      ];
+      const repoSkills = cand.find((p) => fs.existsSync(p));
+      if (!repoSkills) { return; }
+      const runtimeSkills = path.join(os.homedir(), '.omni', 'skills');
+      fs.mkdirSync(runtimeSkills, { recursive: true });
+      let copied = 0;
+      for (const f of fs.readdirSync(repoSkills)) {
+        if (!/\.md$/i.test(f)) { continue; }
+        const dst = path.join(runtimeSkills, f);
+        if (!fs.existsSync(dst)) { fs.copyFileSync(path.join(repoSkills, f), dst); copied++; }
+      }
+      if (copied) { console.log('[Skills] Zaseedowano ' + copied + ' skilli z repo do ~/.omni/skills'); }
+    } catch (e) { }
   }
 
   private wireApprovals() {

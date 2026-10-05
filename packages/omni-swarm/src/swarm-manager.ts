@@ -787,7 +787,7 @@ export class SwarmManager {
     (this as any).useStrong = useCoder;
     for (const sk of sysExtras) { if (foldedTask.indexOf(sk) !== -1) { (this as any).useStrong = true; break; } }
     (this as any).useCoder = useCoder;
-    if (useCoder) { this.snapshotProject(cwd); }
+    if (useCoder || (this as any).useStrong) { this.snapshotProject(cwd); }
     const task: Task = {
       id: taskId,
       sessionId,
@@ -1139,6 +1139,10 @@ export class SwarmManager {
       task.status = 'failed';
       task.error = error.message;
       this.memory.appendTranscript(sessionId, 'system', `Task failed: ${error.message}`);
+      if ((this as any).codeBackupDir) {
+        const restored = this.restoreProject();
+        if (restored.length) { console.log('[Swarm] Zadanie nieudane - wycofano zmiany w: ' + restored.join(', ')); }
+      }
     }
 
     task.updatedAt = Date.now();
