@@ -54,7 +54,8 @@ export class SwarmManager {
     const defaultMini = provider === 'groq' ? 'openai/gpt-oss-20b' : modelFlash;
     const modelMini = process.env.OMNI_LLM_MODEL_MINI || defaultMini;
 
-    const strongModel = process.env.OMNI_LLM_MODEL_PLAN || process.env.OMNI_LLM_MODEL_CODER || ({ groq: 'openai/gpt-oss-120b', deepseek: 'deepseek-v4-pro', openrouter: 'qwen/qwen3.8-27b:free', gemini: 'gemini-flash-latest' } as any)[provider] || modelFlash;
+    const fastMode = String(process.env.OMNI_FAST || '') === '1';
+    const strongModel = fastMode ? modelFlash : (process.env.OMNI_LLM_MODEL_PLAN || process.env.OMNI_LLM_MODEL_CODER || ({ groq: 'openai/gpt-oss-120b', deepseek: 'deepseek-v4-pro', openrouter: 'qwen/qwen3.8-27b:free', gemini: 'gemini-flash-latest' } as any)[provider] || modelFlash);
     this.planner = new QwenProvider({ provider, model: strongModel, temperature: 0.4, maxTokens: 1400 });
     this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 1400 });
     this.reviewer = new QwenProvider({ provider, model: strongModel, temperature: 0.1, maxTokens: 1200 });

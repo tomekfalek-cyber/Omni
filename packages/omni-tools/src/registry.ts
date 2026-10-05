@@ -238,6 +238,49 @@ export class ToolRegistry {
       fs.closeSync(fd);
       return 'SHA-256 ' + p + ' (' + st.size + ' B): ' + h.digest('hex');
     });
+    this.registerTool({
+      name: 'http_request',
+      description: 'Wywoluje dowolny HTTP API (GET/POST/PUT/DELETE). Parametry: url, method, headers (JSON), body.',
+      parameters: { url: 'string', method: 'string', headers: 'string', body: 'string' },
+      requiresApproval: false, timeoutMs: 30000, maxOutputBytes: 30000,
+    }, async (args: any) => {
+      const url = String((args && args.url) || '').trim();
+      if (url.indexOf('http') !== 0) { throw new Error('Podaj poprawny url (http/https).'); }
+      const method = String((args && args.method) || 'GET').toUpperCase();
+      let headers: any = { 'User-Agent': 'OmniBot' };
+      if (args && args.headers) { try { headers = Object.assign(headers, JSON.parse(String(args.headers))); } catch (e) { } }
+      const init: any = { method: method, headers: headers };
+      if (method !== 'GET' && method !== 'HEAD' && args && args.body !== undefined) { init.body = typeof args.body === 'string' ? args.body : JSON.stringify(args.body); }
+      const res = await fetch(url, init);
+      const text = await res.text();
+      return 'HTTP ' + res.status + ' ' + res.statusText + String.fromCharCode(10) + text.slice(0, 25000);
+    });
+    this.registerTool({
+      name: 'analyze_image',
+      description: 'Analizuje obrazek (plik lokalny lub URL) modelem wizyjnym: opisuje, odpowiada na pytanie o zawartosc.',
+      parameters: { path: 'string', question: 'string' },
+      requiresApproval: false, timeoutMs: 45000, maxOutputBytes: 4000,
+    }, async (args: any) => {
+      const key = String(process.env.GEMINI_API_KEY || '').trim();
+      if (!key) { throw new Error('Brak GEMINI_API_KEY (dodaj w panelu, grupa Modele i mowa).'); }
+      const p = String((args && args.path) || '').trim();
+      if (!p) { throw new Error('Podaj path (sciezka lub URL obrazka).'); }
+      let base64 = ''; let mime = 'image/png';
+      if (p.indexOf('http') === 0) {
+        const rr = await fetch(p); const buf = Buffer.from(await rr.arrayBuffer()); base64 = buf.toString('base64'); mime = String(rr.headers.get('content-type') || 'image/png').split(';')[0];
+      } else {
+        const buf = fs.readFileSync(p); base64 = buf.toString('base64'); mime = /\.jpe?g$/i.test(p) ? 'image/jpeg' : 'image/png';
+      }
+      const q = String((args && args.question) || 'Opisz dokladnie, co widzisz na obrazku.').slice(0, 300);
+      const r2 = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + encodeURIComponent(key), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: q }, { inline_data: { mime_type: mime, data: base64 } }] }] }),
+      });
+      const j: any = await r2.json().catch(() => null);
+      if (!r2.ok) { throw new Error('Gemini ' + r2.status + ': ' + JSON.stringify(j).slice(0, 200)); }
+      const parts = (j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [];
+      return String((parts[0] && parts[0].text) || '(brak odpowiedzi)').slice(0, 3500);
+    });
 
     // Integracje: GitHub, Telegram, e-mail, WhatsApp
     const integrations = new IntegrationTools();
