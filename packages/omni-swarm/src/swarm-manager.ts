@@ -86,6 +86,14 @@ export class SwarmManager {
       return fs.readFileSync(f, 'utf8').slice(-4000);
     } catch (e) { return ''; }
   }
+  /** Czyta pamiec srodowiska (stack, porty, uslugi, pulapki). */
+  private readEnvMemory(): string {
+    try {
+      const f = path.join(os.homedir(), '.omni', 'memory', 'environment.md');
+      if (!fs.existsSync(f)) { return ''; }
+      return fs.readFileSync(f, 'utf8').slice(-3000);
+    } catch (e) { return ''; }
+  }
   /** Zapamietuje male pliki projektu przed zadaniem koderskim (do cofniecia nieudanych zmian). */
   private snapshotProject(cwd: string): void {
     try {
@@ -135,6 +143,7 @@ export class SwarmManager {
       '12. Zlozone zadanie rozbij na kroki i po kazdym sprawdz wynik. Koncz albo wynikiem z dowodem, albo konkretna przeszkoda.',
       '13. Masz internet, pamiec, narzedzia i dzisiejsza date - nie wymyslaj ograniczen. Niepewny fakt najpierw sprawdz narzedziem.',
       '14. Formatuj czytelnie (naglowki, listy). Bez lania wody.',
+      '15. ZMIANY SYSTEMOWE: zanim zmienisz konfiguracje/usluge/plik systemowy - NAJPIERW sprawdz obecny stan (odczyt), zrob kopie, zaplanuj, zmien, a potem SPRAWDZ dzialanie (curl/ps/log/hash). Nigdy nie nadpisuj konfiguracji bez kopii.',
     ].join(nl);
   }
   /** Petla TDD: uruchom kod/test, a przy bledzie popraw i uruchom ponownie (test -> poprawka -> retest). */
@@ -316,6 +325,41 @@ export class SwarmManager {
         const f = this.projectMemoryFile((this as any).activeCwd || this.workspaceCwd);
         try { return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').slice(-6000) : 'Pamiec projektu jest pusta.'; }
         catch (e) { return 'Blad odczytu pamieci projektu.'; }
+      },
+    });
+    this.tools.register({
+      definition: {
+        name: 'env_remember',
+        description: 'Zapisuje trwaly fakt o SRODOWISKU/maszynie (stack, porty, sciezki, uslugi, pulapki). Podaj key i value.',
+        parameters: { key: 'string', value: 'string' },
+        requiresApproval: false, timeoutMs: 5000, maxOutputBytes: 0,
+      },
+      execute: async (args: any) => {
+        const key = String((args && args.key) || '').trim();
+        const val = String((args && args.value) || '').trim();
+        if (!key || !val) { throw new Error('Podaj key i value.'); }
+        const f = path.join(os.homedir(), '.omni', 'memory', 'environment.md');
+        fs.mkdirSync(path.dirname(f), { recursive: true });
+        const line = '- [' + new Date().toISOString().slice(0, 10) + '] ' + key + ': ' + val;
+        let prev = '';
+        try { prev = fs.readFileSync(f, 'utf8'); } catch (err) { prev = ''; }
+        if (prev.indexOf(val) !== -1) { return 'Juz zapamietane: ' + key; }
+        const sep = (prev && prev.slice(-1) !== String.fromCharCode(10)) ? String.fromCharCode(10) : '';
+        fs.writeFileSync(f, prev + sep + line + String.fromCharCode(10), 'utf8');
+        return 'Zapisano w pamieci srodowiska: ' + key;
+      },
+    });
+    this.tools.register({
+      definition: {
+        name: 'env_read',
+        description: 'Odczytuje pamiec srodowiska (stack, porty, sciezki, uslugi, pulapki).',
+        parameters: {},
+        requiresApproval: false, timeoutMs: 5000, maxOutputBytes: 12000,
+      },
+      execute: async () => {
+        const f = path.join(os.homedir(), '.omni', 'memory', 'environment.md');
+        try { return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').slice(-6000) : 'Pamiec srodowiska jest pusta.'; }
+        catch (e) { return 'Blad odczytu pamieci srodowiska.'; }
       },
     });
   }
@@ -1113,6 +1157,7 @@ export class SwarmManager {
       'MASZ NARZEDZIA - uzywaj ich zamiast mowic, ze czegos nie potrafisz:',
       tools,
       (this.readProjectMemory(cwd) ? 'PAMIEC PROJEKTU (ustalenia z wczesniejszych sesji - korzystaj, nie pytaj ponownie):' + NL + this.readProjectMemory(cwd) : 'PAMIEC PROJEKTU: pusta (zapisuj ustalenia narzedziem project_remember)'),
+      (this.readEnvMemory() ? 'PAMIEC SRODOWISKA (stack, porty, uslugi, pulapki - korzystaj):' + NL + this.readEnvMemory() : ''),
       'MASZ DOSTEP DO INTERNETU (web_search, web_fetch). Mozesz sprawdzac biezace informacje, wiadomosci i strony. NIE twierdz, ze nie wiesz co sie dzialo po 2024 roku - po prostu wyszukaj.',
       'MASZ PAMIEC TRWALA (memory_save, memory_search) - zapisuj wazne ustalenia i preferencje uzytkownika.',
       'MASZ ROZMOWE GLOSOWA: uzytkownik moze mowic zamiast pisac (przycisk z ikona mikrofonu w czacie).',
