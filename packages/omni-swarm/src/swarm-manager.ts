@@ -867,9 +867,17 @@ export class SwarmManager {
     for (const ck of codingKeys) { if (foldedTask.indexOf(ck) !== -1) { useCoder = true; break; } }
     const codeExtras = ['python', 'javascript', 'typescript', 'funkcj', 'metod', 'modul', 'bibliotek', 'algorytm', 'regex', ' sql', 'html', 'css', 'komponent', 'zoptymalizuj', 'napraw', 'debug', 'przetestuj', 'testy', 'blad', 'stworz', 'zbuduj', 'zapytani'];
     for (const ck of codeExtras) { if (foldedTask.indexOf(ck) !== -1) { useCoder = true; break; } }
+    // AUDYT/RAPORT != kodowanie: zadanie "ocen/zaudytuj/raport" NIE moze wchodzic w TDD ani zmieniac plikow.
+    const reportKeys = ['audyt', 'raport', 'ocen', 'przeglad', 'review', 'analiz', 'przeanalizuj', 'inspekcj', 'opini', 'recenzj'];
+    const fixKeys = ['popraw', 'napraw', 'zaimplementuj', 'zrefaktoruj', 'dodaj ', 'zmien ', 'wdroz', 'stworz', 'napisz plik', 'edytuj'];
+    let reportOnly = false;
+    for (const rk of reportKeys) { if (foldedTask.indexOf(rk) !== -1) { reportOnly = true; break; } }
+    if (reportOnly) { for (const fk of fixKeys) { if (foldedTask.indexOf(fk) !== -1) { reportOnly = false; break; } } }
+    if (reportOnly) { useCoder = false; }
     const sysExtras = ['shell', 'log', 'proces', 'port', 'serwer', 'siec', 'network', 'diagnoz', 'debug', 'crash', 'wyciek', 'nasluch', 'cpu', 'ram', 'dysk', 'systemd', 'uslug', 'firewall', 'konfiguracj'];
     (this as any).useStrong = useCoder;
     for (const sk of sysExtras) { if (foldedTask.indexOf(sk) !== -1) { (this as any).useStrong = true; break; } }
+    if (reportOnly) { (this as any).useStrong = true; }
     (this as any).useCoder = useCoder;
     if (useCoder || (this as any).useStrong) { this.snapshotProject(cwd); }
     const task: Task = {
