@@ -346,6 +346,14 @@ export class SwarmManager {
       execute: async (args: any) => this.readSkill(String((args && args.name) || '').trim()),
     });
     this.tools.register({
+      definition: { name: 'skill_drafts', description: 'Lista szkicow skilli (z porazek) czekajacych na akceptacje.', parameters: {}, requiresApproval: false, timeoutMs: 5000, maxOutputBytes: 6000 },
+      execute: async () => this.listDrafts(),
+    });
+    this.tools.register({
+      definition: { name: 'skill_accept', description: 'Akceptuje szkic skilla: przenosi z _drafts/ do aktywnych (po weryfikacji przez czlowieka).', parameters: { name: 'string' }, requiresApproval: false, timeoutMs: 5000, maxOutputBytes: 2000 },
+      execute: async (args: any) => this.acceptDraft(String((args && args.name) || '')),
+    });
+    this.tools.register({
       definition: {
         name: 'project_remember',
         description: 'Zapisuje trwaly fakt o PROJEKCIE (stack, konwencje, decyzje, pulapki) do pamieci projektu. Podaj key i value.',
@@ -860,6 +868,44 @@ export class SwarmManager {
     } catch (error) { return 'Blad odczytu skilli.'; }
   }
 
+  /** Lista szkicow skilli czekajacych na akceptacje (z _drafts/). */
+  private listDrafts(): string {
+    const nl = String.fromCharCode(10);
+    try {
+      const dd = path.join(os.homedir(), '.omni', 'skills', '_drafts');
+      if (!fs.existsSync(dd)) { return 'Brak szkicow.'; }
+      const files = fs.readdirSync(dd).filter((f: string) => f.slice(-3) === '.md');
+      if (!files.length) { return 'Brak szkicow.'; }
+      return files.map((f: string) => {
+        const raw = fs.readFileSync(path.join(dd, f), 'utf8');
+        const t = (raw.split(nl).filter((l: string) => l.indexOf('# ') === 0)[0] || f).replace(/^#+ /, '');
+        return '- ' + f.replace(/\.md$/, '') + ' :: ' + t;
+      }).join(nl);
+    } catch (e) { return 'Blad odczytu szkicow.'; }
+  }
+  /** Akceptuje szkic skilla: przenosi z _drafts/ do aktywnych, zdejmuje tag draft i ustawia id. */
+  private acceptDraft(name: string): string {
+    try {
+      const dir = path.join(os.homedir(), '.omni', 'skills');
+      const dd = path.join(dir, '_drafts');
+      const rawIn = String(name || '').trim();
+      if (!rawIn) { return 'Podaj nazwe szkicu (skill_drafts pokaze liste).'; }
+      const cand = [rawIn, rawIn.replace(/\.md$/i, '') + '.md', 'draft-' + rawIn.replace(/\.md$/i, '') + '.md', 'draft-' + rawIn];
+      let use = '';
+      for (const c of cand) { const p = path.join(dd, c); if (fs.existsSync(p)) { use = p; break; } }
+      if (!use) { return 'Nie znam szkicu: ' + rawIn; }
+      const base = path.basename(use).replace(/^draft-/, '');
+      const dst = path.join(dir, base);
+      if (fs.existsSync(dst)) { return 'Skill juz istnieje (nie nadpisuje): ' + base; }
+      let raw = fs.readFileSync(use, 'utf8');
+      raw = raw.replace(/^id:\s*\S+/m, 'id: ' + base.replace(/\.md$/i, ''));
+      raw = raw.replace(/tags:\s*\[([^\]]*)\]/, (m: string, inner: string) => 'tags: [' + inner.split(',').map((x: string) => x.trim()).filter((x: string) => x && x !== 'draft').join(', ') + ']');
+      raw = raw.replace(/successRate:\s*[0-9.]+/, 'successRate: 1.0');
+      fs.writeFileSync(dst, raw, 'utf8');
+      fs.unlinkSync(use);
+      return 'Zaakceptowano szkic -> aktywny skill: ' + base;
+    } catch (e: any) { return 'Blad akceptacji: ' + e.message; }
+  }
   private readSkill(name: string): string {
     try {
       ((this as any).usedSkills = (this as any).usedSkills || []).push(String(name || ''));
