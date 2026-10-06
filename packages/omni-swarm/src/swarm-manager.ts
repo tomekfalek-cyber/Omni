@@ -734,6 +734,56 @@ export class SwarmManager {
       return top.map((x: any) => '- ' + x.title + ' [skill_get: ' + x.fn.replace(/\.md$/i, '') + ']' + (x.when ? ' - ' + x.when : '')).join(nl);
     } catch (error) { return ''; }
   }
+  /** Zapisuje porazke zadania i po 2 podobnych tworzy szkic skilla (do akceptacji, nieaktywny). */
+  private noteFailure(prompt: string, reason: string): void {
+    try {
+      const dir = path.join(os.homedir(), '.omni');
+      const f = path.join(dir, 'failures.json');
+      let arr: any[] = [];
+      try { arr = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { arr = []; }
+      if (!Array.isArray(arr)) { arr = []; }
+      const stem = this.foldPl(String(prompt || '').toLowerCase()).split(/[^a-z0-9]+/).filter((t: string) => t.length > 1).slice(0, 5).join('-');
+      if (!stem) { return; }
+      arr.push({ stem: stem, prompt: String(prompt || '').slice(0, 300), reason: String(reason || '').slice(0, 200), ts: Date.now() });
+      if (arr.length > 200) { arr = arr.slice(arr.length - 200); }
+      const count = arr.filter((x: any) => x && x.stem === stem).length;
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(f, JSON.stringify(arr), 'utf8');
+      if (count >= 2) { this.draftSkill(stem, String(prompt || ''), String(reason || '')); }
+    } catch (e) { }
+  }
+  /** Tworzy szkic skilla z powtarzajacej sie porazki - w _drafts/, do recznej akceptacji (nie auto-aktywny). */
+  private draftSkill(stem: string, samplePrompt: string, reason: string): void {
+    try {
+      const dd = path.join(os.homedir(), '.omni', 'skills', '_drafts');
+      fs.mkdirSync(dd, { recursive: true });
+      const slug = ('draft-' + stem).slice(0, 60).replace(/-+$/, '');
+      const file = path.join(dd, slug + '.md');
+      if (fs.existsSync(file)) { return; }
+      const title = String(samplePrompt || '').replace(/\s+/g, ' ').slice(0, 80);
+      const nlc = String.fromCharCode(10);
+      const body = [
+        '---',
+        'id: ' + slug,
+        'name: Szkic: ' + title,
+        'description: Szkic z porazek (' + reason.slice(0, 80) + ')',
+        'tags: [draft, auto]',
+        'successRate: 0.5',
+        'usageCount: 0',
+        '---',
+        '# Szkic: ' + title,
+        'KIEDY: zadanie "' + String(samplePrompt || '').slice(0, 140) + '" (powtorzona porazka)',
+        'ZADANIE, KTORE 2x SIE NIE UDALO (' + reason.slice(0, 120) + '). Dopracuj kroki:',
+        '1. Zdiagnozuj przyczyne porazki (przeczytaj blad, sprawdz hipoteze jednym testem).',
+        '2. Zaplanuj minimalne kroki naprawy wg zaleznosci.',
+        '3. Wykonaj i sprawdz wynik.',
+        '',
+      ].join(nlc);
+      fs.writeFileSync(file, body, 'utf8');
+      this.emit({ kind: 'writing', text: 'Utworzono szkic skilla (do akceptacji): ' + slug });
+      console.log('[Swarm] Szkic skilla z 2x FAIL: ' + file);
+    } catch (e) { }
+  }
   private listSkills(): string {
     const nl = String.fromCharCode(10);
     try {
@@ -1423,6 +1473,7 @@ export class SwarmManager {
 
       if (!draftAnswer || !String(draftAnswer).trim()) {
         draftAnswer = 'Nie udalo sie uzyskac odpowiedzi od silnika (' + String(process.env.OMNI_LLM_PROVIDER || 'aktywny') + '). Najczestsza przyczyna: klucz API odrzucony albo limit darmowego planu. Sprawdz zakladke Klucze API (jest przycisk Sprawdz klucze) i sprobuj ponownie.';
+        this.noteFailure(prompt, 'brak odpowiedzi silnika (klucz/limit)');
       }
       // KROK 4: Evolver uczy sie z zadania (opcjonalny - blad nie moze zepsuc odpowiedzi)
       if (!fastAnswered && !quickTask) { try { await this.runEvolver(prompt, executionResult); } catch (error) { } }
@@ -1439,6 +1490,7 @@ export class SwarmManager {
       task.status = 'failed';
       task.error = error.message;
       this.memory.appendTranscript(sessionId, 'system', `Task failed: ${error.message}`);
+      try { this.noteFailure(prompt, String((error && error.message) || '')); } catch (e) { }
       if ((this as any).codeBackupDir) {
         const restored = this.restoreProject();
         if (restored.length) { console.log('[Swarm] Zadanie nieudane - wycofano zmiany w: ' + restored.join(', ')); }
