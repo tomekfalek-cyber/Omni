@@ -88,6 +88,22 @@ export class SwarmManager {
       return fs.readFileSync(f, 'utf8').slice(-4000);
     } catch (e) { return ''; }
   }
+  /** Czyta skumulowane lekcje z poprzednich zadan (pamiec, ktora sie kumuluje). */
+  private readLessons(): string {
+    try { const f = path.join(os.homedir(), '.omni', 'memory', 'lessons.md'); return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').slice(-2000) : ''; } catch (e) { return ''; }
+  }
+  /** Dopisuje krotka, unikalna lekcje do pamieci kumulatywnej. */
+  private appendLesson(text: string): void {
+    try {
+      const f = path.join(os.homedir(), '.omni', 'memory', 'lessons.md');
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      const line = '- ' + String(text || '').trim().replace(/\s+/g, ' ').slice(0, 200);
+      let prev = ''; try { prev = fs.readFileSync(f, 'utf8'); } catch (e) { prev = ''; }
+      if (prev.indexOf(line.slice(2, 60)) !== -1) { return; }
+      fs.writeFileSync(f, prev + (prev && prev.slice(-1) !== String.fromCharCode(10) ? String.fromCharCode(10) : '') + line + String.fromCharCode(10), 'utf8');
+      console.log('[Pamiec] Dodano lekcje: ' + line.slice(0, 80));
+    } catch (e) { }
+  }
   /** Czyta pamiec srodowiska (stack, porty, uslugi, pulapki). */
   private readEnvMemory(): string {
     try {
@@ -1323,6 +1339,7 @@ export class SwarmManager {
       tools,
       (this.readProjectMemory(cwd) ? 'PAMIEC PROJEKTU (ustalenia z wczesniejszych sesji - korzystaj, nie pytaj ponownie):' + NL + this.readProjectMemory(cwd) : 'PAMIEC PROJEKTU: pusta (zapisuj ustalenia narzedziem project_remember)'),
       (this.readEnvMemory() ? 'PAMIEC SRODOWISKA (stack, porty, uslugi, pulapki - korzystaj):' + NL + this.readEnvMemory() : ''),
+      (this.readLessons() ? 'LEKCJE Z POPRZEDNICH ZADAN (stosuj, nie powtarzaj bledow):' + NL + this.readLessons() : ''),
       'MASZ DOSTEP DO INTERNETU (web_search, web_fetch). Mozesz sprawdzac biezace informacje, wiadomosci i strony. NIE twierdz, ze nie wiesz co sie dzialo po 2024 roku - po prostu wyszukaj.',
       'MASZ PAMIEC TRWALA (memory_save, memory_search) - zapisuj wazne ustalenia i preferencje uzytkownika.',
       'MASZ ROZMOWE GLOSOWA: uzytkownik moze mowic zamiast pisac (przycisk z ikona mikrofonu w czacie).',
@@ -1414,5 +1431,6 @@ export class SwarmManager {
     if (!verified) { return; }
     this.memory.saveFact(`skill_${Date.now()}`, skill);
     this.saveSkill(skill);
+    this.appendLesson(String(skill));
   }
 }

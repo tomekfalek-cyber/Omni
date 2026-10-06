@@ -104,6 +104,9 @@ export class OmniGateway {
     this.setupREST();
     this.setupOAuth();
     this.setupWebSocket();
+    // #10 CENTRALNY LOG BLEDOW: zamiast cichego polykania - kazdy nieobsluzony blad trafia do logu.
+    process.on('unhandledRejection', (e: any) => { try { console.log('[Blad] Nieobsluzone odrzucenie: ' + (e && e.message ? e.message : String(e))); } catch (err) { } });
+    process.on('uncaughtException', (e: any) => { try { console.log('[Blad] Nieobsluzony wyjatek: ' + (e && e.message ? e.message : String(e))); } catch (err) { } });
 
     this.httpServer.listen(port, host, () => {
       console.log('[Gateway] Omni Gateway uruchomiony na ' + host + ':' + port);
