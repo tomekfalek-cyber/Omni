@@ -342,6 +342,19 @@ export class ToolRegistry {
       out.push('- klucze: ' + keys.join(', '));
       return out.join(String.fromCharCode(10));
     });
+    this.registerTool({
+      name: 'health_check',
+      description: 'Nadzor zdrowia maszyny (read-only): wolne miejsce i RAM, usluga omni-gateway, nasluchujace porty. Do Uzycia w automatyzacjach.',
+      parameters: {},
+      requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 8000,
+    }, async () => {
+      const out: string[] = ['HEALTH CHECK: ' + new Date().toISOString().slice(0, 19)];
+      try { const df = await execFileP('df', ['-h', '/'], { timeout: 5000 }); const l = String(df.stdout).trim().split(String.fromCharCode(10)); out.push('- dysk /: ' + (l[1] || '?')); } catch (e) { out.push('- dysk: blad'); }
+      try { const fr = await execFileP('free', ['-m'], { timeout: 5000 }); const l = String(fr.stdout).split(String.fromCharCode(10)); out.push('- pamiec: ' + (l[1] || '?').replace(/\s+/g, ' ')); } catch (e) { }
+      try { const st = await execFileP('systemctl', ['--user', 'is-active', 'omni-gateway.service'], { timeout: 5000 }); out.push('- omni-gateway: ' + String(st.stdout).trim()); } catch (e: any) { out.push('- omni-gateway: ' + String((e.stdout || e.message || '')).trim()); }
+      try { const ss = await execFileP('ss', ['-tuln'], { timeout: 5000 }); const n = String(ss.stdout).split(String.fromCharCode(10)).filter((x) => x.indexOf('LISTEN') !== -1).length; out.push('- nasluchujace porty (LISTEN): ' + n); } catch (e) { }
+      return out.join(String.fromCharCode(10));
+    });
 
     // Integracje: GitHub, Telegram, e-mail, WhatsApp
     const integrations = new IntegrationTools();
