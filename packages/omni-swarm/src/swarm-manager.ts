@@ -1191,6 +1191,17 @@ export class SwarmManager {
     const s = String(typeof out === 'string' ? out : JSON.stringify(out)).slice(0, 4000);
     return 'Pliki w ' + dir + ' (lista):' + String.fromCharCode(10) + s;
   }
+  /** #4 Lekki scoring trudnosci zadania (dlugosc, wielokrokowosc, ciezkie czasowniki) - routing nie tylko po slowach. */
+  private difficultyScore(prompt: string, folded: string): number {
+    let s = 0;
+    const len = String(prompt || '').trim().length;
+    if (len > 180) { s += 1; }
+    if (len > 400) { s += 1; }
+    if (String(folded || '').indexOf(String.fromCharCode(10)) !== -1) { s += 1; }
+    const heavy = ['zaplanuj', 'zaprojektuj', 'zoptymalizuj', 'przeanalizuj', 'porownaj', 'zbuduj', 'zaimplementuj', 'refaktor', 'napraw', 'wyjasnij', 'dlaczego', 'architektur', 'wydajnosc', 'strategi'];
+    for (const h of heavy) { if (String(folded || '').indexOf(h) !== -1) { s += 1; break; } }
+    return Math.min(s, 3);
+  }
   private async executeTaskInner(sessionId: string, prompt: string, cwd: string): Promise<Task> {
     const taskId = uuidv4();
     (this as any).activeCwd = cwd;
@@ -1215,11 +1226,14 @@ export class SwarmManager {
     if (reportOnly) { for (const fk of fixKeys) { if (foldedTask.indexOf(fk) !== -1) { reportOnly = false; break; } } }
     if (reportOnly) { useCoder = false; }
     const sysExtras = ['shell', 'log', 'proces', 'port', 'serwer', 'siec', 'network', 'diagnoz', 'debug', 'crash', 'wyciek', 'nasluch', 'cpu', 'ram', 'dysk', 'systemd', 'uslug', 'firewall', 'konfiguracj'];
-    (this as any).useStrong = useCoder;
+    // #4 ROUTING PO TRUDNOSCI: lekki scoring - nie tylko slowa kluczowe.
+    const diff = this.difficultyScore(prompt, foldedTask);
+    (this as any).difficulty = diff;
+    (this as any).useStrong = useCoder || diff >= 2;
     for (const sk of sysExtras) { if (foldedTask.indexOf(sk) !== -1) { (this as any).useStrong = true; break; } }
     if (reportOnly) { (this as any).useStrong = true; }
-    // PRZYSPIESZENIE: krotkie, nie-koderskie zadania nie placa za ciezki pipeline.
-    const quickTask = !useCoder && !reportOnly && String(prompt).trim().length < 180;
+    // PRZYSPIESZENIE: krotkie, LATWE, nie-koderskie zadania nie placa za ciezki pipeline.
+    const quickTask = !useCoder && !reportOnly && diff < 2 && String(prompt).trim().length < 180;
     (this as any).quickTask = quickTask;
     (this as any).useCoder = useCoder;
     if (useCoder || (this as any).useStrong) { this.snapshotProject(cwd); }
