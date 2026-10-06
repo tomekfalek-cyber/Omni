@@ -1072,6 +1072,20 @@ export class SwarmManager {
     finally { this.busy = false; }
   }
 
+  /** Deterministyczna lista plikow ("przygotuj liste plikow w <dir>") - zawsze uruchamia file_list. */
+  private async tryDirectListFiles(prompt: string, cwd: string): Promise<string | null> {
+    const low = this.foldPl(String(prompt || '').toLowerCase());
+    const wantList = (/lista|liste|wykaz|spis|zawartosc/.test(low) && /plik|katalog|folder|dir/.test(low))
+      || /\bls\b/.test(low)
+      || /co jest w (katalogu|folderze|katalog|folder)/.test(low);
+    if (!wantList) { return null; }
+    let dir = cwd;
+    const m = String(prompt || '').match(/(?:\/[A-Za-z0-9._-]+)+/);
+    if (m && m[0]) { dir = m[0]; }
+    const out = await this.execToolResilient('file_list', { path: dir }, cwd);
+    const s = String(typeof out === 'string' ? out : JSON.stringify(out)).slice(0, 4000);
+    return 'Pliki w ' + dir + ' (lista):' + String.fromCharCode(10) + s;
+  }
   private async executeTaskInner(sessionId: string, prompt: string, cwd: string): Promise<Task> {
     const taskId = uuidv4();
     (this as any).activeCwd = cwd;
@@ -1142,6 +1156,18 @@ export class SwarmManager {
         task.error = 'Nie udalo sie ustawic przypomnienia: ' + error.message;
       }
       task.updatedAt = Date.now();
+      return task;
+    }
+
+    // Deterministyczna lista plikow: "przygotuj liste plikow w <dir>" zawsze uruchamia file_list.
+    const directList = await this.tryDirectListFiles(prompt, cwd);
+    if (directList) {
+      task.status = 'completed';
+      task.result = this.stripMarkers(directList);
+      (task as any).engine = 'deterministyczne (file_list)';
+      this.memory.appendTranscript(sessionId, 'assistant', task.result);
+      task.updatedAt = Date.now();
+      this.emit({ kind: 'done', text: '' });
       return task;
     }
 
