@@ -1374,6 +1374,7 @@ export class OmniGateway {
       prompt: task && task.prompt,
       result: task && task.result,
       error: task && task.error,
+      engine: task && (task as any).engine,
     });
     if (this.recentTasks.length > 100) this.recentTasks.shift();
   }

@@ -1553,7 +1553,7 @@ function loadSessions(){
 function loadTasks(){
   api("/api/tasks").then(function(d){
     el("tasksList").innerHTML = (d.tasks || []).length ? d.tasks.map(function(t){
-      return "<div class=item><b>" + esc(t.status) + "</b> <span class=mut>" + esc(new Date(t.createdAt || Date.now()).toLocaleString()) + "</span><div class=mut>" + esc((t.prompt || "").slice(0, 180)) + "</div></div>";
+      return "<div class=item><b>" + esc(t.status) + "</b> <span class=mut>" + esc(new Date(t.createdAt || Date.now()).toLocaleString()) + "</span><div class=mut>" + esc((t.prompt || "").slice(0, 180)) + "</div>" + (t.engine ? "<div class=mut>silnik: " + esc(t.engine) + "</div>" : "") + "</div>";
     }).join("") : "<div class=mut>Brak zadan.</div>";
   }).catch(function(e){ el("tasksList").innerHTML = "<div class=mut>Blad: " + esc(e.message) + "</div>"; });
 }

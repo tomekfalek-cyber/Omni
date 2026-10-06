@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 export class SwarmManager {
   private planner: QwenProvider;
   private executor: QwenProvider;
+  private executorStrong: QwenProvider;
   private reviewer: QwenProvider;
   private evolver: QwenProvider;
   private coder: QwenProvider;
@@ -32,6 +33,7 @@ export class SwarmManager {
 
     this.planner = new QwenProvider({ provider, model: modelFlash, temperature: 0.7, maxTokens: 2000 });
     this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 4000 });
+    this.executorStrong = new QwenProvider({ provider, model: modelPro, temperature: 0.3, maxTokens: 4000 });
     this.reviewer = new QwenProvider({ provider, model: modelPro, temperature: 0.1, maxTokens: 2000 });
     this.evolver = new QwenProvider({ provider, model: modelFlash, temperature: 0.8, maxTokens: 3000 });
     this.coder = new QwenProvider({ provider, model: process.env.OMNI_LLM_MODEL_CODER || modelFlash, temperature: 0.2, maxTokens: 4000 });
@@ -58,11 +60,14 @@ export class SwarmManager {
     const strongModel = fastMode ? modelFlash : (process.env.OMNI_LLM_MODEL_PLAN || process.env.OMNI_LLM_MODEL_CODER || ({ groq: 'openai/gpt-oss-120b', deepseek: 'deepseek-v4-pro', openrouter: 'qwen/qwen3.8-27b:free', gemini: 'gemini-flash-latest' } as any)[provider] || modelFlash);
     this.planner = new QwenProvider({ provider, model: strongModel, temperature: 0.4, maxTokens: 1400 });
     this.executor = new QwenProvider({ provider, model: modelFlash, temperature: 0.3, maxTokens: 1400 });
+    this.executorStrong = new QwenProvider({ provider, model: strongModel, temperature: 0.3, maxTokens: 1400 });
     this.reviewer = new QwenProvider({ provider, model: strongModel, temperature: 0.1, maxTokens: 1200 });
     this.evolver = new QwenProvider({ provider, model: strongModel, temperature: 0.6, maxTokens: 900 });
     const coderByProvider: any = { groq: 'openai/gpt-oss-120b', deepseek: 'deepseek-v4-pro', openrouter: 'qwen/qwen3.8-27b:free', gemini: 'gemini-flash-latest' };
     const defaultCoder = coderByProvider[provider] || modelFlash;
     this.coder = new QwenProvider({ provider, model: process.env.OMNI_LLM_MODEL_CODER || defaultCoder, temperature: 0.2, maxTokens: 4000 });
+    (this as any).modelMap = { provider, fastMode, strong: strongModel, flash: modelFlash, mini: modelMini, coder: process.env.OMNI_LLM_MODEL_CODER || defaultCoder };
+    this.logEngine({ event: 'configure', engine: (this as any).modelMap });
   }
 
   /** Krotkie zapytanie testowe do aktualnie ustawionego silnika. */
@@ -434,13 +439,13 @@ export class SwarmManager {
     (this as any).modelCalls = ((this as any).modelCalls || 0) + 1;
     let choice = toolChoice;
     if (choice === 'required' && /thinking|reason|deepseek-v4-pro|deepseek-reasoner/i.test(String(process.env.OMNI_LLM_MODEL || ''))) { choice = 'auto'; }
-    const provider: any = (((this as any).useCoder || (this as any).useStrong) && this.coder) ? this.coder : this.executor;
+    const provider: any = this.pickProvider();
     if (typeof provider.getCompletionWithTools === 'function') {
       try {
         return await provider.getCompletionWithTools(messages, tools, choice);
       } catch (error: any) {
         console.log('[Swarm] Proba z tool_choice=' + String(toolChoice) + ' nieudana (' + error.message + ')');
-        if (this.onEngineFailure && /429|rate limit|quota|limit token|tokenow|resource_exhausted|exhausted|overload|unavailable|503|401|invalid|authentication|unauthorized/i.test(String(error.message || ''))) { try { this.onEngineFailure(); } catch (e) { } }
+        if (this.onEngineFailure && /429|rate limit|quota|limit token|tokenow|resource_exhausted|exhausted|overload|unavailable|503|401|invalid|authentication|unauthorized/i.test(String(error.message || ''))) { this.logEngine({ event: 'fallback', reason: String(error.message || '').slice(0, 160), engine: (this as any).engineUsed || null }); try { this.onEngineFailure(); } catch (e) { } }
         try {
           if (choice && choice !== 'auto') {
             const nudge = messages.concat([{ role: 'user', content: 'WYWOŁAJ NARZĘDZIE TERAZ. Nie odpowiadaj z pamięci - użyj odpowiedniego narzędzia i podaj wynik z jego działania.' }]);
@@ -488,6 +493,33 @@ export class SwarmManager {
     return this.tools.getAllDefinitions();
   }
 
+  /** Wybiera silnik: coder dla kodu/systemu, mocny dla realnych zadan, szybki (flash) dla krotkich. */
+  private pickProvider(): QwenProvider {
+    if (((this as any).useCoder || (this as any).useStrong) && this.coder) { (this as any).engineUsed = this.engineTag(this.coder, 'coder'); return this.coder; }
+    if ((this as any).quickTask) { (this as any).engineUsed = this.engineTag(this.executor, 'flash'); return this.executor; }
+    const p: QwenProvider = this.executorStrong || this.executor;
+    (this as any).engineUsed = this.engineTag(p, p === this.executorStrong ? 'strong' : 'flash');
+    return p;
+  }
+  /** Opis uzytego silnika (provider/model/rola). */
+  private engineTag(p: any, role: string): any {
+    const cfg: any = (p && (p as any).config) || {};
+    return { provider: String(cfg.provider || process.env.OMNI_LLM_PROVIDER || ''), model: String(cfg.model || ''), role: role };
+  }
+  /** Etykieta silnika do panelu: "model @ provider [rola]". */
+  private engineUsedLabel(): string {
+    const e: any = (this as any).engineUsed;
+    if (!e || !e.model) { return ''; }
+    return String(e.model) + ' @ ' + String(e.provider || '') + ' [' + String(e.role || '') + ']';
+  }
+  /** Dziennik silnikow: konfiguracja i fallbacki (kiedy realna jakosc spada). */
+  private logEngine(entry: Record<string, any>): void {
+    try {
+      const f = path.join(os.homedir(), '.omni', 'logs', 'engines.log');
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.appendFileSync(f, new Date().toISOString() + ' ' + JSON.stringify(entry) + String.fromCharCode(10), 'utf8');
+    } catch (e) { }
+  }
   private stripMarkers(text: string): string {
     let t = String(text || '')
       .split('[[DONE]]').join('')
@@ -944,6 +976,7 @@ export class SwarmManager {
     if (directDate) {
       task.status = 'completed';
       task.result = directDate;
+      (task as any).engine = this.engineUsedLabel();
       this.memory.appendTranscript(sessionId, 'assistant', directDate);
       task.updatedAt = Date.now();
       return task;
@@ -954,6 +987,7 @@ export class SwarmManager {
         const out = await this.tools.executeTool('reminder_set', directRem, cwd);
         task.status = 'completed';
         task.result = String(typeof out === 'string' ? out : JSON.stringify(out));
+        (task as any).engine = this.engineUsedLabel();
         this.memory.appendTranscript(sessionId, 'assistant', task.result);
       } catch (error: any) {
         task.status = 'failed';
@@ -1158,7 +1192,7 @@ export class SwarmManager {
         plain.push({ role: 'user', content: 'Napisz teraz konkretna odpowiedz dla uzytkownika po polsku, NA PODSTAWIE WYNIKOW NARZEDZI powyzej. Jesli czegos nie udalo sie wykonac - powiedz to wprost i podaj konkretna blokade.' });
         let streamed = '';
         try {
-          const provider: any = (((this as any).useCoder || (this as any).useStrong) && this.coder) ? this.coder : this.executor;
+          const provider: any = this.pickProvider();
           if (this.onToken && typeof provider.streamCompletion === 'function') {
             console.log('[Swarm] Strumieniowanie odpowiedzi...');
             for await (const chunk of provider.streamCompletion(plain)) {
@@ -1335,6 +1369,7 @@ export class SwarmManager {
       this.memory.appendTranscript(sessionId, 'assistant', String(draftAnswer || '').slice(0, 2000));
       // Odpowiedź wykonawcy jest ważniejsza niż marudzenie reviewera.
       task.result = this.stripMarkers(String(draftAnswer || executionResult || ''));
+      (task as any).engine = this.engineUsedLabel();
       if (!fastAnswered && !quickTask) { try { await this.harvestMemory(sessionId, prompt, String(draftAnswer || executionResult || '')); } catch (error) { } }
       this.memory.appendTranscript(sessionId, 'system', `Task completed: ${taskId}`);
     } catch (error: any) {

@@ -50,6 +50,7 @@ export interface Task {
   currentAgent: AgentRole;
   result?: string;
   error?: string;
+  engine?: string;
 }
 
 export interface Session {
