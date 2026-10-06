@@ -505,9 +505,10 @@ export class SwarmManager {
   /** Wybiera silnik: coder dla kodu/systemu, mocny dla realnych zadan, szybki (flash) dla krotkich. */
   private pickProvider(): QwenProvider {
     if (((this as any).useCoder || (this as any).useStrong) && this.coder) { (this as any).engineUsed = this.engineTag(this.coder, 'coder'); return this.coder; }
-    if ((this as any).quickTask) { (this as any).engineUsed = this.engineTag(this.executor, 'flash'); return this.executor; }
+    if ((this as any).quickTask) { (this as any).engineUsed = this.engineTag(this.executor, 'flash'); this.logEngine({ event: 'downgrade', reason: 'quickTask (krotkie/latwe)', engine: (this as any).engineUsed }); return this.executor; }
     const p: QwenProvider = this.executorStrong || this.executor;
     (this as any).engineUsed = this.engineTag(p, p === this.executorStrong ? 'strong' : 'flash');
+    if (!this.executorStrong) { this.logEngine({ event: 'downgrade', reason: 'brak mocnego silnika', engine: (this as any).engineUsed }); }
     return p;
   }
   /** Opis uzytego silnika (provider/model/rola). */
@@ -723,7 +724,7 @@ export class SwarmManager {
   }
   /** #2: aktualizuje successRate/usageCount skilli, ktore faktycznie weszly w zadaniu. */
   private async recordSkillUsage(success: boolean): Promise<void> {
-    const names: string[] = (this as any).usedSkills || [];
+    const names: string[] = ((this as any).usedSkills || []).concat((this as any).injectedSkills || []);
     if (!names.length) { return; }
     try {
       await this.getSkillMgr();
@@ -745,6 +746,8 @@ export class SwarmManager {
       if (m) {
         const skills = m.findRelevantSkills(task, limit);
         if (skills && skills.length) {
+          (this as any).injectedSkills = (this as any).injectedSkills || [];
+          for (const s of skills) { try { (this as any).injectedSkills.push(String(s.id)); } catch (e) { } }
           return skills.map((s: any) => '- ' + s.name + ' [skill_get: ' + s.id + ']' + (s.description ? ' - ' + String(s.description).slice(0, 90) : '')).join(String.fromCharCode(10));
         }
         return '';
@@ -1213,6 +1216,7 @@ export class SwarmManager {
     (this as any).activePrompt = String(prompt || '');
     (this as any).modelCalls = 0;
     (this as any).usedSkills = [];
+    (this as any).injectedSkills = [];
     try { await this.getSkillMgr(); } catch (e) { }
     const trimmedLower = String(prompt).trim().toLowerCase();
     const exact = trimmedLower === '/dokladnie' || trimmedLower.indexOf('/dokladnie ') === 0;
