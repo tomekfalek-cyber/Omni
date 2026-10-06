@@ -917,6 +917,9 @@ export class SwarmManager {
     (this as any).useStrong = useCoder;
     for (const sk of sysExtras) { if (foldedTask.indexOf(sk) !== -1) { (this as any).useStrong = true; break; } }
     if (reportOnly) { (this as any).useStrong = true; }
+    // PRZYSPIESZENIE: krotkie, nie-koderskie zadania nie placa za ciezki pipeline.
+    const quickTask = !useCoder && !reportOnly && String(prompt).trim().length < 180;
+    (this as any).quickTask = quickTask;
     (this as any).useCoder = useCoder;
     if (useCoder || (this as any).useStrong) { this.snapshotProject(cwd); }
     const task: Task = {
@@ -1276,7 +1279,7 @@ export class SwarmManager {
         } catch (error: any) { console.log('[Swarm] Petla TDD/przeglad nieudane: ' + error.message); }
       }
       // REFLEKSJA: czy odpowiedz faktycznie rozwiazuje zadanie uzytkownika?
-      if (!fastAnswered && draftAnswer && String(draftAnswer).trim().length > 40) {
+      if (!fastAnswered && !quickTask && draftAnswer && String(draftAnswer).trim().length > 200) {
         try {
           const refl = await this.executor.getCompletion([
             { role: 'system', content: 'Jestes Reflektorem. Patrzysz na ZADANIE i ODPOWIEDZ. Zwroc WYLACZNIE jedno: "OK" (odpowiedz rozwiazuje zadanie) albo "BRAK: <czego brakuje, 1 zdanie>". Nie przepisuj odpowiedzi, nie dodawaj nic wiecej.' },
@@ -1306,7 +1309,7 @@ export class SwarmManager {
         } catch (error) { }
       }
       // TOP4: self-critique (Krytyk) - tylko przy realnym ryzyku (kod albo uzyte narzedzia).
-      if (!fastAnswered && draftAnswer && String(draftAnswer).trim().length > 20 && (useCoder || usedTools)) {
+      if (!fastAnswered && draftAnswer && String(draftAnswer).trim().length > 20 && (useCoder || (usedTools && !quickTask))) {
         try {
           const crit = await this.executor.getCompletion([
             { role: 'system', content: ((this as any).useCoder ? 'Jestes takze Testerem: sprawdz kod pod katem bledow i uruchom test; jesli kod nie byl uruchomiony, zaznacz to wprost. ' : '') + 'Jestes SUROWYM Krytykiem faktow. Usun lub popraw KAZDE twierdzenie bez pokrycia w wynikach narzedzi. Nie dodawaj nic od siebie i nie chwal. Zwroc WYLACZNIE poprawiona odpowiedz po polsku.' },
@@ -1325,8 +1328,8 @@ export class SwarmManager {
         draftAnswer = 'Nie udalo sie uzyskac odpowiedzi od silnika (' + String(process.env.OMNI_LLM_PROVIDER || 'aktywny') + '). Najczestsza przyczyna: klucz API odrzucony albo limit darmowego planu. Sprawdz zakladke Klucze API (jest przycisk Sprawdz klucze) i sprobuj ponownie.';
       }
       // KROK 4: Evolver uczy sie z zadania (opcjonalny - blad nie moze zepsuc odpowiedzi)
-      if (!fastAnswered) { try { await this.runEvolver(prompt, executionResult); } catch (error) { } }
-      try { await this.updateSessionSummary(sessionId); } catch (error) { }
+      if (!fastAnswered && !quickTask) { try { await this.runEvolver(prompt, executionResult); } catch (error) { } }
+      if (!quickTask) { try { await this.updateSessionSummary(sessionId); } catch (error) { } }
 
       task.status = 'completed';
       this.memory.appendTranscript(sessionId, 'assistant', String(draftAnswer || '').slice(0, 2000));
@@ -1405,7 +1408,8 @@ export class SwarmManager {
       { role: 'user' as const, content: prompt }
     ];
     try {
-      const raw = await this.planner.getCompletion(messages);
+      const pl: any = ((this as any).quickTask && this.executor) ? this.executor : this.planner;
+      const raw = await pl.getCompletion(messages);
       return this.formatPlan(raw);
     } catch (error) {
       return prompt;
