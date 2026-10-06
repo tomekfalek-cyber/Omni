@@ -489,12 +489,17 @@ export class SwarmManager {
   }
 
   private stripMarkers(text: string): string {
-    return text
+    let t = String(text || '')
       .split('[[DONE]]').join('')
       .split('[[APPROVED]]').join('')
       .split('[[REJECTED]]').join('')
-      .split('[REJECTED BY REVIEWER]').join('')
-      .trim();
+      .split('[REJECTED BY REVIEWER]').join('');
+    // Usun surowe znaczniki wywolan narzedzi, ktore potrafia wyciec do odpowiedzi (DSML/XML).
+    t = t.replace(/<\/?\|[^>]*\|>/g, '');
+    t = t.replace(/<\/?(?:invoke|parameter|tool_call|tool_calls|function_calls)(?:\s[^>]*)?>/gi, '');
+    t = t.replace(/^\s*[<|]{1,3}\s*$/gm, '');
+    t = t.replace(/\n{3,}/g, String.fromCharCode(10) + String.fromCharCode(10));
+    return t.trim();
   }
 
   private parseToolCalls(text: string): Array<{ name: string, args: any }> {
@@ -514,6 +519,18 @@ export class SwarmManager {
       }
       if (name) calls.push({ name: name, args: args });
       idx = text.indexOf(marker, end);
+    }
+    // Format 2: surowe znaczniki XML/DSML (invoke + parameter) - niektore modele tak je emituja.
+    const invRe = /<\|?DSML\|?invoke\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/\|?DSML\|?invoke>|<invoke\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/invoke>/gi;
+    let im;
+    while ((im = invRe.exec(text)) !== null) {
+      const nm = im[1] || im[3];
+      const body = im[2] || im[4] || '';
+      const a: any = {};
+      const pRe = /<\|?DSML\|?parameter\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/\|?DSML\|?parameter>|<parameter\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/parameter>/gi;
+      let pm;
+      while ((pm = pRe.exec(body)) !== null) { a[pm[1] || pm[3]] = String(pm[2] || pm[4] || '').trim(); }
+      if (nm) calls.push({ name: nm, args: a });
     }
     return calls;
   }
