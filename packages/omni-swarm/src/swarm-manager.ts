@@ -429,6 +429,7 @@ export class SwarmManager {
   }
 
   private async executorTurn(messages: any[], tools: any[], toolChoice?: string): Promise<{ content: string, toolCalls: any[] }> {
+    (this as any).modelCalls = ((this as any).modelCalls || 0) + 1;
     let choice = toolChoice;
     if (choice === 'required' && /thinking|reason|deepseek-v4-pro|deepseek-reasoner/i.test(String(process.env.OMNI_LLM_MODEL || ''))) { choice = 'auto'; }
     const provider: any = (((this as any).useCoder || (this as any).useStrong) && this.coder) ? this.coder : this.executor;
@@ -876,6 +877,7 @@ export class SwarmManager {
   private async executeTaskInner(sessionId: string, prompt: string, cwd: string): Promise<Task> {
     const taskId = uuidv4();
     (this as any).activeCwd = cwd;
+    (this as any).modelCalls = 0;
     const trimmedLower = String(prompt).trim().toLowerCase();
     const exact = trimmedLower === '/dokladnie' || trimmedLower.indexOf('/dokladnie ') === 0;
     if (exact) { prompt = String(prompt).trim().slice('/dokladnie'.length).trim(); }
@@ -1002,6 +1004,7 @@ export class SwarmManager {
 
       for (let i = 0; i < task.maxIterations; i++) {
         const iterStartCount = execNames.length;
+        if (task.maxIterations > 1) { this.emit({ kind: 'thinking', text: 'Iteracja ' + (i + 1) + '/' + task.maxIterations }); }
         if (i === 0 && this.shouldUseSwarm(prompt, plan)) {
           const parts = this.splitPlan(plan, Number(String(process.env.OMNI_SWARM_WORKERS || '3')));
           if (parts.length >= 2) {

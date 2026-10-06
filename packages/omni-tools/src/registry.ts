@@ -405,7 +405,21 @@ export class ToolRegistry {
 
     // 2. Wykonaj narzędzie z timeoutem
     const timeoutMs = tool.definition.timeoutMs;
-    const executePromise = tool.execute(args, cwd);
+    const runTool = async (): Promise<any> => {
+      let lastErr: any = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { return await tool.execute(args, cwd); }
+        catch (e: any) {
+          lastErr = e;
+          const transient = /429|503|502|504|timeout|ECONNRESET|ETIMEDOUT|ENOTFOUND|fetch failed|network|rate limit|overload|socket hang/i.test(String((e && e.message) || e));
+          if (!transient || attempt === 2) { throw e; }
+          console.log('[ToolRegistry] Ponawiam ' + toolName + ' (proba ' + (attempt + 2) + '/3): ' + String((e && e.message) || e).slice(0, 80));
+          await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+        }
+      }
+      throw lastErr;
+    };
+    const executePromise = runTool();
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => reject(new Error(`Przekroczono limit czasu narzędzia (${timeoutMs}ms)`)), timeoutMs);
     });
