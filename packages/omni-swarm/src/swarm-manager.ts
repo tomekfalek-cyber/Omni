@@ -166,6 +166,7 @@ export class SwarmManager {
       '18. CLI (argparse): argumenty zaczynajace sie od "-" (np. wyrazenie "-5+3" albo sciezka "-plik") sa traktowane jak OPCJE. Pisz CLI odpornie: uzyj nargs=argparse.REMAINDER albo obslugi "--", i waliduj wejscie zamiast sie wywalac.',
       '19. BEZPIECZENSTWO: narzedzia audytowe/ofensywne (skanowanie, testy wstrzykniec, exploit) stosuj WYLACZNIE do systemow, ktore uzytkownik posiada lub ma pisemna zgode. Atakowanie cudzych systemow - ODMAWIAJ. W audycie najpierw inwentarz (passive), potem testy aktywne za zgoda.',
       '20. AUDYT/RAPORT z kodu lub repozytorium: najpierw zmierz (repo_audit, code_map), potem PRZECZYTAJ najwazniejsze pliki. Pisz szczery, konkretny raport z DOWODAMI (plik:linia albo liczba) - mocne strony, ryzyka z waga, tabela ocen, werdykt, priorytetowe poprawki. Bez pochlebstw i bez ogolnikow.',
+      '21. RAPORT/AUDYT = CZYTAJ i PISZ, minimum dzialan: uzyj file_read, file_list, code_map, repo_audit, a wynik zapisz file_write. NIE uruchamiaj shell_exec/run_code i NIE zmieniaj plikow projektu - audyt niczego nie modyfikuje.',
     ].join(nl);
   }
   /** Petla TDD: uruchom kod/test, a przy bledzie popraw i uruchom ponownie (test -> poprawka -> retest). */
@@ -961,7 +962,12 @@ export class SwarmManager {
       let noProgress = 0;
       let fastAnswered = false;
       const execNames: string[] = [];
-      const toolSchemas = this.toolSchemas();
+      let toolSchemas = this.toolSchemas();
+      if (reportOnly) {
+        const allow = new Set(['file_read', 'file_list', 'code_map', 'repo_audit', 'file_write', 'memory_search', 'memory_save', 'web_search', 'web_fetch', 'skill_get', 'skill_list']);
+        toolSchemas = toolSchemas.filter((t: any) => allow.has(t.function && t.function.name));
+        console.log('[Swarm] Tryb raportu: narzedzia ograniczone do ' + toolSchemas.length);
+      }
       const lowerPrompt = String(prompt).toLowerCase();
       const searchKeys = ['cen', 'kurs', 'koszt', 'ile kosztuje', 'bitcoin', 'btc', 'ethereum', 'krypto', 'walut', 'wymian', 'wiadomosc', 'wydarzen', 'aktualn', 'dzisiaj', 'dzisiejsz', 'pogod', 'prognoz', 'wynik', 'notowan'];
       let needsSearch = false;
