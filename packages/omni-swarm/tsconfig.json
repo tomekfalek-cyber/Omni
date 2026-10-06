@@ -23,6 +23,9 @@
     },
     {
       "path": "../omni-tools"
+    },
+    {
+      "path": "../omni-evolution"
     }
   ]
 }

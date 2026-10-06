@@ -34,7 +34,8 @@
     "uuid": "^9.0.1",
     "omni-core": "workspace:*",
     "omni-memory": "workspace:*",
-    "omni-tools": "workspace:*"
+    "omni-tools": "workspace:*",
+    "omni-evolution": "workspace:*"
   },
   "devDependencies": {
     "@types/uuid": "^9.0.8",

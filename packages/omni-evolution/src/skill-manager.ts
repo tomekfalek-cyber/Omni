@@ -19,6 +19,7 @@ export interface Skill {
 export class SkillManager {
   private skillsDir: string;
   private skills: Map<string, Skill> = new Map();
+  private files: Map<string, string> = new Map();
 
   constructor(skillsDir: string = '.omni/skills') {
     this.skillsDir = skillsDir;
@@ -45,6 +46,7 @@ export class SkillManager {
         const skill = await this.loadSkillFromFile(path.join(this.skillsDir, file));
         if (skill) {
           this.skills.set(skill.id, skill);
+          this.files.set(skill.id, file);
         }
       } catch (error: any) {
         console.error(`[SkillManager] Błąd ładowania skill ${file}:`, error.message);
@@ -125,10 +127,12 @@ export class SkillManager {
     };
 
     const fileContent = matter.stringify(skill.content, frontmatter);
-    const fileName = `${skill.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`;
+    const slug = String(skill.name || skill.id || 'skill').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const fileName = this.files.get(skill.id) || (slug + '.md');
     const filePath = path.join(this.skillsDir, fileName);
 
     await fs.writeFile(filePath, fileContent, 'utf-8');
+    this.files.set(skill.id, fileName);
   }
 
   /**

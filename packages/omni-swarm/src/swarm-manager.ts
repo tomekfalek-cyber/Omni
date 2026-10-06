@@ -6,6 +6,7 @@ import { Task, Message, AgentRole, ToolCall } from 'omni-core/types.js';
 import { OmniMemory } from 'omni-memory/memory.js';
 import { ToolRegistry } from 'omni-tools/registry.js';
 import { v4 as uuidv4 } from 'uuid';
+import { SkillManager } from 'omni-evolution';
 
 export class SwarmManager {
   private planner: QwenProvider;
@@ -686,8 +687,65 @@ export class SwarmManager {
       return 'SELF-TEST SKILLI: ' + good.length + '/' + files.length + ' OK' + String.fromCharCode(10) + 'Poprawne: ' + good.join(', ') + (bad.length ? String.fromCharCode(10) + 'Do poprawy: ' + bad.join('; ') : '');
     } catch (e: any) { return 'Blad self-testu skilli: ' + e.message; }
   }
-  /** Ranking skilli pod biezace zadanie (BM25-lite + synonimy, bez embeddingow) - top-N zamiast calej listy. */
+  /** Leniwie tworzy i inicjalizuje SkillManager (JEDEN ranking skilli dla calego bota). */
+  private async getSkillMgr(): Promise<any> {
+    if ((this as any)._skillMgr !== undefined) { return (this as any)._skillMgr; }
+    (this as any)._skillMgr = null;
+    try {
+      const m = new SkillManager(path.join(os.homedir(), '.omni', 'skills'));
+      await m.initialize();
+      (this as any)._skillMgr = m;
+    } catch (e) { (this as any)._skillMgr = null; }
+    return (this as any)._skillMgr;
+  }
+  /** Dopasowuje nazwe uzytego skilla do wpisu w SkillManager (id/slug/nazwa). */
+  private skillIdFor(name: string): any {
+    try {
+      const m: any = (this as any)._skillMgr;
+      if (!m) { return null; }
+      const nm = String(name || '').trim().toLowerCase();
+      const slug = nm.replace(new RegExp('[^a-z0-9]+', 'g'), '-').replace(new RegExp('^-+|-+$', 'g'), '');
+      const all: any[] = m.getAllSkills();
+      for (const s of all) {
+        const sid = String(s.id || '').toLowerCase();
+        if (sid === nm || sid === slug || String(s.name || '').toLowerCase() === nm || (slug && sid.indexOf(slug) !== -1)) { return s; }
+      }
+    } catch (e) { }
+    return null;
+  }
+  /** #2: aktualizuje successRate/usageCount skilli, ktore faktycznie weszly w zadaniu. */
+  private async recordSkillUsage(success: boolean): Promise<void> {
+    const names: string[] = (this as any).usedSkills || [];
+    if (!names.length) { return; }
+    try {
+      await this.getSkillMgr();
+      const m: any = (this as any)._skillMgr;
+      if (!m) { return; }
+      const seen: any = {};
+      for (const nm of names) {
+        const s = this.skillIdFor(nm);
+        if (s && !seen[s.id]) { seen[s.id] = true; await m.recordUsage(s.id, success); }
+      }
+      const ids = Object.keys(seen);
+      if (ids.length) { console.log('[Swarm] recordUsage: ' + ids.join(', ') + ' => ' + (success ? 'sukces' : 'porazka')); }
+    } catch (e) { }
+  }
+  /** Ranking skilli przez SkillManager (JEDEN algorytm); awaryjnie ranker lokalny. */
   private rankSkillsForTask(task: string, limit: number): string {
+    try {
+      const m: any = (this as any)._skillMgr;
+      if (m) {
+        const skills = m.findRelevantSkills(task, limit);
+        if (skills && skills.length) {
+          return skills.map((s: any) => '- ' + s.name + ' [skill_get: ' + s.id + ']' + (s.description ? ' - ' + String(s.description).slice(0, 90) : '')).join(String.fromCharCode(10));
+        }
+        return '';
+      }
+    } catch (e) { }
+    return this.rankSkillsLocal(task, limit);
+  }
+  /** Awaryjny ranking lokalny (BM25-lite + synonimy) - gdy SkillManager niedostepny. */
+  private rankSkillsLocal(task: string, limit: number): string {
     const nl = String.fromCharCode(10);
     try {
       const q = this.foldPl(String(task || '').toLowerCase());
@@ -804,6 +862,7 @@ export class SwarmManager {
 
   private readSkill(name: string): string {
     try {
+      ((this as any).usedSkills = (this as any).usedSkills || []).push(String(name || ''));
       const file = this.skillPath(name);
       if (!fs.existsSync(file)) { return 'Nie znam skilla o nazwie: ' + name; }
       return fs.readFileSync(file, 'utf8').slice(0, 6000);
@@ -1091,6 +1150,8 @@ export class SwarmManager {
     (this as any).activeCwd = cwd;
     (this as any).activePrompt = String(prompt || '');
     (this as any).modelCalls = 0;
+    (this as any).usedSkills = [];
+    try { await this.getSkillMgr(); } catch (e) { }
     const trimmedLower = String(prompt).trim().toLowerCase();
     const exact = trimmedLower === '/dokladnie' || trimmedLower.indexOf('/dokladnie ') === 0;
     if (exact) { prompt = String(prompt).trim().slice('/dokladnie'.length).trim(); }
@@ -1554,6 +1615,7 @@ export class SwarmManager {
       task.error = error.message;
       this.memory.appendTranscript(sessionId, 'system', `Task failed: ${error.message}`);
       try { this.noteFailure(prompt, String((error && error.message) || '')); } catch (e) { }
+      try { await this.recordSkillUsage(false); } catch (e) { }
       if ((this as any).codeBackupDir) {
         const restored = this.restoreProject();
         if (restored.length) { console.log('[Swarm] Zadanie nieudane - wycofano zmiany w: ' + restored.join(', ')); }
@@ -1561,6 +1623,7 @@ export class SwarmManager {
     }
 
     task.updatedAt = Date.now();
+    try { await this.recordSkillUsage(task.status === 'completed'); } catch (e) { }
     this.emit({ kind: 'done', text: '' });
     return task;
   }
