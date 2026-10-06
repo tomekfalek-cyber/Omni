@@ -281,6 +281,50 @@ export class ToolRegistry {
       const parts = (j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [];
       return String((parts[0] && parts[0].text) || '(brak odpowiedzi)').slice(0, 3500);
     });
+    this.registerTool({
+      name: 'repo_audit',
+      description: 'Audyt repozytorium (read-only): liczba plikow/linii, najwieksze pliki, pliki testowe, TODO/FIXME, puste catch, logi. Parametr: path.',
+      parameters: { path: 'string' },
+      requiresApproval: false, timeoutMs: 25000, maxOutputBytes: 40000,
+    }, async (args: any, cwd: string) => {
+      const base = path.resolve(cwd || '.', String((args && args.path) || '.'));
+      const skip = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage', '__pycache__', '.cache', '.venv', 'venv']);
+      const codeExt = /\.(py|js|ts|tsx|jsx|mjs|cjs|go|rs|java|rb|php|c|cpp|h|cs|swift|kt|sql|sh)$/i;
+      const files: any[] = [];
+      let totalLines = 0, todo = 0, emptyCatch = 0, logs = 0, tests = 0;
+      const walk = (dir: string, depth: number) => {
+        if (depth > 4 || files.length > 4000) { return; }
+        let es: any[] = [];
+        try { es = fs.readdirSync(dir, { withFileTypes: true }) as any[]; } catch (e) { return; }
+        for (const en of es) {
+          if (skip.has(en.name)) { continue; }
+          const full = path.join(dir, en.name);
+          if (en.isDirectory()) { walk(full, depth + 1); continue; }
+          if (!codeExt.test(en.name)) { continue; }
+          try {
+            const st = fs.statSync(full);
+            if (!st.isFile() || st.size > 2000000) { continue; }
+            const txt = fs.readFileSync(full, 'utf8');
+            const lines = txt.split(String.fromCharCode(10)).length;
+            totalLines += lines;
+            files.push({ f: full.replace(base, '.'), lines: lines, kb: Math.round(st.size / 1024) });
+            if (/test|spec/i.test(en.name)) { tests++; }
+            todo += (txt.match(/TODO|FIXME|HACK|XXX/g) || []).length;
+            logs += (txt.match(/console\.log|print\(/g) || []).length;
+            emptyCatch += (txt.match(/catch\s*(\([^)]*\))?\s*\{\s*\}/g) || []).length;
+          } catch (e) { }
+        }
+      };
+      walk(base, 0);
+      files.sort((a, b) => b.lines - a.lines);
+      const out: string[] = [];
+      out.push('AUDYT: ' + base);
+      out.push('Plikow kodu: ' + files.length + ' | linii kodu: ' + totalLines + ' | plikow testowych: ' + tests);
+      out.push('TODO/FIXME: ' + todo + ' | puste catch: ' + emptyCatch + ' | logow: ' + logs);
+      out.push('--- NAJWIEKSZE PLIKI (top 12) ---');
+      for (const f of files.slice(0, 12)) { out.push(f.lines + ' linii (' + f.kb + ' KB)  ' + f.f); }
+      return out.join(String.fromCharCode(10));
+    });
 
     // Integracje: GitHub, Telegram, e-mail, WhatsApp
     const integrations = new IntegrationTools();

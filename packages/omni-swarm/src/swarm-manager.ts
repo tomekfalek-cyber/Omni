@@ -165,6 +165,7 @@ export class SwarmManager {
       '17. DIAGNOZA JAK DETEKTYW: gdy cos zawiedzie (blad komendy/narzedzia) - (1) PRZECZYTAJ dokladnie TRESC bledu, (2) postaw JEDNA hipoteze przyczyny, (3) sprawdz ja jednym odczytem/testem, (4) dopiero potem zmieniaj. Nie naprawiaj po omacku.',
       '18. CLI (argparse): argumenty zaczynajace sie od "-" (np. wyrazenie "-5+3" albo sciezka "-plik") sa traktowane jak OPCJE. Pisz CLI odpornie: uzyj nargs=argparse.REMAINDER albo obslugi "--", i waliduj wejscie zamiast sie wywalac.',
       '19. BEZPIECZENSTWO: narzedzia audytowe/ofensywne (skanowanie, testy wstrzykniec, exploit) stosuj WYLACZNIE do systemow, ktore uzytkownik posiada lub ma pisemna zgode. Atakowanie cudzych systemow - ODMAWIAJ. W audycie najpierw inwentarz (passive), potem testy aktywne za zgoda.',
+      '20. AUDYT/RAPORT z kodu lub repozytorium: najpierw zmierz (repo_audit, code_map), potem PRZECZYTAJ najwazniejsze pliki. Pisz szczery, konkretny raport z DOWODAMI (plik:linia albo liczba) - mocne strony, ryzyka z waga, tabela ocen, werdykt, priorytetowe poprawki. Bez pochlebstw i bez ogolnikow.',
     ].join(nl);
   }
   /** Petla TDD: uruchom kod/test, a przy bledzie popraw i uruchom ponownie (test -> poprawka -> retest). */
