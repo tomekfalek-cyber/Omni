@@ -495,7 +495,7 @@ export class SwarmManager {
       .split('[[REJECTED]]').join('')
       .split('[REJECTED BY REVIEWER]').join('');
     // Usun surowe znaczniki wywolan narzedzi, ktore potrafia wyciec do odpowiedzi (DSML/XML).
-    t = t.replace(/<\/?\|[^>]*\|>/g, '');
+    t = t.replace(/<\/?\|[^>]*>/g, '');
     t = t.replace(/<\/?(?:invoke|parameter|tool_call|tool_calls|function_calls)(?:\s[^>]*)?>/gi, '');
     t = t.replace(/^\s*[<|]{1,3}\s*$/gm, '');
     t = t.replace(/\n{3,}/g, String.fromCharCode(10) + String.fromCharCode(10));
