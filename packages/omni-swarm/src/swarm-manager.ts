@@ -870,7 +870,7 @@ export class SwarmManager {
     for (const ck of codeExtras) { if (foldedTask.indexOf(ck) !== -1) { useCoder = true; break; } }
     // AUDYT/RAPORT != kodowanie: zadanie "ocen/zaudytuj/raport" NIE moze wchodzic w TDD ani zmieniac plikow.
     const reportKeys = ['audyt', 'raport', 'ocen', 'przeglad', 'review', 'analiz', 'przeanalizuj', 'inspekcj', 'opini', 'recenzj'];
-    const fixKeys = ['popraw', 'napraw', 'zaimplementuj', 'zrefaktoruj', 'dodaj ', 'zmien ', 'wdroz', 'stworz', 'napisz plik', 'edytuj'];
+    const fixKeys = ['napraw', 'zaimplementuj', 'zrefaktoruj', 'wdroz', 'edytuj', 'napisz plik', 'stworz plik', 'zmien plik', 'dopisz', 'dodaj do pliku', 'popraw kod', 'popraw blad', 'popraw funkcj', 'dodaj funkcj'];
     let reportOnly = false;
     for (const rk of reportKeys) { if (foldedTask.indexOf(rk) !== -1) { reportOnly = true; break; } }
     if (reportOnly) { for (const fk of fixKeys) { if (foldedTask.indexOf(fk) !== -1) { reportOnly = false; break; } } }
