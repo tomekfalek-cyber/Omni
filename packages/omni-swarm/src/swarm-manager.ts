@@ -1001,7 +1001,7 @@ export class SwarmManager {
         }
 
         task.iterations = i + 1;
-        const toolIntentKeys = ['obraz', 'grafika', 'grafik', 'obrazek', 'narysuj', 'rysunek', 'ilustracj', 'zdjec', 'foto', 'logo', 'ikon', 'plakat', 'generuj', 'przypomn', 'przypomni', 'wyslij', 'mail', 'email', 'log', 'proces', 'port', 'serwer', 'diagnoz', 'shell', 'siec', 'nasluch', 'cpu', 'ram', 'dysk', 'systemd', 'firewall'];
+        const toolIntentKeys = ['obraz', 'grafika', 'grafik', 'obrazek', 'narysuj', 'rysunek', 'ilustracj', 'zdjec', 'foto', 'logo', 'ikon', 'plakat', 'generuj', 'przypomn', 'przypomni', 'wyslij', 'mail', 'email', 'log', 'proces', 'port', 'serwer', 'diagnoz', 'shell', 'siec', 'nasluch', 'cpu', 'ram', 'dysk', 'systemd', 'firewall', 'ogarnij', 'repo', 'repozytorium', 'projekt', 'przygotuj', 'zajmij', 'przejrzyj', 'zrob', 'wykonaj', 'napraw', 'popraw', 'dokoncz', 'zaplanuj', 'uporzadkuj', 'przeanalizuj', 'zbadaj', 'sprawdz'];
         let needsTool = false;
         for (const tk of toolIntentKeys) { if (String(prompt).toLowerCase().indexOf(tk) !== -1) { needsTool = true; break; } }
         if (i === 0 && !exact && !needsSearch && !isAction && !needsTool) {
