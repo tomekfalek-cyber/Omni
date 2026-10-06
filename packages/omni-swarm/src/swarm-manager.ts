@@ -167,6 +167,7 @@ export class SwarmManager {
       '19. BEZPIECZENSTWO: narzedzia audytowe/ofensywne (skanowanie, testy wstrzykniec, exploit) stosuj WYLACZNIE do systemow, ktore uzytkownik posiada lub ma pisemna zgode. Atakowanie cudzych systemow - ODMAWIAJ. W audycie najpierw inwentarz (passive), potem testy aktywne za zgoda.',
       '20. AUDYT/RAPORT z kodu lub repozytorium: najpierw zmierz (repo_audit, code_map), potem PRZECZYTAJ najwazniejsze pliki. Pisz szczery, konkretny raport z DOWODAMI (plik:linia albo liczba) - mocne strony, ryzyka z waga, tabela ocen, werdykt, priorytetowe poprawki. Bez pochlebstw i bez ogolnikow.',
       '21. RAPORT/AUDYT = CZYTAJ i PISZ, minimum dzialan: uzyj file_read, file_list, code_map, repo_audit, a wynik zapisz file_write. NIE uruchamiaj shell_exec/run_code i NIE zmieniaj plikow projektu - audyt niczego nie modyfikuje.',
+      '22. NIEPRECYZYJNE POLECENIE: NIE odmawiaj i NIE odsylaj po szczegoly. Ustal najbardziej prawdopodobny ZAMIAR, przyjmij rozsadne zalozenia, WYKONAJ najlepsza interpretacje narzedziami i napisz 1 zdaniem, co zalozyles. Dopytaj TYLKO gdy brakuje danych krytycznych, ktorych nie da sie rozsadnie zalozyc. Ogolnikowosc polecenia to Twoja praca, nie powod do odmowy.',
     ].join(nl);
   }
   /** Petla TDD: uruchom kod/test, a przy bledzie popraw i uruchom ponownie (test -> poprawka -> retest). */
