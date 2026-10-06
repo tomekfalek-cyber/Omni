@@ -1639,6 +1639,30 @@ export class SwarmManager {
           else { console.log('[Swarm] Refleksja: OK'); }
         } catch (error) { }
       }
+      // #5 PLAN-CHECKLIST: po toolach sprawdz, czy KAZDY krok planu ma pokrycie w wynikach.
+      if (!fastAnswered && !quickTask && usedTools && plan && String(plan).split(String.fromCharCode(10)).filter((l: string) => l.trim().length > 3).length >= 2) {
+        try {
+          const chk = await this.executor.getCompletion([
+            { role: 'system', content: 'Jestes Kontrolerem planu. Masz PLAN i WYNIKI NARZEDZI. Zwroc WYLACZNIE "OK" (kazdy krok planu ma pokrycie w wynikach) albo "BRAK: <kroki bez wyniku, 1 zdanie>". Nie przepisuj planu.' },
+            { role: 'user', content: 'PLAN:' + String.fromCharCode(10) + plan + String.fromCharCode(10) + String.fromCharCode(10) + 'WYNIKI NARZEDZI:' + String.fromCharCode(10) + String(executionResult || '').slice(0, 3000) },
+          ]);
+          const v = String(chk || '').trim();
+          if (/^BRAK/i.test(v)) {
+            console.log('[Swarm] Plan-checklist: ' + v.slice(0, 140));
+            executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'PLAN-CHECKLIST (braki): ' + v;
+            this.emit({ kind: 'writing', text: 'Domykam brakujace kroki planu...' });
+            const contMsgs: any[] = messages.concat([{ role: 'user', content: 'PLAN-CHECKLIST wykryl braki: ' + v + ' Wykonaj brakujace kroki TERAZ narzedziami i podaj wynik.' }]);
+            const cr = await this.executorTurn(contMsgs, toolSchemas, 'auto');
+            const ccalls = cr.toolCalls || [];
+            for (const call of ccalls) {
+              const nm = call.function && call.function.name;
+              let ar: any = {}; try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
+              try { const o = await this.execToolResilient(nm, ar, cwd); const t = typeof o === 'string' ? o : JSON.stringify(o); executionResult += t; } catch (e) { }
+            }
+            if (cr.content && String(cr.content).trim().length > 20) { draftAnswer = this.stripMarkers(String(cr.content)); }
+          } else { console.log('[Swarm] Plan-checklist: OK'); }
+        } catch (error) { }
+      }
       // TOP4: self-critique (Krytyk) - tylko przy realnym ryzyku (kod albo uzyte narzedzia).
       if (!fastAnswered && draftAnswer && String(draftAnswer).trim().length > 20 && (useCoder || (usedTools && !quickTask))) {
         try {
