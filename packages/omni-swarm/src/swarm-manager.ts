@@ -1337,7 +1337,9 @@ export class SwarmManager {
         for (const m of messages) {
           if (m.role === 'tool') { plain.push({ role: 'user', content: 'Wynik narzedzia: ' + this.compressToolOutput(String(m.content || '')) }); }
         }
-        plain.push({ role: 'user', content: 'Napisz teraz konkretna odpowiedz dla uzytkownika po polsku, NA PODSTAWIE WYNIKOW NARZEDZI powyzej. Jesli czegos nie udalo sie wykonac - powiedz to wprost i podaj konkretna blokade.' });
+        const toolCount = messages.filter((m: any) => m.role === 'tool').length;
+        const synth = toolCount >= 3 ? ('SYNTEZA: masz ' + toolCount + ' wynikow narzedzi - polacz je w JEDNA spojna odpowiedz, podaj dowody (plik:linia, liczby, nazwy), nie powtarzaj surowych logow. ') : '';
+        plain.push({ role: 'user', content: synth + 'Napisz teraz konkretna odpowiedz dla uzytkownika po polsku, NA PODSTAWIE WYNIKOW NARZEDZI powyzej. Jesli czegos nie udalo sie wykonac - powiedz to wprost i podaj konkretna blokade.' });
         let streamed = '';
         try {
           const provider: any = this.pickProvider();
