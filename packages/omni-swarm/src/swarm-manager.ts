@@ -1335,7 +1335,7 @@ export class SwarmManager {
       this.memory.appendTranscript(sessionId, 'assistant', String(draftAnswer || '').slice(0, 2000));
       // Odpowiedź wykonawcy jest ważniejsza niż marudzenie reviewera.
       task.result = draftAnswer || executionResult;
-      if (!fastAnswered) { try { await this.harvestMemory(sessionId, prompt, String(draftAnswer || executionResult || '')); } catch (error) { } }
+      if (!fastAnswered && !quickTask) { try { await this.harvestMemory(sessionId, prompt, String(draftAnswer || executionResult || '')); } catch (error) { } }
       this.memory.appendTranscript(sessionId, 'system', `Task completed: ${taskId}`);
     } catch (error: any) {
       task.status = 'failed';
