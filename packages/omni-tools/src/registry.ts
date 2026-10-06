@@ -8,6 +8,7 @@ import { ShellSandbox } from './tools/shell-sandbox.js';
 import { WebTools } from './tools/web-tools.js';
 import { IntegrationTools } from './tools/integration-tools.js';
 import * as crypto from 'crypto';
+import * as os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 const execFileP = promisify(execFile);
@@ -323,6 +324,22 @@ export class ToolRegistry {
       out.push('TODO/FIXME: ' + todo + ' | puste catch: ' + emptyCatch + ' | logow: ' + logs);
       out.push('--- NAJWIEKSZE PLIKI (top 12) ---');
       for (const f of files.slice(0, 12)) { out.push(f.lines + ' linii (' + f.kb + ' KB)  ' + f.f); }
+      return out.join(String.fromCharCode(10));
+    });
+    this.registerTool({
+      name: 'self_test',
+      description: 'Samodiagnostyka Omni: liczba narzedzi, skille, katalogi (zapisywalne), wersja node/python, zmienne srodowiska silnikow.',
+      parameters: {},
+      requiresApproval: false, timeoutMs: 15000, maxOutputBytes: 6000,
+    }, async () => {
+      const out: string[] = ['SAMODIAGNOSTYKA OMNI:'];
+      try { const n = this.getAllDefinitions().length; out.push('- narzedzia: ' + n); } catch (e) { out.push('- narzedzia: blad'); }
+      try { const sk = path.join(os.homedir(), '.omni', 'skills'); const c = fs.existsSync(sk) ? fs.readdirSync(sk).filter((f: string) => /\.md$/i.test(f)).length : 0; out.push('- skille: ' + c); } catch (e) { }
+      for (const d of [path.join(os.homedir(), '.omni'), '/tmp']) { try { fs.accessSync(d, fs.constants.W_OK); out.push('- zapisywalne: ' + d + ' OK'); } catch (e) { out.push('- zapisywalne: ' + d + ' BRAK'); } }
+      out.push('- node: ' + process.version);
+      for (const k of ['OMNI_LLM_PROVIDER', 'OMNI_LLM_MODEL', 'OMNI_LLM_MODEL_CODER']) { out.push('- ' + k + ': ' + (process.env[k] || '(brak)')); }
+      const keys = ['GEMINI_API_KEY', 'GITHUB_TOKEN', 'TELEGRAM_BOT_TOKEN', 'DEEPSEEK_API_KEY'].map((k) => k + '=' + (String(process.env[k] || '').length > 8 ? 'ustawiony' : 'BRAK'));
+      out.push('- klucze: ' + keys.join(', '));
       return out.join(String.fromCharCode(10));
     });
 
