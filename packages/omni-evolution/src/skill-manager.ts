@@ -203,6 +203,31 @@ export class SkillManager {
    * Znajduje najlepsze skills dla danego zadania.
    */
   /** Tokenizacja: male litery, bez diakrytykow, po znakach niealfanumerycznych. */
+  /** Synonimy PL/EN — rozszerzaja zapytanie bez embeddingow (waga 0.5 wobec oryginalu). */
+  private expandQuery(tokens: string[]): Array<{ term: string, w: number }> {
+    const syn: Record<string, string[]> = {
+      port: ['nasluch', 'socket', 'ss', 'netstat', 'eaddrinuse'],
+      log: ['blad', 'error', 'exception', 'traceback', 'journal'],
+      proces: ['pid', 'cpu', 'ram', 'ps'],
+      config: ['konfiguracj', 'ustawien', 'env', 'yaml'],
+      api: ['endpoint', 'rest', 'fastapi', 'http'],
+      jwt: ['token', 'auth', 'logowanie', 'haslo'],
+      jira: ['ticket', 'zgloszen', 'sprint', 'board'],
+      bezpieczen: ['security', 'owasp', 'hardening', 'sekret'],
+      refaktor: ['modul', 'warstw', 'serwis'],
+    };
+    const out = new Map<string, number>();
+    for (const t of tokens) { if (!out.has(t)) { out.set(t, 1); } }
+    for (const t of tokens) {
+      for (const [k, vals] of Object.entries(syn)) {
+        if (t.indexOf(k) !== -1 || vals.some((v) => t.indexOf(v) !== -1)) {
+          if (!out.has(k)) { out.set(k, 0.5); }
+          for (const v of vals) { if (!out.has(v)) { out.set(v, 0.5); } }
+        }
+      }
+    }
+    return Array.from(out.entries()).map(([term, w]) => ({ term: term, w: w }));
+  }
   private tokenize(text: string): string[] {
     const map: Record<string, string> = { 'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z' };
     const low = String(text || '').toLowerCase().replace(/[ąćęłńóśźż]/g, (c) => map[c] || c);
@@ -214,6 +239,7 @@ export class SkillManager {
     const skills = this.getAllSkills();
     if (!skills.length) { return []; }
     const docs = skills.map((s) => this.tokenize(s.name + ' ' + s.description + ' ' + s.tags.join(' ') + ' ' + s.content));
+    const tagDocs = skills.map((s) => this.tokenize(s.tags.join(' ') + ' ' + s.name));
     const N = docs.length;
     const avgLen = (docs.reduce((a, d) => a + d.length, 0) / N) || 1;
     const df: Record<string, number> = {};
@@ -223,19 +249,30 @@ export class SkillManager {
     }
     const k1 = 1.5;
     const b = 0.75;
-    const q = this.tokenize(taskDescription);
+    const q = this.expandQuery(this.tokenize(taskDescription));
+    const now = Date.now();
     const scored = skills.map((skill, i) => {
       const d = docs[i];
       const tf: Record<string, number> = {};
       for (const t of d) { tf[t] = (tf[t] || 0) + 1; }
       let score = 0;
-      for (const term of q) {
+      let tagHits = 0;
+      for (const item of q) {
+        const term = item.term;
         const f = tf[term] || 0;
-        if (!f) { continue; }
-        const idf = Math.log(1 + (N - (df[term] || 0) + 0.5) / ((df[term] || 0) + 0.5));
-        score += idf * (f * (k1 + 1)) / (f + k1 * (1 - b + b * (d.length / avgLen)));
+        if (f) {
+          const idf = Math.log(1 + (N - (df[term] || 0) + 0.5) / ((df[term] || 0) + 0.5));
+          score += item.w * idf * (f * (k1 + 1)) / (f + k1 * (1 - b + b * (d.length / avgLen)));
+        }
+        if (tagDocs[i].indexOf(term) !== -1) { tagHits += item.w; }
       }
-      score = score * (0.7 + 0.3 * (Number(skill.successRate) || 1));
+      // BOOST TAGOW: mnoznikowy i ograniczony (max +60%) - nie moze zdominowac BM25.
+      if (tagHits > 0) { score *= 1 + Math.min(0.6, 0.2 * tagHits); }
+      const sr = Math.max(0.1, Math.min(1, Number(skill.successRate) || 1));
+      score *= 0.4 + 0.8 * sr;
+      const ageDays = (now - (skill.updatedAt || skill.createdAt || now)) / 86400000;
+      if (ageDays < 30) { score *= 1.05; }
+      if ((skill.usageCount || 0) >= 3 && sr < 0.5) { score *= 0.6; }
       return { skill, score };
     });
     scored.sort((a, b2) => b2.score - a.score);
