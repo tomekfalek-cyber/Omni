@@ -520,8 +520,16 @@ export class SwarmManager {
       fs.appendFileSync(f, new Date().toISOString() + ' ' + JSON.stringify(entry) + String.fromCharCode(10), 'utf8');
     } catch (e) { }
   }
+  /** Normalizuje znaki pelnej szerokosci, ktorych niektore modele uzywaja w znacznikach narzedzi (｜＜＞). */
+  private normalizeToolMarkers(s: string): string {
+    return String(s || '')
+      .split(String.fromCharCode(0xFF5C)).join('|')
+      .split(String.fromCharCode(0xFF1C)).join('<')
+      .split(String.fromCharCode(0xFF1E)).join('>')
+      .split(String.fromCharCode(0xFF5E)).join('~');
+  }
   private stripMarkers(text: string): string {
-    let t = String(text || '')
+    let t = this.normalizeToolMarkers(String(text || ''))
       .split('[[DONE]]').join('')
       .split('[[APPROVED]]').join('')
       .split('[[REJECTED]]').join('')
@@ -535,6 +543,7 @@ export class SwarmManager {
   }
 
   private parseToolCalls(text: string): Array<{ name: string, args: any }> {
+    text = this.normalizeToolMarkers(String(text || ''));
     const calls: Array<{ name: string, args: any }> = [];
     const marker = '[[CALL_TOOL:';
     let idx = text.indexOf(marker);
