@@ -212,7 +212,7 @@ export class SwarmManager {
           let ar: any = {};
           try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
           try {
-            const outp = await this.tools.executeTool(nm, ar, cwd);
+            const outp = await this.execToolResilient(nm, ar, cwd);
             msgs.push({ role: 'tool', tool_call_id: call.id, content: String(typeof outp === 'string' ? outp : JSON.stringify(outp)).slice(0, 6000) });
           } catch (e: any) {
             msgs.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + e.message });
@@ -245,7 +245,7 @@ export class SwarmManager {
       let ar: any = {};
       try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
       try {
-        const outp = await this.tools.executeTool(nm, ar, cwd);
+        const outp = await this.execToolResilient(nm, ar, cwd);
         msgs.push({ role: 'tool', tool_call_id: call.id, content: String(typeof outp === 'string' ? outp : JSON.stringify(outp)).slice(0, 6000) });
       } catch (e: any) {
         msgs.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + e.message });
@@ -633,7 +633,7 @@ export class SwarmManager {
           let args: any = {};
           try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { args = {}; }
           try {
-            const output = await this.tools.executeTool(name, args, cwd);
+            const output = await this.execToolResilient(name, args, cwd);
             const text = typeof output === 'string' ? output : JSON.stringify(output);
             messages.push({ role: 'tool', tool_call_id: call.id, content: this.compressToolOutput(text) });
           } catch (e: any) {
@@ -859,6 +859,41 @@ export class SwarmManager {
 
 
   /** Klasyfikuje bledy narzedzi (taksonomia) i zapisuje wzorce. */
+  /** Wykonuje narzedzie odpornie: przy bledzie zmienia strategie i ponawia (max 2x). */
+  private async execToolResilient(name: string, args: any, cwd: string): Promise<string> {
+    const attempts = 3;
+    let lastMsg = '';
+    let a: any = args;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        const output = await this.tools.executeTool(name, a, cwd);
+        if (attempt > 0) { console.log('[Swarm] Narzedzie ' + name + ' ok po probie ' + (attempt + 1)); }
+        return typeof output === 'string' ? output : JSON.stringify(output);
+      } catch (error: any) {
+        lastMsg = String((error && error.message) || error);
+        const kind = this.classifyToolError(lastMsg);
+        if (attempt >= attempts - 1) { break; }
+        if (kind === 'uprawnienia') { return 'BLOKADA (' + name + '): ' + lastMsg + ' - nie ponawiam, zmien podejscie.'; }
+        if (kind === 'argumenty') { a = this.repairToolArgs(a); console.log('[Swarm] Blad argumentow ' + name + ' - poprawiam argumenty i ponawiam.'); continue; }
+        if (kind === 'timeout') { console.log('[Swarm] Timeout ' + name + ' - ponawiam (proba ' + (attempt + 2) + ').'); continue; }
+        console.log('[Swarm] Blad ' + name + ' (' + kind + ') - ponawiam (proba ' + (attempt + 2) + ').');
+        await new Promise<void>((res) => setTimeout(res, 400 * (attempt + 1)));
+      }
+    }
+    return 'BLAD (' + this.classifyToolError(lastMsg) + '): ' + lastMsg;
+  }
+  /** Prosta naprawa argumentow narzedzia: usuwa puste pola, zamienia obiekty na JSON. */
+  private repairToolArgs(args: any): any {
+    const out: any = {};
+    if (args && typeof args === 'object') {
+      for (const k of Object.keys(args)) {
+        const v = (args as any)[k];
+        if (v === undefined || v === null) { continue; }
+        out[k] = (typeof v === 'object') ? JSON.stringify(v) : v;
+      }
+    }
+    return out;
+  }
   private classifyToolError(msg: string): string {
     const m = String(msg || '').toLowerCase();
     let kind = 'inne';
@@ -1097,7 +1132,7 @@ export class SwarmManager {
     const directRem = this.tryDirectReminder(prompt);
     if (directRem) {
       try {
-        const out = await this.tools.executeTool('reminder_set', directRem, cwd);
+        const out = await this.execToolResilient('reminder_set', directRem, cwd);
         task.status = 'completed';
         task.result = String(typeof out === 'string' ? out : JSON.stringify(out));
         (task as any).engine = this.engineUsedLabel();
@@ -1116,7 +1151,7 @@ export class SwarmManager {
       let codeCtx = '';
       if (useCoder) {
         try {
-          const cm = await this.tools.executeTool('code_map', { path: '.', query: '' }, cwd);
+          const cm = await this.execToolResilient('code_map', { path: '.', query: '' }, cwd);
           codeCtx = String(typeof cm === 'string' ? cm : JSON.stringify(cm)).slice(0, 4000);
           console.log('[Swarm] code_map: kontekst projektu ' + codeCtx.length + ' znakow');
         } catch (error: any) { codeCtx = ''; }
@@ -1127,10 +1162,10 @@ export class SwarmManager {
           const nl2 = String.fromCharCode(10);
           const wantsLog = /log|blad|awari|crash|error|exception|traceback|wyjatek|stack/i.test(String(prompt));
           const tasks: Promise<any>[] = [
-            this.tools.executeTool('net_summary', {}, cwd),
-            this.tools.executeTool('proc_inspect', { filter: '' }, cwd),
+            this.execToolResilient('net_summary', {}, cwd),
+            this.execToolResilient('proc_inspect', { filter: '' }, cwd),
           ];
-          if (wantsLog) { tasks.push(this.tools.executeTool('log_tail', { path: path.join(cwd, 'gateway.log'), lines: 30 }, cwd).catch(() => '')); }
+          if (wantsLog) { tasks.push(this.execToolResilient('log_tail', { path: path.join(cwd, 'gateway.log'), lines: 30 }, cwd).catch(() => '')); }
           const res = await Promise.all(tasks);
           const ports = res[0]; const procs = res[1]; const logTail = res[2];
           sysCtx = 'STAN SYSTEMU (odczyt przed planem):' + nl2 + '--- PORTY ---' + nl2 + String(ports).slice(0, 1500) + nl2 + '--- PROCESY (top wg CPU) ---' + nl2 + String(procs).slice(0, 2000);
@@ -1230,7 +1265,7 @@ export class SwarmManager {
             for (const call of textCalls) {
               usedTools = true;
               try {
-                const output = await this.tools.executeTool(call.name, call.args, cwd);
+                const output = await this.execToolResilient(call.name, call.args, cwd);
                 const text = typeof output === 'string' ? output : JSON.stringify(output);
                 executionResult += text;
                 this.memory.appendTranscript(sessionId, 'tool', call.name + ': ' + text.slice(0, 400));
@@ -1274,13 +1309,13 @@ export class SwarmManager {
           this.emit({ kind: 'thinking', text: 'Rownolegle narzedzia: ' + readIdx.length });
           await Promise.all(readIdx.map(async (idx: number) => {
             const p = parsed[idx];
-            try { this.emit({ kind: 'tool', text: p.name }); const output = await this.tools.executeTool(p.name, p.args, cwd); results[idx] = { ok: true, name: p.name, text: typeof output === 'string' ? output : JSON.stringify(output) }; }
+            try { this.emit({ kind: 'tool', text: p.name }); const output = await this.execToolResilient(p.name, p.args, cwd); results[idx] = { ok: true, name: p.name, text: typeof output === 'string' ? output : JSON.stringify(output) }; }
             catch (error: any) { results[idx] = { ok: false, name: p.name, text: 'BLAD (' + this.classifyToolError(error.message) + '): ' + error.message }; }
           }));
-        } else { for (const idx of readIdx) { const p = parsed[idx]; try { this.emit({ kind: 'tool', text: p.name }); const output = await this.tools.executeTool(p.name, p.args, cwd); results[idx] = { ok: true, name: p.name, text: typeof output === 'string' ? output : JSON.stringify(output) }; } catch (error: any) { results[idx] = { ok: false, name: p.name, text: 'BLAD (' + this.classifyToolError(error.message) + '): ' + error.message }; } } }
+        } else { for (const idx of readIdx) { const p = parsed[idx]; try { this.emit({ kind: 'tool', text: p.name }); const output = await this.execToolResilient(p.name, p.args, cwd); results[idx] = { ok: true, name: p.name, text: typeof output === 'string' ? output : JSON.stringify(output) }; } catch (error: any) { results[idx] = { ok: false, name: p.name, text: 'BLAD (' + this.classifyToolError(error.message) + '): ' + error.message }; } } }
         for (const idx of serIdx) {
           const p = parsed[idx];
-          try { console.log('[Swarm] Wykonuje narzedzie: ' + p.name); this.emit({ kind: 'tool', text: p.name }); const output = await this.tools.executeTool(p.name, p.args, cwd); results[idx] = { ok: true, name: p.name, text: typeof output === 'string' ? output : JSON.stringify(output) }; }
+          try { console.log('[Swarm] Wykonuje narzedzie: ' + p.name); this.emit({ kind: 'tool', text: p.name }); const output = await this.execToolResilient(p.name, p.args, cwd); results[idx] = { ok: true, name: p.name, text: typeof output === 'string' ? output : JSON.stringify(output) }; }
           catch (error: any) { results[idx] = { ok: false, name: p.name, text: 'BLAD (' + this.classifyToolError(error.message) + '): ' + error.message }; }
         }
         for (let idx = 0; idx < parsed.length; idx++) {
@@ -1347,7 +1382,7 @@ export class SwarmManager {
               let ar: any = {};
               try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
               try {
-                const outp = await this.tools.executeTool(nm, ar, cwd);
+                const outp = await this.execToolResilient(nm, ar, cwd);
                 forced.push({ role: 'tool', tool_call_id: call.id, content: String(typeof outp === 'string' ? outp : JSON.stringify(outp)).slice(0, 6000) });
               } catch (e: any) {
                 forced.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + e.message });
@@ -1387,7 +1422,7 @@ export class SwarmManager {
               let ar: any = {};
               try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
               try {
-                const outp = await this.tools.executeTool(nm, ar, cwd);
+                const outp = await this.execToolResilient(nm, ar, cwd);
                 forcedV.push({ role: 'tool', tool_call_id: call.id, content: String(typeof outp === 'string' ? outp : JSON.stringify(outp)).slice(0, 6000) });
               } catch (e: any) {
                 forcedV.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + e.message });
@@ -1446,7 +1481,7 @@ export class SwarmManager {
               for (const call of tc) {
                 const nm2 = call.function && call.function.name;
                 let ar2: any = {}; try { ar2 = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar2 = {}; }
-                try { const o = await this.tools.executeTool(nm2, ar2, cwd); const t = typeof o === 'string' ? o : JSON.stringify(o); executionResult += t; cont.push({ role: 'tool', tool_call_id: call.id, content: this.compressToolOutput(t) }); this.memory.appendTranscript(sessionId, 'tool', nm2 + ': ' + t.slice(0, 300)); }
+                try { const o = await this.execToolResilient(nm2, ar2, cwd); const t = typeof o === 'string' ? o : JSON.stringify(o); executionResult += t; cont.push({ role: 'tool', tool_call_id: call.id, content: this.compressToolOutput(t) }); this.memory.appendTranscript(sessionId, 'tool', nm2 + ': ' + t.slice(0, 300)); }
                 catch (e: any) { cont.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + e.message }); }
               }
             }
