@@ -60,7 +60,7 @@ export class ToolRegistry {
       const dirs: string[] = [];
       let files = 0;
       const walk = (dir: string, depth: number) => {
-        if (depth > 3) { return; }
+        if (depth > 4) { return; }
         let entries: any[] = [];
         try { entries = fs.readdirSync(dir, { withFileTypes: true }) as any[]; } catch (e) { return; }
         for (const e of entries) {
@@ -75,7 +75,7 @@ export class ToolRegistry {
       out.push('KATALOG: ' + base);
       out.push('PLIKI: ' + files + ' | katalogi: ' + dirs.length);
       out.push('TYPY: ' + Object.keys(extCount).sort((a, b) => extCount[b] - extCount[a]).slice(0, 12).map((k) => k + '=' + extCount[k]).join(', '));
-      out.push('STRUKTURA: ' + dirs.slice(0, 60).join(' '));
+      out.push('STRUKTURA: ' + dirs.slice(0, 120).join(' '));
       const keyFiles = ['package.json', 'tsconfig.json', 'README.md', 'requirements.txt', 'pyproject.toml', 'go.mod', 'Cargo.toml', 'Makefile', 'docker-compose.yml'];
       for (const kf of keyFiles) { const p = path.join(base, kf); if (fs.existsSync(p)) { out.push('--- ' + kf + ' ---'); try { out.push(fs.readFileSync(p, 'utf8').slice(0, 800)); } catch (e) { } } }
       // A3: glebsza swiadomosc codebase - symbole (funkcje/klasy) i importy.
@@ -83,11 +83,11 @@ export class ToolRegistry {
       const symLines: string[] = [];
       let scanned = 0;
       const scanSyms = (dir: string, depth: number) => {
-        if (depth > 3 || scanned >= 40 || symLines.length >= 200) { return; }
+        if (depth > 4 || scanned >= 80 || symLines.length >= 400) { return; }
         let es: any[] = [];
         try { es = fs.readdirSync(dir, { withFileTypes: true }) as any[]; } catch (e) { return; }
         for (const e of es) {
-          if (skip.has(e.name) || scanned >= 40 || symLines.length >= 200) { continue; }
+          if (skip.has(e.name) || scanned >= 80 || symLines.length >= 400) { continue; }
           const full2 = path.join(dir, e.name);
           if (e.isDirectory()) { scanSyms(full2, depth + 1); continue; }
           if (!symExts.has(path.extname(e.name))) { continue; }

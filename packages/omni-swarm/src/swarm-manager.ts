@@ -126,11 +126,11 @@ export class SwarmManager {
       fs.mkdirSync(tmp, { recursive: true });
       let total = 0; const copied: string[] = [];
       const walk = (dir: string, rel: string, depth: number) => {
-        if (depth > 3 || total > 3000000 || copied.length > 400) { return; }
+        if (depth > 4 || total > 6000000 || copied.length > 800) { return; }
         let entries: any[] = [];
         try { entries = fs.readdirSync(dir, { withFileTypes: true }) as any[]; } catch (e) { return; }
         for (const en of entries) {
-          if (total > 3000000 || copied.length > 400) { break; }
+          if (total > 6000000 || copied.length > 800) { break; }
           if (skip.has(en.name)) { continue; }
           const full = path.join(dir, en.name);
           const r = rel ? rel + '/' + en.name : en.name;
@@ -138,7 +138,7 @@ export class SwarmManager {
           if (!exts.test(en.name)) { continue; }
           try {
             const st = fs.statSync(full);
-            if (!st.isFile() || st.size > 200000) { continue; }
+            if (!st.isFile() || st.size > 300000) { continue; }
             total += st.size;
             const dst = path.join(tmp, r);
             fs.mkdirSync(path.dirname(dst), { recursive: true });
