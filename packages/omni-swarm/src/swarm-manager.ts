@@ -1192,6 +1192,11 @@ export class SwarmManager {
     return 'Pliki w ' + dir + ' (lista):' + String.fromCharCode(10) + s;
   }
   /** #4 Lekki scoring trudnosci zadania (dlugosc, wielokrokowosc, ciezkie czasowniki) - routing nie tylko po slowach. */
+  /** #8 Jasny szablon blokady: co probowalem -> blad -> co Ty musisz zrobic. */
+  private blockerText(what: string, err: string, todo: string): string {
+    const nl = String.fromCharCode(10);
+    return ['NIE UDALO SIE (blokada):', '- Co probowalem: ' + String(what || '').slice(0, 300), '- Blad: ' + String(err || '').slice(0, 300), '- Co musisz zrobic: ' + String(todo || 'sprawdz klucz API / limit / uprawnienia i sprobuj ponownie.')].join(nl);
+  }
   private difficultyScore(prompt: string, folded: string): number {
     let s = 0;
     const len = String(prompt || '').trim().length;
@@ -1680,7 +1685,7 @@ export class SwarmManager {
       }
 
       if (!draftAnswer || !String(draftAnswer).trim()) {
-        draftAnswer = 'Nie udalo sie uzyskac odpowiedzi od silnika (' + String(process.env.OMNI_LLM_PROVIDER || 'aktywny') + '). Najczestsza przyczyna: klucz API odrzucony albo limit darmowego planu. Sprawdz zakladke Klucze API (jest przycisk Sprawdz klucze) i sprobuj ponownie.';
+        draftAnswer = this.blockerText('wywolanie silnika (' + String(process.env.OMNI_LLM_PROVIDER || 'aktywny') + ') dla: ' + String(prompt).slice(0, 120), 'brak odpowiedzi modelu (klucz odrzucony albo limit darmowego planu)', 'sprawdz zakladke Klucze API (przycisk Sprawdz klucze) i sprobuj ponownie.');
         this.noteFailure(prompt, 'brak odpowiedzi silnika (klucz/limit)');
       }
       // KROK 4: Evolver uczy sie z zadania (opcjonalny - blad nie moze zepsuc odpowiedzi)
@@ -1697,6 +1702,8 @@ export class SwarmManager {
     } catch (error: any) {
       task.status = 'failed';
       task.error = error.message;
+      task.result = this.blockerText('realizacja zadania: ' + String(prompt).slice(0, 120), String(error.message || ''), 'sprawdz przyczyne powyzej (uprawnienia / klucz / limit) i sprobuj ponownie albo doprecyzuj zadanie.');
+      (task as any).engine = this.engineUsedLabel();
       this.memory.appendTranscript(sessionId, 'system', `Task failed: ${error.message}`);
       try { this.noteFailure(prompt, String((error && error.message) || '')); } catch (e) { }
       try { await this.recordSkillUsage(false); } catch (e) { }
