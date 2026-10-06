@@ -686,6 +686,54 @@ export class SwarmManager {
       return 'SELF-TEST SKILLI: ' + good.length + '/' + files.length + ' OK' + String.fromCharCode(10) + 'Poprawne: ' + good.join(', ') + (bad.length ? String.fromCharCode(10) + 'Do poprawy: ' + bad.join('; ') : '');
     } catch (e: any) { return 'Blad self-testu skilli: ' + e.message; }
   }
+  /** Ranking skilli pod biezace zadanie (BM25-lite + synonimy, bez embeddingow) - top-N zamiast calej listy. */
+  private rankSkillsForTask(task: string, limit: number): string {
+    const nl = String.fromCharCode(10);
+    try {
+      const q = this.foldPl(String(task || '').toLowerCase());
+      if (q.trim().length < 3) { return ''; }
+      const dir = path.join(os.homedir(), '.omni', 'skills');
+      if (!fs.existsSync(dir)) { return ''; }
+      const files = fs.readdirSync(dir).filter((f: string) => f.slice(-3) === '.md' && f.toLowerCase() !== 'readme.md');
+      if (!files.length) { return ''; }
+      const syn: Record<string, string[]> = {
+        port: ['nasluch', 'socket', 'ss', 'netstat', 'eaddrinuse'],
+        log: ['blad', 'error', 'exception', 'traceback', 'journal'],
+        proces: ['pid', 'cpu', 'ram', 'ps'],
+        config: ['konfiguracj', 'ustawien', 'env', 'yaml'],
+        api: ['endpoint', 'rest', 'fastapi', 'http'],
+        jwt: ['token', 'auth', 'logowanie', 'haslo'],
+        jira: ['ticket', 'zgloszen', 'sprint', 'board'],
+        bezpieczen: ['security', 'owasp', 'hardening', 'sekret'],
+        refaktor: ['modul', 'warstw', 'serwis'],
+      };
+      const qtok = q.split(/[^a-z0-9]+/).filter((t: string) => t.length > 1);
+      const qset = new Set<string>(qtok);
+      for (const t of qtok) {
+        for (const k of Object.keys(syn)) {
+          if (t.indexOf(k) !== -1 || syn[k].some((v) => t.indexOf(v) !== -1)) { qset.add(k); for (const v of syn[k]) { qset.add(v); } }
+        }
+      }
+      const terms = Array.from(qset);
+      const scored = files.map((f: string) => {
+        const raw = fs.readFileSync(path.join(dir, f), 'utf8');
+        const low = this.foldPl(raw.slice(0, 1600).toLowerCase());
+        const name = f.replace(/\.md$/i, '').toLowerCase();
+        let score = 0;
+        for (const term of terms) {
+          const c = low.split(term).length - 1;
+          if (c) { score += Math.min(4, c) * (term.length >= 4 ? 2 : 1); }
+          if (name.indexOf(term) !== -1) { score += 3; }
+        }
+        const lineWhen = (raw.split(nl).filter((l: string) => l.indexOf('KIEDY:') === 0)[0] || '').replace('KIEDY: ', '');
+        const lineTitle = (raw.split(nl).filter((l: string) => l.indexOf('# ') === 0)[0] || f).replace(/^#+ /, '');
+        return { title: lineTitle, when: lineWhen, fn: f, score: score };
+      }).sort((a: any, b2: any) => b2.score - a.score);
+      const top = scored.filter((x: any) => x.score > 0).slice(0, limit);
+      if (!top.length) { return ''; }
+      return top.map((x: any) => '- ' + x.title + ' [skill_get: ' + x.fn.replace(/\.md$/i, '') + ']' + (x.when ? ' - ' + x.when : '')).join(nl);
+    } catch (error) { return ''; }
+  }
   private listSkills(): string {
     const nl = String.fromCharCode(10);
     try {
@@ -883,8 +931,9 @@ export class SwarmManager {
     } catch (error) { return ''; }
   }
 
-  private readKnowledge(): string {
+  private readKnowledge(taskDescription?: string): string {
     const nl = String.fromCharCode(10);
+    const task = String(taskDescription || (this as any).activePrompt || '');
     try {
       const dir = path.join(os.homedir(), '.omni', 'memory');
       const parts: string[] = [];
@@ -905,8 +954,12 @@ export class SwarmManager {
       }
       const sdir = path.join(os.homedir(), '.omni', 'skills');
       if (fs.existsSync(sdir)) {
-        const idx = this.listSkills();
-        if (idx && idx.indexOf('Brak zapisanych') === -1) { parts.push('TWOJE SKILLE (procedury - uzyj skill_get, gdy zadanie pasuje):' + nl + idx); }
+        const top = this.rankSkillsForTask(task, 3);
+        if (top) { parts.push('TRAFNE SKILLE (uzyj skill_get po nazwe):' + nl + top); }
+        else {
+          const idx = this.listSkills();
+          if (idx && idx.indexOf('Brak zapisanych') === -1) { parts.push('TWOJE SKILLE (procedury - uzyj skill_get, gdy zadanie pasuje):' + nl + idx); }
+        }
       }
       return parts.join(nl);
     } catch (error) { return ''; }
@@ -937,6 +990,7 @@ export class SwarmManager {
   private async executeTaskInner(sessionId: string, prompt: string, cwd: string): Promise<Task> {
     const taskId = uuidv4();
     (this as any).activeCwd = cwd;
+    (this as any).activePrompt = String(prompt || '');
     (this as any).modelCalls = 0;
     const trimmedLower = String(prompt).trim().toLowerCase();
     const exact = trimmedLower === '/dokladnie' || trimmedLower.indexOf('/dokladnie ') === 0;
