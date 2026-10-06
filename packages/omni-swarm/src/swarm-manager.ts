@@ -992,7 +992,7 @@ export class SwarmManager {
         } catch (error: any) { sysCtx = ''; }
       }
       const planCtx = codeCtx ? ('KONTEKST PROJEKTU (mapa kodu - uwzglednij strukture i zaleznosci plikow):' + String.fromCharCode(10) + codeCtx) : sysCtx;
-      const plan = await this.runPlanner(planCtx ? (planCtx + String.fromCharCode(10) + String.fromCharCode(10) + prompt) : prompt, exact);
+      const plan = quickTask ? prompt : await this.runPlanner(planCtx ? (planCtx + String.fromCharCode(10) + String.fromCharCode(10) + prompt) : prompt, exact);
       this.memory.appendTranscript(sessionId, 'planner', `Plan: ${plan}`);
 
       // KROK 2: Executor wykonuje kroki
