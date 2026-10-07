@@ -7,6 +7,7 @@ import { OmniMemory } from 'omni-memory/memory.js';
 import { ToolRegistry } from 'omni-tools/registry.js';
 import { v4 as uuidv4 } from 'uuid';
 import { SkillManager } from 'omni-evolution';
+import { recoverToolArgs } from './tool-args.js';
 
 export class SwarmManager {
   private planner: QwenProvider;
@@ -480,7 +481,9 @@ export class SwarmManager {
     if (pm) { out.path = pm[1].replace(/\\"/g, '"').replace(/\n/g, String.fromCharCode(10)).replace(/\t/g, String.fromCharCode(9)); }
     // Bezpiecznie: NIE odzyskujemy 'content' (bywa uciety/zescapowany) - lepiej zwrocic blad i ponowic, niz zapisac zepsuty plik.
     if (Object.keys(out).length) { console.log('[Swarm] parseArgs: odzyskano tylko sciezke; content do ponowienia.'); }
-    else { console.log('[Swarm] parseArgs: nie udalo sie odzyskac argumentow - narzedzie zglosi blad.'); }
+    else { console.log('[Swarm] parseArgs: probuje leniwy odzysk.'); }
+    const rec = recoverToolArgs(s);
+    if (rec && (rec.content !== undefined || rec.path !== undefined)) { console.log('[Swarm] parseArgs: odzyskano leniwie (' + (rec.content !== undefined ? String(rec.content).length + ' znakow content' : 'tylko path') + ').'); return Object.assign({}, out, rec); }
     return out;
   }
   private async executorTurn(messages: any[], tools: any[], toolChoice?: string): Promise<{ content: string, toolCalls: any[] }> {
