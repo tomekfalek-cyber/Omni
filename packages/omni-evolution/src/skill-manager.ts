@@ -219,6 +219,15 @@ export class SkillManager {
       jira: ['ticket', 'zgloszen', 'sprint', 'board'],
       bezpieczen: ['security', 'owasp', 'hardening', 'sekret'],
       refaktor: ['modul', 'warstw', 'serwis'],
+      panel: ['www', 'ui', 'dashboard', 'frontend', '7800'],
+      deploy: ['wdrozenie', 'wypchnij', 'publish', 'release', 'wrangler'],
+      stack: ['technologi', 'framework', 'bibliotek', 'narzedzi'],
+      serwis: ['uslug', 'daemon', 'systemd'],
+      baza: ['db', 'sqlite', 'sql', 'postgres', 'tabela'],
+      kanal: ['channel', 'whatsapp', 'telegram', 'discord', 'sms'],
+      mail: ['email', 'poczta', 'smtp', 'imap'],
+      obraz: ['image', 'grafika', 'png', 'generuj'],
+      test: ['testy', 'unittest', 'pytest', 'assert'],
     };
     const out = new Map<string, number>();
     for (const t of tokens) { if (!out.has(t)) { out.set(t, 1); } }
