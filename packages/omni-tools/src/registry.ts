@@ -35,6 +35,8 @@ export class ToolRegistry {
     this.registerTool(fileTools.getDefinitions()[0], (args, cwd) => fileTools.readFile(args, cwd));
     this.registerTool(fileTools.getDefinitions()[1], (args, cwd) => fileTools.writeFile(args, cwd));
     this.registerTool(fileTools.getDefinitions()[2], (args, cwd) => fileTools.listFiles(args, cwd));
+    const appendDef = fileTools.getDefinitions().filter((d: any) => d.name === 'file_append')[0];
+    if (appendDef) { this.registerTool(appendDef, (args: any, cwd: string) => fileTools.appendFile(args, cwd)); }
 
     // Rejestracja Git Tools
     this.registerTool(gitTools.getDefinitions()[0], (args, cwd) => gitTools.getStatus(cwd));

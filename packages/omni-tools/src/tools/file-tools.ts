@@ -39,6 +39,14 @@ export class FileTools {
         requiresApproval: false,
         timeoutMs: 5000,
         maxOutputBytes: 50000
+      },
+      {
+        name: 'file_append',
+        description: 'Dopisuje tekst na koniec pliku (tworzy, jesli nie istnieje). Uzyj do DUZYCH plikow: file_write pierwsza czesc, potem file_append kolejne czesci.',
+        parameters: { path: 'string', content: 'string' },
+        requiresApproval: true,
+        timeoutMs: 10000,
+        maxOutputBytes: 0
       }
     ];
   }
@@ -68,6 +76,15 @@ export class FileTools {
     
     await fs.writeFile(safePath, validated.content, 'utf-8');
     return `Pomyślnie zapisano plik: ${safePath}`;
+  }
+
+  public async appendFile(args: { path: string, content: string }, cwd: string): Promise<string> {
+    const schema = z.object({ path: z.string().min(1), content: z.string() });
+    const validated = schema.parse(args);
+    const safePath = this.sanitizePath(validated.path, cwd);
+    await fs.mkdir(path.dirname(safePath), { recursive: true });
+    await fs.appendFile(safePath, validated.content, 'utf-8');
+    return `Dopisano do pliku: ${safePath}`;
   }
 
   public async listFiles(args: { path: string }, cwd: string): Promise<string> {
