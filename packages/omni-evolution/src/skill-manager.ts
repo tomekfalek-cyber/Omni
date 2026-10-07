@@ -231,7 +231,9 @@ export class SkillManager {
     };
     const out = new Map<string, number>();
     for (const t of tokens) { if (!out.has(t)) { out.set(t, 1); } }
+    const blocked = ['portfel', 'portal', 'import', 'raport', 'support', 'komponent'];
     for (const t of tokens) {
+      if (blocked.indexOf(t) !== -1) { continue; }
       for (const [k, vals] of Object.entries(syn)) {
         if (t.indexOf(k) !== -1 || vals.some((v) => t.indexOf(v) !== -1)) {
           if (!out.has(k)) { out.set(k, 0.5); }

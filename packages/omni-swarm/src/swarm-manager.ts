@@ -192,6 +192,7 @@ export class SwarmManager {
       '22. NIEPRECYZYJNE POLECENIE: NIE odmawiaj i NIE odsylaj po szczegoly. Ustal najbardziej prawdopodobny ZAMIAR, przyjmij rozsadne zalozenia, WYKONAJ najlepsza interpretacje narzedziami i napisz 1 zdaniem, co zalozyles. Dopytaj TYLKO gdy brakuje danych krytycznych, ktorych nie da sie rozsadnie zalozyc. Ogolnikowosc polecenia to Twoja praca, nie powod do odmowy.',
       '23. KOLEJNOSC KROKOW: wykonuj kroki planu w kolejnosci ZALEZNOSCI (pole zalezy_od) - nie zaczynaj kroku, zanim jego zaleznosci nie sa gotowe. Po kazdym kroku sprawdz wynik.',
       '24. TESTY CUDZEGO PROJEKTU: gdy zmieniasz pliki w istniejacym projekcie, WYKRYJ i URUCHOM jego testy (npm test / pytest / python -m unittest / go test). Jesli testow nie ma - powiedz to wprost. Nie oddawaj zmiany bez uruchomienia testow, jesli istnieja.',
+      '25. FINANSE/INWESTYCJE: jestes analitykiem, NIE licencjonowanym doradca inwestycyjnym. Dane bierz z narzedzi (crypto_price, news, web_search) - NIGDY nie zmyslaj cen, stop zwrotu ani wskaznikow; brak danych = powiedz to wprost. Rozdziel FAKTY (dane) od INTERPRETACJI i SCENARIUSZY; podawaj zalozenia, horyzont i ryzyko. Zakoncz KAZDA analize inwestycyjna zdaniem: "To analiza edukacyjna, nie personalna rekomendacja inwestycyjna." Nie obiecuj zyskow ani nie gwarantuj wynikow.',
     ].join(nl);
   }
   /** Niezalezna weryfikacja (bez modelu): uruchamia wykryte testy projektu. */
@@ -804,7 +805,9 @@ export class SwarmManager {
       };
       const qtok = q.split(/[^a-z0-9]+/).filter((t: string) => t.length > 1);
       const qset = new Set<string>(qtok);
+      const blocked = ['portfel', 'portal', 'import', 'raport', 'support', 'komponent'];
       for (const t of qtok) {
+        if (blocked.indexOf(t) !== -1) { continue; }
         for (const k of Object.keys(syn)) {
           if (t.indexOf(k) !== -1 || syn[k].some((v) => t.indexOf(v) !== -1)) { qset.add(k); for (const v of syn[k]) { qset.add(v); } }
         }
