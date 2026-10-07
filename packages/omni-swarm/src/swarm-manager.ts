@@ -477,9 +477,9 @@ export class SwarmManager {
     const out: any = {};
     const pm = t.match(/"path"\s*:\s*"((?:[^"\\]|\\.)*)"/);
     if (pm) { out.path = pm[1].replace(/\\"/g, '"').replace(/\n/g, String.fromCharCode(10)).replace(/\t/g, String.fromCharCode(9)); }
-    const cm = t.match(/"content"\s*:\s*"([\s\S]*?)"\s*[,}]/);
-    if (cm) { out.content = cm[1].replace(/\\"/g, '"').replace(/\n/g, String.fromCharCode(10)).replace(/\t/g, String.fromCharCode(9)); }
-    if (Object.keys(out).length) { console.log('[Swarm] parseArgs: odzyskano pola z surowego JSON (' + Object.keys(out).join(', ') + ')'); }
+    // Bezpiecznie: NIE odzyskujemy 'content' (bywa uciety/zescapowany) - lepiej zwrocic blad i ponowic, niz zapisac zepsuty plik.
+    if (Object.keys(out).length) { console.log('[Swarm] parseArgs: odzyskano tylko sciezke; content do ponowienia.'); }
+    else { console.log('[Swarm] parseArgs: nie udalo sie odzyskac argumentow - narzedzie zglosi blad.'); }
     return out;
   }
   private async executorTurn(messages: any[], tools: any[], toolChoice?: string): Promise<{ content: string, toolCalls: any[] }> {
