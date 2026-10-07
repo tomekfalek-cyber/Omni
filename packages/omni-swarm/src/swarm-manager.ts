@@ -465,6 +465,7 @@ export class SwarmManager {
   }
 
   /** Odporne parsowanie argumentow narzedzia: JSON -> naprawa -> ekstrakcja pol. */
+  /** Odporne parsowanie argumentow: JSON -> naprawa -> leniwy odzysk (path/content). */
   private parseArgs(raw: any): any {
     if (raw && typeof raw === 'object') { return raw; }
     const s = String(raw || '').trim();
@@ -476,12 +477,38 @@ export class SwarmManager {
     for (const ch of t) { if (ch === '{') { bal++; } else if (ch === '}') { bal--; } }
     if (bal > 0) { try { return JSON.parse(t + '}'.repeat(bal)); } catch (e) { } }
     const out: any = {};
-    const pm = t.match(/"path"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    if (pm) { out.path = pm[1].replace(/\\"/g, '"').replace(/\n/g, String.fromCharCode(10)).replace(/\t/g, String.fromCharCode(9)); }
-    // Bezpiecznie: NIE odzyskujemy 'content' (bywa uciety/zescapowany) - lepiej zwrocic blad i ponowic, niz zapisac zepsuty plik.
-    if (Object.keys(out).length) { console.log('[Swarm] parseArgs: odzyskano tylko sciezke; content do ponowienia.'); }
-    else { console.log('[Swarm] parseArgs: nie udalo sie odzyskac argumentow - narzedzie zglosi blad.'); }
+    const pm = t.match(/\"path\"\s*:\s*\"((?:[^\"\\]|\\.)*)\"/);
+    if (pm) { out.path = this.decodeJsonStr(pm[1]); }
+    const ci = t.indexOf(\"content\");
+    if (ci !== -1) {
+      const colon = t.indexOf(':', ci);
+      const qi = colon !== -1 ? t.indexOf(\", colon + 1) : -1;
+      if (qi !== -1) { let rest = t.slice(qi + 1); const lastQ = rest.lastIndexOf(\"); if (lastQ !== -1) { rest = rest.slice(0, lastQ); } out.content = this.decodeJsonStr(rest); }
+    }
+    if (out.content !== undefined) { console.log('[Swarm] parseArgs: odzyskano content leniwie (' + String(out.content).length + ' znakow).'); }
+    else if (Object.keys(out).length) { console.log('[Swarm] parseArgs: odzyskano tylko sciezke.'); }
+    else { console.log('[Swarm] parseArgs: nie udalo sie odzyskac argumentow.'); }
     return out;
+  }
+  /** Dekoduje escape sekwencje JSON w pojedynczym przebiegu. */
+  private decodeJsonStr(input: string): string {
+    const src = String(input || '');
+    let res = '';
+    for (let i = 0; i < src.length; i++) {
+      const c = src[i];
+      if (c !== \\) { res += c; continue; }
+      const nx = src[i + 1]; i++;
+      if (nx === 'n') { res += String.fromCharCode(10); }
+      else if (nx === 't') { res += String.fromCharCode(9); }
+      else if (nx === 'r') { res += String.fromCharCode(13); }
+      else if (nx === \") { res += \"; }
+      else if (nx === \\) { res += \\; }
+      else if (nx === '/') { res += '/'; }
+      else if (nx === 'u') { const hx = src.slice(i + 1, i + 5); i += 4; res += String.fromCharCode(parseInt(hx, 16) || 63); }
+      else { res += (nx || ''); }
+    }
+    return res;
+  }
   }
   private async executorTurn(messages: any[], tools: any[], toolChoice?: string): Promise<{ content: string, toolCalls: any[] }> {
     (this as any).modelCalls = ((this as any).modelCalls || 0) + 1;
