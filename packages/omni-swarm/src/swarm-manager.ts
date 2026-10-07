@@ -194,6 +194,23 @@ export class SwarmManager {
       '24. TESTY CUDZEGO PROJEKTU: gdy zmieniasz pliki w istniejacym projekcie, WYKRYJ i URUCHOM jego testy (npm test / pytest / python -m unittest / go test). Jesli testow nie ma - powiedz to wprost. Nie oddawaj zmiany bez uruchomienia testow, jesli istnieja.',
     ].join(nl);
   }
+  /** Niezalezna weryfikacja (bez modelu): uruchamia wykryte testy projektu. */
+  private async verifyProjectTests(cwd: string): Promise<boolean> {
+    try {
+      let files: string[] = [];
+      try { files = fs.readdirSync(cwd); } catch (e) { return false; }
+      let cmd = '';
+      const pyTests = files.filter((f) => /^test_.*\.py$/i.test(f) || /_test\.py$/i.test(f));
+      if (pyTests.length) { cmd = 'python3 -m unittest discover -v 2>&1'; }
+      else if (files.indexOf('package.json') !== -1) { cmd = 'npm test --silent 2>&1'; }
+      if (!cmd) { return false; }
+      const out = await this.execToolResilient('shell_exec', { command: cmd }, cwd);
+      const s = String(typeof out === 'string' ? out : JSON.stringify(out));
+      const ok = /(^|\n)OK\b/.test(s) || /\b[0-9]+ passed\b/i.test(s) || /all tests passed/i.test(s);
+      console.log('[Swarm] Weryfikacja testow (niezalezna): ' + (ok ? 'OK' : 'FAIL') + ' :: ' + cmd);
+      return ok;
+    } catch (e) { return false; }
+  }
   /** Petla TDD: uruchom kod/test, a przy bledzie popraw i uruchom ponownie (test -> poprawka -> retest). */
   private async codeTestFixLoop(prompt: string, cwd: string): Promise<string> {
     const NLx = String.fromCharCode(10);
@@ -1611,9 +1628,16 @@ export class SwarmManager {
           const tddReport = await this.codeTestFixLoop(prompt, cwd);
           if (tddReport && tddReport.trim().length > 5) { executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'TDD: ' + tddReport; }
           if (/^FAIL/.test(tddReport || '')) {
-            const restored = this.restoreProject();
-            if (restored.length) { executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'WYCOFANO nieudane zmiany w plikach: ' + restored.join(', '); console.log('[Swarm] Wycofano nieudane zmiany: ' + restored.join(', ')); }
-            this.emit({ kind: 'writing', text: 'Testy nie przeszly - wycofano zmiany w plikach.' });
+            const testsOk = await this.verifyProjectTests(cwd);
+            if (testsOk) {
+              console.log('[Swarm] TDD zglosilo FAIL, ale testy faktycznie przechodza - zachowuje zmiany.');
+              executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'TDD zglosilo FAIL, ale niezalezna weryfikacja: testy przechodza - zmiany zachowane.';
+              (this as any).codeBackupDir = null;
+            } else {
+              const restored = this.restoreProject();
+              if (restored.length) { executionResult = (executionResult ? executionResult + String.fromCharCode(10) : '') + 'WYCOFANO nieudane zmiany w plikach: ' + restored.join(', '); console.log('[Swarm] Wycofano nieudane zmiany: ' + restored.join(', ')); }
+              this.emit({ kind: 'writing', text: 'Testy nie przeszly - wycofano zmiany w plikach.' });
+            }
           } else {
             (this as any).codeBackupDir = null;
             if (!/^PASS_FIRST/.test(tddReport || '')) {
