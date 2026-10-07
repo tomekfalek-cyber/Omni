@@ -34,9 +34,19 @@ function py(args) { return cp.spawnSync('python3', args, { cwd: DIR, encoding: '
   const uni = py(['-m', 'unittest', 'discover', '-v']);
   const uniTxt = String(uni.stdout || '') + String(uni.stderr || '');
   const nonTest = files.filter(f => !/^test_|_test\.py$/.test(f));
-  const hardSecret = /(client_secret|api_key|password|token)\s*=\s*["'][^"']{6,}["']/i.test(all);
+  let prod = ''; for (const f of nonTest) { try { prod += fs.readFileSync(DIR + '/' + f, 'utf8') + '\n'; } catch (e) {} }
+  function looksLikeSecret(code) {
+    const re = /(client_secret|api_key|apikey|password|secret|access_token|bearer)\s*=\s*["']([^"']{8,})["']/gi;
+    let m; while ((m = re.exec(code))) { const v = m[2];
+      if (/^[A-Z0-9_]+$/.test(v)) continue;
+      if (/^(test|dummy|example|your|xxx|explicit|from-env|changeme|placeholder)/i.test(v)) continue;
+      if (/^(https?:|\/|\.|\$|\{)/.test(v)) continue;
+      return true; }
+    return false;
+  }
+  const hardSecret = looksLikeSecret(prod);
   const checks = [
-    ['sekrety z ENV', /os\.environ|getenv/.test(all) && !hardSecret],
+    ['sekrety z ENV', /os\.environ|getenv/.test(prod) && !hardSecret],
     ['paginacja (limit/offset/page)', /offset|limit|\bpage\b/i.test(all)],
     ['backoff 429/5xx (Retry-After)', /429|retry-after|backoff|Retry\(/i.test(all)],
     ['refresh tokena na 401', /401/.test(all)],
