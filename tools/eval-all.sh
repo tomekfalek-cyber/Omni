@@ -7,7 +7,7 @@ mkdir -p "$(dirname "$HIST")"
 TS=$(date -Iseconds)
 {
   echo "=== $TS ==="
-  for t in eval-rozum eval-sysadmin eval-koder eval-projekt eval-fix; do
+  for t in eval-rozum eval-sysadmin eval-koder eval-projekt eval-fix eval-kod-jakosc; do
     F="/tmp/omni-eval-$t.out"
     timeout 1200 node "tools/$t.mjs" > "$F" 2>&1
     L=$(grep -aE '^WYNIK_' "$F" | tail -1)
