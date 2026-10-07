@@ -230,7 +230,7 @@ export class SwarmManager {
         for (const call of calls) {
           const nm = call.function && call.function.name;
           let ar: any = {};
-          try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
+          try { ar = this.parseArgs(call.function && call.function.arguments); } catch (e) { ar = {}; }
           try {
             const outp = await this.execToolResilient(nm, ar, cwd);
             msgs.push({ role: 'tool', tool_call_id: call.id, content: String(typeof outp === 'string' ? outp : JSON.stringify(outp)).slice(0, 6000) });
@@ -263,7 +263,7 @@ export class SwarmManager {
     for (const call of calls) {
       const nm = call.function && call.function.name;
       let ar: any = {};
-      try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
+      try { ar = this.parseArgs(call.function && call.function.arguments); } catch (e) { ar = {}; }
       try {
         const outp = await this.execToolResilient(nm, ar, cwd);
         msgs.push({ role: 'tool', tool_call_id: call.id, content: String(typeof outp === 'string' ? outp : JSON.stringify(outp)).slice(0, 6000) });
@@ -463,6 +463,25 @@ export class SwarmManager {
     }));
   }
 
+  /** Odporne parsowanie argumentow narzedzia: JSON -> naprawa -> ekstrakcja pol. */
+  private parseArgs(raw: any): any {
+    if (raw && typeof raw === 'object') { return raw; }
+    const s = String(raw || '').trim();
+    if (!s) { return {}; }
+    try { return JSON.parse(s); } catch (e) { }
+    const t = s.replace(/,\s*([}\]])/g, '$1');
+    try { return JSON.parse(t); } catch (e) { }
+    let bal = 0;
+    for (const ch of t) { if (ch === '{') { bal++; } else if (ch === '}') { bal--; } }
+    if (bal > 0) { try { return JSON.parse(t + '}'.repeat(bal)); } catch (e) { } }
+    const out: any = {};
+    const pm = t.match(/"path"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (pm) { out.path = pm[1].replace(/\\"/g, '"').replace(/\n/g, String.fromCharCode(10)).replace(/\t/g, String.fromCharCode(9)); }
+    const cm = t.match(/"content"\s*:\s*"([\s\S]*?)"\s*[,}]/);
+    if (cm) { out.content = cm[1].replace(/\\"/g, '"').replace(/\n/g, String.fromCharCode(10)).replace(/\t/g, String.fromCharCode(9)); }
+    if (Object.keys(out).length) { console.log('[Swarm] parseArgs: odzyskano pola z surowego JSON (' + Object.keys(out).join(', ') + ')'); }
+    return out;
+  }
   private async executorTurn(messages: any[], tools: any[], toolChoice?: string): Promise<{ content: string, toolCalls: any[] }> {
     (this as any).modelCalls = ((this as any).modelCalls || 0) + 1;
     let choice = toolChoice;
@@ -660,7 +679,7 @@ export class SwarmManager {
         for (const call of calls) {
           const name = call.function && call.function.name;
           let args: any = {};
-          try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { args = {}; }
+          try { args = this.parseArgs(call.function && call.function.arguments); } catch (e) { args = {}; }
           try {
             const output = await this.execToolResilient(name, args, cwd);
             const text = typeof output === 'string' ? output : JSON.stringify(output);
@@ -1484,7 +1503,7 @@ export class SwarmManager {
         const parsed = toolCalls.map((call: any) => {
           const name = call.function && call.function.name;
           let args: any = {};
-          try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (error) { args = {}; }
+          try { args = this.parseArgs(call.function && call.function.arguments); } catch (error) { args = {}; }
           return { call: call, name: String(name), args: args };
         });
         const results: any[] = new Array(parsed.length);
@@ -1568,7 +1587,7 @@ export class SwarmManager {
             for (const call of calls1) {
               const nm = call.function && call.function.name;
               let ar: any = {};
-              try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
+              try { ar = this.parseArgs(call.function && call.function.arguments); } catch (e) { ar = {}; }
               try {
                 const outp = await this.execToolResilient(nm, ar, cwd);
                 forced.push({ role: 'tool', tool_call_id: call.id, content: String(typeof outp === 'string' ? outp : JSON.stringify(outp)).slice(0, 6000) });
@@ -1608,7 +1627,7 @@ export class SwarmManager {
             for (const call of vcalls) {
               const nm = call.function && call.function.name;
               let ar: any = {};
-              try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
+              try { ar = this.parseArgs(call.function && call.function.arguments); } catch (e) { ar = {}; }
               try {
                 const outp = await this.execToolResilient(nm, ar, cwd);
                 forcedV.push({ role: 'tool', tool_call_id: call.id, content: String(typeof outp === 'string' ? outp : JSON.stringify(outp)).slice(0, 6000) });
@@ -1675,7 +1694,7 @@ export class SwarmManager {
               cont.push({ role: 'assistant', content: r2.content || null, tool_calls: tc });
               for (const call of tc) {
                 const nm2 = call.function && call.function.name;
-                let ar2: any = {}; try { ar2 = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar2 = {}; }
+                let ar2: any = {}; try { ar2 = this.parseArgs(call.function && call.function.arguments); } catch (e) { ar2 = {}; }
                 try { const o = await this.execToolResilient(nm2, ar2, cwd); const t = typeof o === 'string' ? o : JSON.stringify(o); executionResult += t; cont.push({ role: 'tool', tool_call_id: call.id, content: this.compressToolOutput(t) }); this.memory.appendTranscript(sessionId, 'tool', nm2 + ': ' + t.slice(0, 300)); }
                 catch (e: any) { cont.push({ role: 'tool', tool_call_id: call.id, content: 'BLAD: ' + e.message }); }
               }
@@ -1702,7 +1721,7 @@ export class SwarmManager {
             const ccalls = cr.toolCalls || [];
             for (const call of ccalls) {
               const nm = call.function && call.function.name;
-              let ar: any = {}; try { ar = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { ar = {}; }
+              let ar: any = {}; try { ar = this.parseArgs(call.function && call.function.arguments); } catch (e) { ar = {}; }
               try { const o = await this.execToolResilient(nm, ar, cwd); const t = typeof o === 'string' ? o : JSON.stringify(o); executionResult += t; } catch (e) { }
             }
             if (cr.content && String(cr.content).trim().length > 20) { draftAnswer = this.stripMarkers(String(cr.content)); }
