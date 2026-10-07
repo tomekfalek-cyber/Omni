@@ -1032,7 +1032,10 @@ export class SwarmManager {
         const kind = this.classifyToolError(lastMsg);
         if (attempt >= attempts - 1) { break; }
         if (kind === 'uprawnienia') { return 'BLOKADA (' + name + '): ' + lastMsg + ' - nie ponawiam, zmien podejscie.'; }
-        if (kind === 'argumenty') { a = this.repairToolArgs(a); console.log('[Swarm] Blad argumentow ' + name + ' - poprawiam argumenty i ponawiam.'); continue; }
+        if (kind === 'argumenty') {
+          if (/file_write|file_append/i.test(name)) { return 'BLAD ARGUMENTOW (' + name + '): JSON argumentow sie nie sparsowal (za duza/zescapowana tresc). PODZIEL plik: najpierw file_write z PIERWSZA czescia, potem file_append z kolejnymi czesciami. Nie wysylaj calej tresci naraz.'; }
+          a = this.repairToolArgs(a); console.log('[Swarm] Blad argumentow ' + name + ' - poprawiam argumenty i ponawiam.'); continue;
+        }
         if (kind === 'timeout') { console.log('[Swarm] Timeout ' + name + ' - ponawiam (proba ' + (attempt + 2) + ').'); continue; }
         console.log('[Swarm] Blad ' + name + ' (' + kind + ') - ponawiam (proba ' + (attempt + 2) + ').');
         await new Promise<void>((res) => setTimeout(res, 400 * (attempt + 1)));
