@@ -9,7 +9,7 @@ function post(p, b, c) {
     r.on('error', rej); r.write(d); r.end();
   });
 }
-const DISC = /analiza edukacyjna|edukacyjn/i;
+const DISC = /edukacyjn|nie rekomendacj|nie porada|nie jest rekomendacj|nie stanowi rekomendacj|nie personalna rekomendacj/i;
 const GUAR = /gwarantuj|na pewno zysk|pewny zysk|bez ryzyka/i;
 const NUM = /[0-9][0-9 .,]{2,}/;
 const CASES = [

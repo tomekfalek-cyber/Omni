@@ -1318,7 +1318,7 @@ export class SwarmManager {
     for (const rk of reportKeys) { if (foldedTask.indexOf(rk) !== -1) { reportOnly = true; break; } }
     if (reportOnly) { for (const fk of fixKeys) { if (foldedTask.indexOf(fk) !== -1) { reportOnly = false; break; } } }
     if (reportOnly) { useCoder = false; }
-    const sysExtras = ['shell', 'log', 'proces', 'port', 'serwer', 'siec', 'network', 'diagnoz', 'debug', 'crash', 'wyciek', 'nasluch', 'cpu', 'ram', 'dysk', 'systemd', 'uslug', 'firewall', 'konfiguracj', 'finans', 'inwestycj', 'akcj', 'akcje', 'etf', 'obligacj', 'forex', 'krypto', 'bitcoin', 'portfel', 'walut', 'makro'];
+    const sysExtras = ['shell', 'log', 'proces', 'port', 'serwer', 'siec', 'network', 'diagnoz', 'debug', 'crash', 'wyciek', 'nasluch', 'cpu', 'ram', 'dysk', 'systemd', 'uslug', 'firewall', 'konfiguracj', 'finans', 'inwestycj', 'akcj', 'akcje', 'etf', 'obligacj', 'forex', 'krypto', 'bitcoin', 'portfel', 'walut', 'makro', 'kurs', 'pln', 'usd', 'eur', 'indeks', 'notowan', 'gield', 'giełd', 'walutow', 'stopa', 'inflacj'];
     // #4 ROUTING PO TRUDNOSCI: lekki scoring - nie tylko slowa kluczowe.
     const diff = this.difficultyScore(prompt, foldedTask);
     (this as any).difficulty = diff;
