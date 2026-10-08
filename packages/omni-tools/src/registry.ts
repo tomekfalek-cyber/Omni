@@ -181,6 +181,7 @@ export class ToolRegistry {
     this.registerTool(webTools.getDefinitions()[2], (args) => webTools.crypto(args));
     this.registerTool(webTools.getDefinitions()[3], (args) => webTools.news(args));
     this.registerTool(webTools.getDefinitions()[4], (args) => webTools.image(args));
+    this.registerTool(webTools.getDefinitions()[5], (args) => webTools.stockQuote(args));
 
     // Narzedzia diagnostyczne READ-ONLY (bez zmian w systemie).
     this.registerTool({

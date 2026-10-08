@@ -198,6 +198,7 @@ export class SwarmManager {
       '27. DUZE PLIKI: NIE wysylaj ogromnej tresci w jednym wywolaniu (JSON sie urywa i plik wychodzi uszkodzony). Pisz przyrostowo: file_write (pierwsza czesc), potem file_append (kolejne czesci). Po zapisie zweryfikuj plik (file_read albo uruchom testy).',
       '28. SWIEZY DOWOD: nie twierdz, ze "testy przechodza" albo "dziala", jesli w TYM zadaniu nie ma wyniku testu/komendy. Kazde "OK" musi miec pokrycie w wyniku narzedzia z tego wlasnie zadania, nie "z poprzedniego razu".',
       '29. SCIEZKI = KATALOG ROBOCZY: pisz pliki wzglednie w cwd (np. ./plik.py), NIE do /tmp ani poza katalog roboczy - inaczej blokada Path Traversal. Jesli zapis padl z powodu sciezki, uzyj sciezki w katalogu roboczym.',
+      '30. ODPOWIEDZ FINANSOWA: dla pytan finansowych trzymaj szablon: FAKTY (dane z narzedzi, z data i zrodlem) -> ZALOZENIA -> SCENARIUSZE (byczy/bazowy/niedzwiedzi z warunkami) -> RYZYKA -> zastrzezenie "to analiza edukacyjna". Jesli brak danych z narzedzia (stock_quote/crypto_price/news) - napisz to wprost, NIE zgaduj.',
     ].join(nl);
   }
   /** Niezalezna weryfikacja (bez modelu): uruchamia wykryte testy projektu. */
@@ -1296,7 +1297,7 @@ export class SwarmManager {
     for (const rk of reportKeys) { if (foldedTask.indexOf(rk) !== -1) { reportOnly = true; break; } }
     if (reportOnly) { for (const fk of fixKeys) { if (foldedTask.indexOf(fk) !== -1) { reportOnly = false; break; } } }
     if (reportOnly) { useCoder = false; }
-    const sysExtras = ['shell', 'log', 'proces', 'port', 'serwer', 'siec', 'network', 'diagnoz', 'debug', 'crash', 'wyciek', 'nasluch', 'cpu', 'ram', 'dysk', 'systemd', 'uslug', 'firewall', 'konfiguracj'];
+    const sysExtras = ['shell', 'log', 'proces', 'port', 'serwer', 'siec', 'network', 'diagnoz', 'debug', 'crash', 'wyciek', 'nasluch', 'cpu', 'ram', 'dysk', 'systemd', 'uslug', 'firewall', 'konfiguracj', 'finans', 'inwestycj', 'akcj', 'akcje', 'etf', 'obligacj', 'forex', 'krypto', 'bitcoin', 'portfel', 'walut', 'makro'];
     // #4 ROUTING PO TRUDNOSCI: lekki scoring - nie tylko slowa kluczowe.
     const diff = this.difficultyScore(prompt, foldedTask);
     (this as any).difficulty = diff;

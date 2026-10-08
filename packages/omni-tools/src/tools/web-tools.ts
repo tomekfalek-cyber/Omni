@@ -23,7 +23,8 @@ export class WebTools {
       { name: 'web_fetch', description: 'Pobiera strone internetowa jako czysty tekst.', parameters: { url: 'string' }, requiresApproval: false, timeoutMs: 30000, maxOutputBytes: this.MAX_BYTES },
       { name: 'crypto_price', description: 'Aktualny kurs kryptowalut w USD i PLN.', parameters: { coins: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 4000 },
       { name: 'news', description: 'Najnowsze wiadomosci na podany temat.', parameters: { query: 'string' }, requiresApproval: false, timeoutMs: 25000, maxOutputBytes: 8000 },
-      { name: 'image_generate', description: 'Tworzy obrazek/grafike na podstawie opisu.', parameters: { prompt: 'string' }, requiresApproval: false, timeoutMs: 90000, maxOutputBytes: 2000 }
+      { name: 'image_generate', description: 'Tworzy obrazek/grafike na podstawie opisu.', parameters: { prompt: 'string' }, requiresApproval: false, timeoutMs: 90000, maxOutputBytes: 2000 },
+      { name: 'stock_quote', description: 'Notowania akcji, ETF, indeksow i par walutowych (Stooq): aapl.us, spy.us, wig20, eurusd, cdp.pl. Podaj symbole po przecinku.', parameters: { symbols: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 4000 }
     ];
   }
 
@@ -245,6 +246,26 @@ export class WebTools {
     return 'Kursy kryptowalut (zrodlo: CoinGecko):' + String.fromCharCode(10) + lines.join(String.fromCharCode(10));
   }
 
+  public async stockQuote(args: { symbols: string }): Promise<string> {
+    const raw = String((args && args.symbols) || '').trim();
+    if (!raw) { return 'Podaj symbole (np. aapl.us, spy.us, wig20, eurusd, cdp.pl).'; }
+    const list = raw.split('+').join(',').split(' ').join(',').split(',').filter(function (x) { return !!x; }).slice(0, 10);
+    const url = 'https://stooq.pl/q/l/?s=' + list.join('+') + '&f=sd2t2ohlcv&h&e=csv';
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Omni bot)' } });
+      if (!res.ok) { return 'Blad pobierania notowan (HTTP ' + res.status + ').'; }
+      const csv = await res.text();
+      const lines = csv.split(String.fromCharCode(10)).filter(function (l) { return l.trim().length > 0; });
+      if (lines.length <= 1) { return 'Brak danych dla: ' + list.join(', ') + ' (sprawdz symbole Stooq).'; }
+      const res2 = ['NOTOWANIA (zrodlo: Stooq, dane opoznione):'];
+      for (let i = 1; i < lines.length; i++) {
+        const c = lines[i].split(',');
+        if (c.length < 7) { continue; }
+        res2.push('- ' + c[0] + ': zamkniecie ' + c[6] + ' (O ' + c[3] + ' / H ' + c[4] + ' / L ' + c[5] + '), wolumen ' + (c[7] || 'n/d') + ' [' + c[1] + ' ' + c[2] + ']');
+      }
+      return res2.join(String.fromCharCode(10));
+    } catch (e: any) { return 'Blad notowan: ' + e.message; }
+  }
   public async news(args: { query: string }): Promise<string> {
     const query = String((args && args.query) || 'Polska').trim() || 'Polska';
     const items = await this.googleNews(query, 8);
