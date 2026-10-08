@@ -96,6 +96,23 @@ export class SwarmManager {
     } catch (e) { return ''; }
   }
   /** Czyta skumulowane lekcje z poprzednich zadan (pamiec, ktora sie kumuluje). */
+  /** Profil inwestora (horyzont, ryzyko, waluta, zakazy) - do spojnych analiz finansowych. */
+  private investorProfileFile(): string {
+    return path.join(os.homedir(), '.omni', 'memory', 'investor-profile.md');
+  }
+  private readInvestorProfile(): string {
+    try { const f = this.investorProfileFile(); return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').slice(-2000) : ''; } catch (e) { return ''; }
+  }
+  private saveInvestorProfile(text: string): string {
+    try {
+      const f = this.investorProfileFile();
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      const prev = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '# Profil inwestora';
+      const nl = String.fromCharCode(10);
+      fs.writeFileSync(f, prev + (prev.slice(-1) !== nl ? nl : '') + '- ' + String(text || '').trim().replace(/\s+/g, ' ').slice(0, 300) + nl, 'utf8');
+      return 'Zapisano do profilu inwestora: ' + String(text || '').trim().slice(0, 120);
+    } catch (e: any) { return 'Blad zapisu profilu: ' + e.message; }
+  }
   private readLessons(): string {
     try { const f = path.join(os.homedir(), '.omni', 'memory', 'lessons.md'); return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').slice(-2000) : ''; } catch (e) { return ''; }
   }
@@ -376,6 +393,10 @@ export class SwarmManager {
     this.tools.register({
       definition: { name: 'skill_accept', description: 'Akceptuje szkic skilla: przenosi z _drafts/ do aktywnych (po weryfikacji przez czlowieka).', parameters: { name: 'string' }, requiresApproval: false, timeoutMs: 5000, maxOutputBytes: 2000 },
       execute: async (args: any) => this.acceptDraft(String((args && args.name) || '')),
+    });
+    this.tools.register({
+      definition: { name: 'investor_profile', description: 'Zapisuje/aktualizuje PROFIL INWESTORA w trwalej pamieci (horyzont, tolerancja ryzyka, waluta, zakazy sektorow). Podaj text; pusty = pokaz obecny profil.', parameters: { text: 'string' }, requiresApproval: false, timeoutMs: 5000, maxOutputBytes: 5000 },
+      execute: async (args: any) => { const t = String((args && args.text) || '').trim(); if (!t) { const p = this.readInvestorProfile(); return p ? ('PROFIL INWESTORA:' + String.fromCharCode(10) + p) : 'Profil inwestora jest pusty.'; } return this.saveInvestorProfile(t); },
     });
     this.tools.register({
       definition: {
@@ -1809,6 +1830,7 @@ export class SwarmManager {
       (this.readProjectMemory(cwd) ? 'PAMIEC PROJEKTU (ustalenia z wczesniejszych sesji - korzystaj, nie pytaj ponownie):' + NL + this.readProjectMemory(cwd) : 'PAMIEC PROJEKTU: pusta (zapisuj ustalenia narzedziem project_remember)'),
       (this.readEnvMemory() ? 'PAMIEC SRODOWISKA (stack, porty, uslugi, pulapki - korzystaj):' + NL + this.readEnvMemory() : ''),
       (this.readLessons() ? 'LEKCJE Z POPRZEDNICH ZADAN (stosuj, nie powtarzaj bledow):' + NL + this.readLessons() : ''),
+      (this.readInvestorProfile() ? 'PROFIL INWESTORA (horyzont, ryzyko, waluta, zakazy - stosuj w KAZDEJ analizie finansowej):' + NL + this.readInvestorProfile() : ''),
       'MASZ DOSTEP DO INTERNETU (web_search, web_fetch). Mozesz sprawdzac biezace informacje, wiadomosci i strony. NIE twierdz, ze nie wiesz co sie dzialo po 2024 roku - po prostu wyszukaj.',
       'MASZ PAMIEC TRWALA (memory_save, memory_search) - zapisuj wazne ustalenia i preferencje uzytkownika.',
       'MASZ ROZMOWE GLOSOWA: uzytkownik moze mowic zamiast pisac (przycisk z ikona mikrofonu w czacie).',
