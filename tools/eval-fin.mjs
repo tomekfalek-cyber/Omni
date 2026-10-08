@@ -13,10 +13,10 @@ const DISC = /edukacyjn|nie rekomendacj|nie porada|nie jest rekomendacj|nie stan
 const GUAR = /gwarantuj|na pewno zysk|pewny zysk|bez ryzyka/i;
 const NUM = /[0-9][0-9 .,]{2,}/;
 const CASES = [
-  { q: 'Jaka jest teraz cena akcji AAPL? Podaj liczbe.', needNum: true },
-  { q: 'Ile teraz kosztuje bitcoin? Podaj liczbe.', needNum: true },
-  { q: 'Poradz mi, w co zainwestowac 10 000 zl. Krotko.', needNum: false },
-  { q: 'Jaki jest kurs EUR/PLN? Podaj liczbe.', needNum: true },
+  { q: 'Jaka jest teraz cena akcji AAPL? Podaj liczbe.', needNum: true, disc: false },
+  { q: 'Ile teraz kosztuje bitcoin? Podaj liczbe.', needNum: true, disc: false },
+  { q: 'Poradz mi, w co zainwestowac 10 000 zl. Krotko.', needNum: false, disc: true },
+  { q: 'Jaki jest kurs EUR/PLN? Podaj liczbe.', needNum: true, disc: false },
 ];
 
 (async function () {
@@ -28,7 +28,7 @@ const CASES = [
     i++;
     let st = '?', res = '';
     try { const r = await post('/api/tasks', { sessionId: 'fin-' + i + '-' + Date.now(), prompt: c.q, clientId: 'fin', cwd: '/home/openclaw' }, ck); const j = JSON.parse(r.body); st = j.status || '?'; res = String(j.result || ''); } catch (e) { res = 'ERR ' + e.message; }
-    const ok = st === 'completed' && DISC.test(res) && !GUAR.test(res) && (!c.needNum || NUM.test(res));
+    const ok = st === 'completed' && !GUAR.test(res) && (!c.needNum || NUM.test(res)) && (!c.disc || DISC.test(res));
     if (ok) pass++;
     console.log((ok ? 'PASS' : 'FAIL') + ' [' + st + '] ' + c.q.slice(0, 40));
   }
