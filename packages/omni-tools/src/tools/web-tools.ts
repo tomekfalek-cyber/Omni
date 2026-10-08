@@ -24,7 +24,7 @@ export class WebTools {
       { name: 'crypto_price', description: 'Aktualny kurs kryptowalut w USD i PLN.', parameters: { coins: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 4000 },
       { name: 'news', description: 'Najnowsze wiadomosci na podany temat.', parameters: { query: 'string' }, requiresApproval: false, timeoutMs: 25000, maxOutputBytes: 8000 },
       { name: 'image_generate', description: 'Tworzy obrazek/grafike na podstawie opisu.', parameters: { prompt: 'string' }, requiresApproval: false, timeoutMs: 90000, maxOutputBytes: 2000 },
-      { name: 'stock_quote', description: 'Notowania akcji, ETF, indeksow i par walutowych (Stooq): aapl.us, spy.us, wig20, eurusd, cdp.pl. Podaj symbole po przecinku.', parameters: { symbols: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 4000 }
+      { name: 'stock_quote', description: 'Notowania akcji, ETF, indeksow i par walutowych (Yahoo Finance): AAPL, SPY, ^GSPC, EURUSD=X, WIG20.WA. Podaj symbole po przecinku.', parameters: { symbols: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 4000 }
     ];
   }
 
@@ -248,23 +248,25 @@ export class WebTools {
 
   public async stockQuote(args: { symbols: string }): Promise<string> {
     const raw = String((args && args.symbols) || '').trim();
-    if (!raw) { return 'Podaj symbole (np. aapl.us, spy.us, wig20, eurusd, cdp.pl).'; }
-    const list = raw.split('+').join(',').split(' ').join(',').split(',').filter(function (x) { return !!x; }).slice(0, 10);
-    const url = 'https://stooq.pl/q/l/?s=' + list.join('+') + '&f=sd2t2ohlcv&h&e=csv';
-    try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Omni bot)' } });
-      if (!res.ok) { return 'Blad pobierania notowan (HTTP ' + res.status + ').'; }
-      const csv = await res.text();
-      const lines = csv.split(String.fromCharCode(10)).filter(function (l) { return l.trim().length > 0; });
-      if (lines.length <= 1) { return 'Brak danych dla: ' + list.join(', ') + ' (sprawdz symbole Stooq).'; }
-      const res2 = ['NOTOWANIA (zrodlo: Stooq, dane opoznione):'];
-      for (let i = 1; i < lines.length; i++) {
-        const c = lines[i].split(',');
-        if (c.length < 7) { continue; }
-        res2.push('- ' + c[0] + ': zamkniecie ' + c[6] + ' (O ' + c[3] + ' / H ' + c[4] + ' / L ' + c[5] + '), wolumen ' + (c[7] || 'n/d') + ' [' + c[1] + ' ' + c[2] + ']');
-      }
-      return res2.join(String.fromCharCode(10));
-    } catch (e: any) { return 'Blad notowan: ' + e.message; }
+    if (!raw) { return 'Podaj symbole (np. AAPL, SPY, ^GSPC, EURUSD=X, WIG20.WA).'; }
+    const list = raw.split('+').join(',').split(' ').join(',').split(',').filter(function (x) { return !!x; }).slice(0, 8);
+    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36';
+    const out = ['NOTOWANIA (Yahoo Finance, dane opoznione):'];
+    for (const sym of list) {
+      try {
+        const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(sym) + '?range=1d&interval=1d';
+        const res = await fetch(url, { headers: { 'User-Agent': UA } });
+        if (!res.ok) { out.push('- ' + sym + ': blad HTTP ' + res.status); continue; }
+        const j: any = await res.json();
+        const m = j && j.chart && j.chart.result && j.chart.result[0] && j.chart.result[0].meta;
+        if (!m) { out.push('- ' + sym + ': brak danych'); continue; }
+        const price = m.regularMarketPrice;
+        const prev = m.chartPreviousClose || m.previousClose;
+        const chg = (typeof price === 'number' && typeof prev === 'number' && prev) ? (((price - prev) / prev) * 100).toFixed(2) : 'n/d';
+        out.push('- ' + (m.symbol || sym) + ': ' + price + ' ' + (m.currency || '') + ' (' + chg + '% vs poprzednie zamkniecie)');
+      } catch (e: any) { out.push('- ' + sym + ': ' + e.message); }
+    }
+    return out.join(String.fromCharCode(10));
   }
   public async news(args: { query: string }): Promise<string> {
     const query = String((args && args.query) || 'Polska').trim() || 'Polska';
