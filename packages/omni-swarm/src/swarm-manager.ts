@@ -196,6 +196,8 @@ export class SwarmManager {
       '25. FINANSE/INWESTYCJE: jestes analitykiem, NIE licencjonowanym doradca inwestycyjnym. Dane bierz z narzedzi (crypto_price, news, web_search) - NIGDY nie zmyslaj cen, stop zwrotu ani wskaznikow; brak danych = powiedz to wprost. Rozdziel FAKTY (dane) od INTERPRETACJI i SCENARIUSZY; podawaj zalozenia, horyzont i ryzyko. Zakoncz KAZDA analize inwestycyjna zdaniem: "To analiza edukacyjna, nie personalna rekomendacja inwestycyjna." Nie obiecuj zyskow ani nie gwarantuj wynikow.',
       '26. KOD PRODUKCYJNY (standard): pisz kod gotowy na produkcje. Sekrety TYLKO z ENV (nigdy w kodzie). NIE wymyslaj API/endpointow/parametrow - brak pewnosci = sprawdz dokumentacje (web_fetch/web_search) albo napisz wprost "do weryfikacji". Zawsze obsluz: bledy (bez golego except), paginacje, limity/429 (backoff z Retry-After), wygasanie tokenow (refresh na 401), walidacje wejscia. Domyslnie tryb bezpieczny (dry-run) dla akcji zmieniajacych dane. Jasne nazwy, male funkcje, testy logiki. Zanim uznasz kod za gotowy - uruchom go/testy.',
       '27. DUZE PLIKI: NIE wysylaj ogromnej tresci w jednym wywolaniu (JSON sie urywa i plik wychodzi uszkodzony). Pisz przyrostowo: file_write (pierwsza czesc), potem file_append (kolejne czesci). Po zapisie zweryfikuj plik (file_read albo uruchom testy).',
+      '28. SWIEZY DOWOD: nie twierdz, ze "testy przechodza" albo "dziala", jesli w TYM zadaniu nie ma wyniku testu/komendy. Kazde "OK" musi miec pokrycie w wyniku narzedzia z tego wlasnie zadania, nie "z poprzedniego razu".',
+      '29. SCIEZKI = KATALOG ROBOCZY: pisz pliki wzglednie w cwd (np. ./plik.py), NIE do /tmp ani poza katalog roboczy - inaczej blokada Path Traversal. Jesli zapis padl z powodu sciezki, uzyj sciezki w katalogu roboczym.',
     ].join(nl);
   }
   /** Niezalezna weryfikacja (bez modelu): uruchamia wykryte testy projektu. */
@@ -1029,9 +1031,12 @@ export class SwarmManager {
       try {
         const output = await this.tools.executeTool(name, a, cwd);
         if (attempt > 0) { console.log('[Swarm] Narzedzie ' + name + ' ok po probie ' + (attempt + 1)); }
-        return typeof output === 'string' ? output : JSON.stringify(output);
+        const resultText = typeof output === 'string' ? output : JSON.stringify(output);
+        if (/(Ran [0-9]+ tests)|pytest|unittest|FAILED|passed/i.test(resultText)) { (this as any).testEvidence = true; }
+        return resultText;
       } catch (error: any) {
         lastMsg = String((error && error.message) || error);
+        if (/Path Traversal|poza katalog/i.test(lastMsg)) { return 'BLAD SCIEZKI: zapis poza katalogiem roboczym jest zablokowany. Uzyj sciezki WZGLEDNEJ w katalogu roboczym (np. ./plik.py).'; }
         const kind = this.classifyToolError(lastMsg);
         if (attempt >= attempts - 1) { break; }
         if (kind === 'uprawnienia') { return 'BLOKADA (' + name + '): ' + lastMsg + ' - nie ponawiam, zmien podejscie.'; }
@@ -1273,6 +1278,7 @@ export class SwarmManager {
     (this as any).modelCalls = 0;
     (this as any).usedSkills = [];
     (this as any).injectedSkills = [];
+    (this as any).testEvidence = false;
     try { await this.getSkillMgr(); } catch (e) { }
     const trimmedLower = String(prompt).trim().toLowerCase();
     const exact = trimmedLower === '/dokladnie' || trimmedLower.indexOf('/dokladnie ') === 0;
@@ -1314,7 +1320,7 @@ export class SwarmManager {
       currentAgent: 'planner',
     };
 
-    const hist = this.recentHistory(sessionId, 8, 3000);
+    const hist = this.recentHistory(sessionId, 6, 3000);
     const rel = this.relevantMemory(String(prompt), 3);
     this.memory.appendTranscript(sessionId, 'system', `Task started: ${prompt}`);
     this.memory.appendTranscript(sessionId, 'user', String(prompt).slice(0, 1200));
@@ -1762,6 +1768,9 @@ export class SwarmManager {
       task.status = 'completed';
       this.memory.appendTranscript(sessionId, 'assistant', String(draftAnswer || '').slice(0, 2000));
       // Odpowiedź wykonawcy jest ważniejsza niż marudzenie reviewera.
+      if (!fastAnswered && (this as any).useCoder && !(this as any).testEvidence && draftAnswer && /testy?\s*(przechodz|przesz|ok)|wszystkie testy|tests?\s*pass/i.test(String(draftAnswer))) {
+        try { const okFresh = await this.verifyProjectTests(cwd); if (!okFresh) { draftAnswer = String(draftAnswer) + String.fromCharCode(10) + String.fromCharCode(10) + '(Uwaga: brak swiezego dowodu testow z tego zadania - nie potwierdzam ich wyniku.)'; console.log('[Swarm] Swiezy dowod: brak wyniku testow w tym zadaniu.'); } } catch (e) { }
+      }
       task.result = this.stripMarkers(String(draftAnswer || executionResult || ''));
       (task as any).engine = this.engineUsedLabel();
       if (!fastAnswered && !quickTask) { try { await this.harvestMemory(sessionId, prompt, String(draftAnswer || executionResult || '')); } catch (error) { } }
