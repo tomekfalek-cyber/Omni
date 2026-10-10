@@ -100,6 +100,27 @@ export class SwarmManager {
   private investorProfileFile(): string {
     return path.join(os.homedir(), '.omni', 'memory', 'investor-profile.md');
   }
+  /** Ingest wiedzy na zadanie: newsy dla tematow -> skrot do ~/.omni/memory/daily-YYYY-MM-DD.md. */
+  private async runDailyIngest(topicsRaw?: string): Promise<string> {
+    const nl = String.fromCharCode(10);
+    const today = new Date().toISOString().slice(0, 10);
+    const custom = String(topicsRaw || '').trim();
+    const topics = custom ? custom.split(',').map((x) => x.trim()).filter((x) => !!x).slice(0, 6) : ['Bitcoin ETF', 'ETF i obligacje', 'AI agenci i modele LLM', 'Cloudflare i GitHub'];
+    const parts: string[] = ['# Daily Ingest - ' + today, ''];
+    for (const t of topics) {
+      parts.push('## ' + t);
+      try { const out = await this.execToolResilient('news', { query: t }, this.workspaceCwd); parts.push(String(out || '').slice(0, 900)); } catch (e) { parts.push('(brak danych)'); }
+      parts.push('');
+    }
+    parts.push('Zrodlo: narzedzie news (Google News RSS)');
+    try {
+      const dir = path.join(os.homedir(), '.omni', 'memory');
+      fs.mkdirSync(dir, { recursive: true });
+      const f = path.join(dir, 'daily-' + today + '.md');
+      fs.writeFileSync(f, parts.join(nl), 'utf8');
+      return 'Ingest zapisany: ' + f + nl + 'Tematy: ' + topics.join(', ');
+    } catch (e: any) { return 'Blad zapisu ingestu: ' + e.message; }
+  }
   /** Skrot 'swiezej wiedzy' z dziennego ingestu (daily-YYYY-MM-DD.md). */
   private readDailyNote(): string {
     try {
@@ -409,6 +430,10 @@ export class SwarmManager {
     this.tools.register({
       definition: { name: 'investor_profile', description: 'Zapisuje/aktualizuje PROFIL INWESTORA w trwalej pamieci (horyzont, tolerancja ryzyka, waluta, zakazy sektorow). Podaj text; pusty = pokaz obecny profil.', parameters: { text: 'string' }, requiresApproval: false, timeoutMs: 5000, maxOutputBytes: 5000 },
       execute: async (args: any) => { const t = String((args && args.text) || '').trim(); if (!t) { const p = this.readInvestorProfile(); return p ? ('PROFIL INWESTORA:' + String.fromCharCode(10) + p) : 'Profil inwestora jest pusty.'; } return this.saveInvestorProfile(t); },
+    });
+    this.tools.register({
+      definition: { name: 'daily_ingest', description: 'Dzienny ingest wiedzy na zadanie: pobiera newsy dla kilku tematow i zapisuje skrot z data do ~/.omni/memory/daily-YYYY-MM-DD.md. Uzyj, gdy ktos prosi o "ingest", "swieza wiedze" albo "przeglad newsow". Opcjonalnie topics (po przecinku).', parameters: { topics: 'string' }, requiresApproval: false, timeoutMs: 90000, maxOutputBytes: 4000 },
+      execute: async (args: any) => this.runDailyIngest(String((args && args.topics) || '')),
     });
     this.tools.register({
       definition: {
