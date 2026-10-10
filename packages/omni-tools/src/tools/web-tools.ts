@@ -24,7 +24,7 @@ export class WebTools {
       { name: 'crypto_price', description: 'Aktualny kurs kryptowalut w USD i PLN.', parameters: { coins: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 4000 },
       { name: 'news', description: 'Najnowsze wiadomosci na podany temat.', parameters: { query: 'string' }, requiresApproval: false, timeoutMs: 25000, maxOutputBytes: 8000 },
       { name: 'image_generate', description: 'Tworzy obrazek/grafike na podstawie opisu.', parameters: { prompt: 'string' }, requiresApproval: false, timeoutMs: 90000, maxOutputBytes: 2000 },
-      { name: 'stock_quote', description: 'Notowania akcji, ETF, indeksow i par walutowych (Yahoo Finance): AAPL, SPY, ^GSPC, EURUSD=X, WIG20.WA. Podaj symbole po przecinku.', parameters: { symbols: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 4000 }
+      { name: 'stock_quote', description: 'Notowania akcji, ETF, indeksow i par walutowych (Yahoo Finance): AAPL, SPY, ^GSPC, EURUSD=X, WIG20.WA. Podaj symbole po przecinku.', parameters: { symbols: 'string', range: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 4000 }
     ];
   }
 
@@ -246,15 +246,17 @@ export class WebTools {
     return 'Kursy kryptowalut (zrodlo: CoinGecko):' + String.fromCharCode(10) + lines.join(String.fromCharCode(10));
   }
 
-  public async stockQuote(args: { symbols: string }): Promise<string> {
+  public async stockQuote(args: { symbols: string, range?: string }): Promise<string> {
     const raw = String((args && args.symbols) || '').trim();
     if (!raw) { return 'Podaj symbole (np. AAPL, SPY, ^GSPC, EURUSD=X, WIG20.WA).'; }
     const list = raw.split('+').join(',').split(' ').join(',').split(',').filter(function (x) { return !!x; }).slice(0, 8);
     const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36';
+    const rangeRaw = String((args && (args as any).range) || '').trim();
+    const range = (rangeRaw === '1mo' || rangeRaw === '3mo' || rangeRaw === '6mo' || rangeRaw === '1y') ? rangeRaw : '';
     const out = ['NOTOWANIA (Yahoo Finance, dane opoznione):'];
     for (const sym of list) {
       try {
-        const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(sym) + '?range=1d&interval=1d';
+        const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(sym) + '?range=' + (range || '1d') + '&interval=1d';
         const res = await fetch(url, { headers: { 'User-Agent': UA } });
         if (!res.ok) { out.push('- ' + sym + ': blad HTTP ' + res.status); continue; }
         const j: any = await res.json();
@@ -263,7 +265,16 @@ export class WebTools {
         const price = m.regularMarketPrice;
         const prev = m.chartPreviousClose || m.previousClose;
         const chg = (typeof price === 'number' && typeof prev === 'number' && prev) ? (((price - prev) / prev) * 100).toFixed(2) : 'n/d';
-        out.push('- ' + (m.symbol || sym) + ': ' + price + ' ' + (m.currency || '') + ' (' + chg + '% vs poprzednie zamkniecie)');
+        const series = (j && j.chart && j.chart.result && j.chart.result[0] && j.chart.result[0].indicators && j.chart.result[0].indicators.quote && j.chart.result[0].indicators.quote[0] && j.chart.result[0].indicators.quote[0].close) || [];
+        const clean = series.filter(function (x: any) { return typeof x === 'number' && isFinite(x); });
+        if (range && clean.length >= 2) {
+          const first = clean[0]; const lastC = clean[clean.length - 1];
+          const pct = ((lastC - first) / first) * 100;
+          const mn = Math.min.apply(null, clean); const mx = Math.max.apply(null, clean);
+          out.push('- ' + (m.symbol || sym) + ' [' + range + ']: ' + first.toFixed(2) + ' -> ' + lastC.toFixed(2) + ' (' + pct.toFixed(2) + '%), min ' + mn.toFixed(2) + ' / max ' + mx.toFixed(2) + ' ' + (m.currency || ''));
+        } else {
+          out.push('- ' + (m.symbol || sym) + ': ' + price + ' ' + (m.currency || '') + ' (' + chg + '% vs poprzednie zamkniecie)');
+        }
       } catch (e: any) { out.push('- ' + sym + ': ' + e.message); }
     }
     return out.join(String.fromCharCode(10));
