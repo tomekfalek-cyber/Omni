@@ -1653,7 +1653,7 @@ export class SwarmManager {
         try {
           const nl2 = String.fromCharCode(10);
           const forced: any[] = [
-            { role: 'system', content: this.capabilities(cwd) + nl2 + this.readKnowledge() + nl2 + 'NIE WOLNO Ci odmawiac ani odsylac uzytkownika do stron. Uzyj narzedzi (crypto_price, news, web_search) i podaj konkretna odpowiedz z danymi.' },
+            { role: 'system', content: this.capabilities(cwd) + nl2 + this.readKnowledge() + nl2 + 'NIE WOLNO Ci odmawiac ani odsylac uzytkownika do stron. Uzyj narzedzi (crypto_price, stock_quote, news, web_search) i podaj konkretna odpowiedz z danymi.' },
             { role: 'user', content: String(prompt) },
           ];
           const res1 = await this.executorTurn(forced, toolSchemas, 'required');
