@@ -265,6 +265,7 @@ export class SwarmManager {
       '29. SCIEZKI = KATALOG ROBOCZY: pisz pliki wzglednie w cwd (np. ./plik.py), NIE do /tmp ani poza katalog roboczy - inaczej blokada Path Traversal. Jesli zapis padl z powodu sciezki, uzyj sciezki w katalogu roboczym.',
       '30. ODPOWIEDZ FINANSOWA: dla pytan finansowych trzymaj szablon: FAKTY (dane z narzedzi, z data i zrodlem) -> ZALOZENIA -> SCENARIUSZE (byczy/bazowy/niedzwiedzi z warunkami) -> RYZYKA -> zastrzezenie "to analiza edukacyjna". Jesli brak danych z narzedzia (stock_quote/crypto_price/news) - napisz to wprost, NIE zgaduj.',
       '31. ANALIZA RYNKU NA ZADANIE: gdy ktos mowi "analizuj rynek", "przeanalizuj newsy", "co sie dzieje na rynku/gieldzie", "swieza wiedza" albo "zrob ingest" - NAJPIERW uruchom narzedzie daily_ingest (swieze newsy), a POTEM odpowiedz na podstawie wynikow. Dla samego "analizuj <plik/tekst>" NIE uzywaj ingestu.',
+      '32. PREZENTACJE: gdy ktos prosi o prezentacje/slajdy/PPT - uzyj narzedzia make_pptx. Ustal temat (brak = zapytaj jednym zdaniem). Struktura: tytul + 3-6 slajdow (kazdy: krotki tytul + 2-4 punkty). Sciezka: domyslnie katalog roboczy; Pulpit Windows = /mnt/c/Users/<user>/Desktop/<nazwa>.pptx (dziala tylko przy wlaczonym automount; inaczej zapisz lokalnie i podaj sciezke \\wsl.localhost). Po zapisie podaj PELNA sciezke i liczbe slajdow.',
     ].join(nl);
   }
   /** Niezalezna weryfikacja (bez modelu): uruchamia wykryte testy projektu. */
