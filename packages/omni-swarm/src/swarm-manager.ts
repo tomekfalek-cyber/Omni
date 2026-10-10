@@ -249,6 +249,7 @@ export class SwarmManager {
       '28. SWIEZY DOWOD: nie twierdz, ze "testy przechodza" albo "dziala", jesli w TYM zadaniu nie ma wyniku testu/komendy. Kazde "OK" musi miec pokrycie w wyniku narzedzia z tego wlasnie zadania, nie "z poprzedniego razu".',
       '29. SCIEZKI = KATALOG ROBOCZY: pisz pliki wzglednie w cwd (np. ./plik.py), NIE do /tmp ani poza katalog roboczy - inaczej blokada Path Traversal. Jesli zapis padl z powodu sciezki, uzyj sciezki w katalogu roboczym.',
       '30. ODPOWIEDZ FINANSOWA: dla pytan finansowych trzymaj szablon: FAKTY (dane z narzedzi, z data i zrodlem) -> ZALOZENIA -> SCENARIUSZE (byczy/bazowy/niedzwiedzi z warunkami) -> RYZYKA -> zastrzezenie "to analiza edukacyjna". Jesli brak danych z narzedzia (stock_quote/crypto_price/news) - napisz to wprost, NIE zgaduj.',
+      '31. ANALIZA RYNKU NA ZADANIE: gdy ktos mowi "analizuj rynek", "przeanalizuj newsy", "co sie dzieje na rynku/gieldzie", "swieza wiedza" albo "zrob ingest" - NAJPIERW uruchom narzedzie daily_ingest (swieze newsy), a POTEM odpowiedz na podstawie wynikow. Dla samego "analizuj <plik/tekst>" NIE uzywaj ingestu.',
     ].join(nl);
   }
   /** Niezalezna weryfikacja (bez modelu): uruchamia wykryte testy projektu. */
@@ -432,7 +433,7 @@ export class SwarmManager {
       execute: async (args: any) => { const t = String((args && args.text) || '').trim(); if (!t) { const p = this.readInvestorProfile(); return p ? ('PROFIL INWESTORA:' + String.fromCharCode(10) + p) : 'Profil inwestora jest pusty.'; } return this.saveInvestorProfile(t); },
     });
     this.tools.register({
-      definition: { name: 'daily_ingest', description: 'Dzienny ingest wiedzy na zadanie: pobiera newsy dla kilku tematow i zapisuje skrot z data do ~/.omni/memory/daily-YYYY-MM-DD.md. Uzyj, gdy ktos prosi o "ingest", "swieza wiedze" albo "przeglad newsow". Opcjonalnie topics (po przecinku).', parameters: { topics: 'string' }, requiresApproval: false, timeoutMs: 90000, maxOutputBytes: 4000 },
+      definition: { name: 'daily_ingest', description: 'Dzienny ingest wiedzy na zadanie: pobiera newsy dla kilku tematow i zapisuje skrot z data do ~/.omni/memory/daily-YYYY-MM-DD.md. Uzyj, gdy ktos prosi o "ingest", "swieza wiedze", "przeglad newsow", "analizuj rynek", "przeanalizuj newsy", "co sie dzieje na rynku". Opcjonalnie topics (po przecinku).', parameters: { topics: 'string' }, requiresApproval: false, timeoutMs: 90000, maxOutputBytes: 4000 },
       execute: async (args: any) => this.runDailyIngest(String((args && args.topics) || '')),
     });
     this.tools.register({
