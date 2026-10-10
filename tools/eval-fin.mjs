@@ -36,7 +36,7 @@ const CASES = [
   const code = process.env.OMNI_CODE || fs.readFileSync(os.homedir() + '/.omni/panel-code', 'utf8').trim();
   const lg = await post('/api/login', { code });
   const ck = (lg.headers['set-cookie'] || []).map(s => s.split(';')[0]).join('; ');
-  let pass = ***, i = 0;
+  let pass = 0, i = 0;
   for (const c of CASES) {
     i++;
     const ref = c.price ? await liveRef(c.id) : null;
