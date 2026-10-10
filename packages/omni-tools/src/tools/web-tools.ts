@@ -24,7 +24,7 @@ export class WebTools {
       { name: 'crypto_price', description: 'Aktualny kurs kryptowalut w USD i PLN.', parameters: { coins: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 4000 },
       { name: 'news', description: 'Najnowsze wiadomosci na podany temat.', parameters: { query: 'string' }, requiresApproval: false, timeoutMs: 25000, maxOutputBytes: 8000 },
       { name: 'image_generate', description: 'Tworzy obrazek/grafike na podstawie opisu.', parameters: { prompt: 'string' }, requiresApproval: false, timeoutMs: 90000, maxOutputBytes: 2000 },
-      { name: 'stock_quote', description: 'Notowania akcji, ETF, indeksow i par walutowych (Yahoo Finance): AAPL, SPY, ^GSPC, EURUSD=X, WIG20.WA. Podaj symbole po przecinku.', parameters: { symbols: 'string', range: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 4000 }
+      { name: 'stock_quote', description: 'Notowania akcji, ETF, indeksow i par walutowych (Yahoo Finance): AAPL, SPY, ^GSPC, EURUSD=X, WIG20.WA. Podaj symbole po przecinku. Parametr range: 1mo/3mo/6mo/1y zwraca historie (zmiana %, min/max).', parameters: { symbols: 'string', range: 'string' }, requiresApproval: false, timeoutMs: 20000, maxOutputBytes: 4000 }
     ];
   }
 
