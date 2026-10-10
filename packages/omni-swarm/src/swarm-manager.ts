@@ -100,6 +100,21 @@ export class SwarmManager {
   private investorProfileFile(): string {
     return path.join(os.homedir(), '.omni', 'memory', 'investor-profile.md');
   }
+  /** Tworzy prezentacje .pptx (python-pptx) z title/subtitle/slides(JSON). */
+  private async makePptx(args: any): Promise<string> {
+    const outPath = String((args && args.path) || '').trim() || path.join(this.workspaceCwd, 'prezentacja-' + Date.now() + '.pptx');
+    let slides: any = [];
+    try { slides = JSON.parse(String((args && args.slides) || '[]')); } catch (e) { slides = []; }
+    if (!Array.isArray(slides)) { slides = []; }
+    const payload = { title: String((args && args.title) || 'Prezentacja'), subtitle: String((args && args.subtitle) || ''), slides: slides };
+    const tmp = path.join(os.tmpdir(), 'omni-pptx-' + Date.now() + '.json');
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(payload), 'utf8');
+      const script = path.join(os.homedir(), '.omni', 'tools', 'make_pptx.py');
+      const r = await this.execToolResilient('shell_exec', { command: 'python3 "' + script + '" "' + tmp + '" "' + outPath + '"' }, this.workspaceCwd);
+      return 'PPTX: ' + String(r || '').slice(0, 300);
+    } catch (e: any) { return 'Blad tworzenia pptx: ' + e.message; } finally { try { fs.unlinkSync(tmp); } catch (e) { } }
+  }
   /** Ingest wiedzy na zadanie: newsy dla tematow -> skrot do ~/.omni/memory/daily-YYYY-MM-DD.md. */
   private async runDailyIngest(topicsRaw?: string): Promise<string> {
     const nl = String.fromCharCode(10);
@@ -435,6 +450,10 @@ export class SwarmManager {
     this.tools.register({
       definition: { name: 'daily_ingest', description: 'Dzienny ingest wiedzy na zadanie: pobiera newsy dla kilku tematow i zapisuje skrot z data do ~/.omni/memory/daily-YYYY-MM-DD.md. Uzyj, gdy ktos prosi o "ingest", "swieza wiedze", "przeglad newsow", "analizuj rynek", "przeanalizuj newsy", "co sie dzieje na rynku". Opcjonalnie topics (po przecinku).', parameters: { topics: 'string' }, requiresApproval: false, timeoutMs: 90000, maxOutputBytes: 4000 },
       execute: async (args: any) => this.runDailyIngest(String((args && args.topics) || '')),
+    });
+    this.tools.register({
+      definition: { name: 'make_pptx', description: 'Tworzy prezentacje PowerPoint (.pptx) i zapisuje pod sciezka. Parametry: path (np. /mnt/c/Users/Dell/Desktop/prez.pptx), title, subtitle, slides (JSON: [{"tytul":"...","punkty":["..."]}]).', parameters: { path: 'string', title: 'string', subtitle: 'string', slides: 'string' }, requiresApproval: false, timeoutMs: 40000, maxOutputBytes: 3000 },
+      execute: async (args: any) => this.makePptx(args),
     });
     this.tools.register({
       definition: {
