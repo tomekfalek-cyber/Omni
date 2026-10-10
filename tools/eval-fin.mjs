@@ -23,7 +23,7 @@ function nums(text) {
   return m.map(x => parseFloat(String(x).replace(/ /g, '').replace(/,/g, '.').replace(/[.,]$/, ''))).filter(n => isFinite(n));
 }
 function nearAny(text, ref) { if (!ref) { return false; } return nums(text).some(n => Math.abs(n - ref) / ref <= 0.15); }
-const DISC = /edukacyjn|nie rekomendacj|nie porada|nie jest rekomendacj|nie stanowi rekomendacj|nie personalna rekomendacj/i;
+const DISC = /edukacyjn|nie (jest|stanowi)[^.]{0,25}(rekomendacj|porad)|nie rekomendacj|nie porad/i;
 const GUAR = /gwarantuj|na pewno zysk|pewny zysk|bez ryzyka/i;
 const CASES = [
   { id: 1, q: 'Jaka jest teraz cena akcji AAPL? Podaj liczbe.', price: true, disc: false },
