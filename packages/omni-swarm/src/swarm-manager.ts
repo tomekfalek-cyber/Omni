@@ -1159,6 +1159,10 @@ export class SwarmManager {
   /** Deterministyczna odpowiedz o dzisiejsza date (bez zgadywania modelu). */
   private tryDirectDate(prompt: string): string | null {
     const low = this.foldPl(String(prompt || '').toLowerCase());
+    // Guard: to ma byc KROTKIE pytanie o date, nie zadanie (np. 'zapisz ... dzisiejsza data ... plik').
+    if (low.length > 80) { return null; }
+    const busy = ['zapisz', 'plik', 'narzedzi', 'uzyj', 'news', 'katalog', 'daily', 'https', 'wykonaj', 'zrob'];
+    for (const b of busy) { if (low.indexOf(b) !== -1) { return null; } }
     const pats = ['jaka jest data', 'jaka data', 'jaka mamy date', 'dzisiejsza data', 'jaki jest dzien', 'jaki dzien', 'ktory mamy dzien', 'jaka jest dzisiaj data', 'data dzisiaj', 'dzisiaj data', 'jaka dzisiaj data'];
     let hit = false;
     for (const p of pats) { if (low.indexOf(p) !== -1) { hit = true; break; } }
