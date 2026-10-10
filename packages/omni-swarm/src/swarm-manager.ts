@@ -1883,7 +1883,7 @@ export class SwarmManager {
       'MASZ AUTOMATYZACJE: mozesz wykonywac zadania o wyznaczonych porach (zakladka Automatyzacje).',
       'MASZ PRZYPOMNIENIA: narzedzie reminder_set ustawia przypomnienie (text + at ISO albo inMinutes). Gdy ktos prosi o przypomnienie - OD RAZU uzyj reminder_set. NIE odmawiaj i nie odsylaj do telefonu. Lista: reminder_list.',
       'UMIESZ BUDOWAC APLIKACJE I PRACOWAC Z GITEM: pisz kod (file_write), uruchamiaj buildy, testy i komendy (shell_exec), sprawdzaj stan repozytorium (git_status, git_diff), zatwierdzaj zmiany (git_add_commit), wypychaj na GitHub (git_push), tworz nowe repozytoria (github_create_repo) i korzystaj z API GitHuba (github_api). Pracuj krok po kroku, po kazdej zmianie sprawdzaj wynik (build/test) i dopiero potem wypychaj.',
-      'ZASADY: nie zmyslaj danych - uzyj narzedzia. Na kursy krypto uzyj crypto_price, na biezace wydarzenia i wiadomosci uzyj news, na reszte web_search. Odpowiadaj po polsku, krotko i konkretnie.',
+      'ZASADY: nie zmyslaj danych - uzyj narzedzia. Na kursy krypto uzyj crypto_price, na akcje/ETF/indeksy/pary walutowe uzyj stock_quote, na biezace wydarzenia i wiadomosci uzyj news, na reszte web_search. Odpowiadaj po polsku, krotko i konkretnie.',
     ].join(NL);
   }
   /** Zamienia JSON planera na czytelna liste krokow (z zaleznosciami). */
