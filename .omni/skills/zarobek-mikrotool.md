@@ -1,6 +1,6 @@
 ---
 id: zarobek-mikrotool
-name: Zarobek: fabryka mikrotooli
+name: "Zarobek: fabryka mikrotooli"
 description: "Procedura: zrob maly, sprzedawalny produkt (kod + README + licencja), przetestuj, przygotuj do wystawienia"
 tags:
   - zarobek

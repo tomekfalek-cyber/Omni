@@ -1,6 +1,6 @@
 ---
 id: zarobek-automatyzacje
-name: Zarobek: automatyzacje dla firm
+name: "Zarobek: automatyzacje dla firm"
 description: "Procedura: zbuduj mala automatyzacje procesu (faktury, raporty, scrap) i przygotuj oferte; sprzedaje wlasciciel"
 tags:
   - zarobek

@@ -1,6 +1,6 @@
 ---
 id: zarobek-bounty
-name: Zarobek: bounty OSS i bug bounty
+name: "Zarobek: bounty OSS i bug bounty"
 description: "Procedura: znajdz zlecenie (platformy z escrow), przygotuj (bounty_run), wykonaj (TDD), wypchnij PR (bounty_pr) - fakture wystawia wlasciciel"
 tags:
   - zarobek
