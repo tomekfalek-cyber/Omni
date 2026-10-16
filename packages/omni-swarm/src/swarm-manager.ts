@@ -1464,6 +1464,12 @@ export class SwarmManager {
   /** Deterministyczna lista plikow ("przygotuj liste plikow w <dir>") - zawsze uruchamia file_list. */
   private async tryDirectListFiles(prompt: string, cwd: string): Promise<string | null> {
     const low = this.foldPl(String(prompt || '').toLowerCase());
+    // NAPRAWA (2026-10-16): NIE przechwytuj zadan z czasownikiem DZIALANIA.
+    // Bez tego 'utworz plik ... funkcja srednia(lista)' bylo brane jako 'pokaz liste plikow',
+    // wypisywalo '(katalog pusty)' i zadanie NIE dochodzilo do modelu.
+    const actionVerb = /(utworz|stworz|napisz|zapisz|dodaj|zrob|zaimplementuj|przetestuj|uruchom|zbuduj|popraw|napraw|zmien|usun|skopiuj|przenies|wykonaj|zainstaluj|opracuj)/;
+    if (actionVerb.test(low)) { return null; }
+    if (String(prompt || '').trim().length > 140) { return null; }
     const wantList = (/lista|liste|wykaz|spis|zawartosc/.test(low) && /plik|katalog|folder|dir/.test(low))
       || /\bls\b/.test(low)
       || /co jest w (katalogu|folderze|katalog|folder)/.test(low);
