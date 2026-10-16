@@ -126,11 +126,23 @@ export class SwarmManager {
       const j: any = await r.json();
       const items = (j && j.items) || [];
       if (!items.length) { return 'Brak otwartych issues z label "bounty"' + (kw ? ' dla: ' + kw : '') + '.'; }
-      const out = ['ZLECENIA Z NAGRODA (GitHub, label bounty):'];
-      for (const it of items.slice(0, 10)) {
-        const repo = String(it.repository_url || '').replace('https://api.github.com/repos/', '');
-        out.push('- ' + String(it.title || '').slice(0, 100) + ' | ' + repo + ' | ' + String(it.html_url || ''));
+      const seen: any = {}; const names: string[] = [];
+      for (const it of items) { const rn = String(it.repository_url || '').replace('https://api.github.com/repos/', ''); if (rn && !seen[rn]) { seen[rn] = true; names.push(rn); } if (names.length >= 12) { break; } }
+      const meta: any = {};
+      for (const rn of names) {
+        try { const rr = await fetch('https://api.github.com/repos/' + rn, { headers: { 'User-Agent': 'omni-agent', 'Accept': 'application/vnd.github+json' } }); if (rr.ok) { const rj: any = await rr.json(); meta[rn] = { stars: Number(rj.stargazers_count || 0), age: Math.max(0, Math.round((Date.now() - Date.parse(rj.created_at || Date.now())) / 86400000)) }; } } catch (e) { }
       }
+      const scored = items.map((it: any) => { const rn = String(it.repository_url || '').replace('https://api.github.com/repos/', ''); const m = meta[rn] || { stars: 0, age: 0 }; return { it: it, rn: rn, stars: m.stars, age: m.age }; });
+      const isFarm = (rn: string) => { const nm = String(rn).split('/')[1] || ''; return /bounty|bounties|airdrop|task|quest/i.test(nm); };
+      const ok = (x: any) => x.stars >= 15 && x.age >= 30 && !isFarm(x.rn);
+      const good = scored.filter(ok).sort((a: any, b: any) => b.stars - a.stars);
+      const junk = scored.filter((x: any) => !ok(x));
+      const out = ['ZLECENIA Z NAGRODA (GitHub) - po wiarygodnosci (gwiazdki, wiek repo):'];
+      if (!good.length) { out.push('(brak wiarygodnych zlecen w tej probce - same farmy/spam)'); }
+      for (const x of good.slice(0, 8)) {
+        out.push('- [' + x.stars + ' gw. | ' + x.age + ' dni] ' + String(x.it.title || '').slice(0, 90) + ' | ' + x.rn + ' | ' + String(x.it.html_url || ''));
+      }
+      if (junk.length) { out.push('ODSiano jako farmy/spam: ' + junk.length + ' (0-2 gwiazdek lub repo mlodsze niz 14 dni).'); }
       return out.join(String.fromCharCode(10));
     } catch (e: any) { return 'Blad bounty_finder: ' + e.message; }
   }
