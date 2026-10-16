@@ -136,6 +136,18 @@ export class SwarmManager {
       return 'Ingest zapisany: ' + f + nl + 'Tematy: ' + topics.join(', ');
     } catch (e: any) { return 'Blad zapisu ingestu: ' + e.message; }
   }
+  /** Skrot dziennego przegladu okazji krypto (krypto-YYYY-MM-DD.md). */
+  private readKryptoNote(): string {
+    try {
+      const dir = path.join(os.homedir(), '.omni', 'memory');
+      const today = new Date().toISOString().slice(0, 10);
+      const f = path.join(dir, 'krypto-' + today + '.md');
+      if (fs.existsSync(f)) { return fs.readFileSync(f, 'utf8').slice(-1500); }
+      const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((x: string) => x.indexOf('krypto-') === 0 && x.slice(-3) === '.md').sort() : [];
+      if (!files.length) { return ''; }
+      return fs.readFileSync(path.join(dir, files[files.length - 1]), 'utf8').slice(-1200);
+    } catch (e) { return ''; }
+  }
   /** Skrot 'swiezej wiedzy' z dziennego ingestu (daily-YYYY-MM-DD.md). */
   private readDailyNote(): string {
     try {
@@ -1897,6 +1909,7 @@ export class SwarmManager {
       (this.readLessons() ? 'LEKCJE Z POPRZEDNICH ZADAN (stosuj, nie powtarzaj bledow):' + NL + this.readLessons() : ''),
       (this.readInvestorProfile() ? 'PROFIL INWESTORA (horyzont, ryzyko, waluta, zakazy - stosuj w KAZDEJ analizie finansowej):' + NL + this.readInvestorProfile() : ''),
       (this.readDailyNote() ? 'SWIEZA WIEDZA (ostatni ingest dzienny - korzystaj przy biezacych pytaniach, podawaj zrodlo):' + NL + this.readDailyNote() : ''),
+      (this.readKryptoNote() ? 'OKAZJE KRYPTO (dzienny przeglad - legalne, zweryfikowane; ostrzegaj o ryzyku):' + NL + this.readKryptoNote() : ''),
       'MASZ DOSTEP DO INTERNETU (web_search, web_fetch). Mozesz sprawdzac biezace informacje, wiadomosci i strony. NIE twierdz, ze nie wiesz co sie dzialo po 2024 roku - po prostu wyszukaj.',
       'MASZ PAMIEC TRWALA (memory_save, memory_search) - zapisuj wazne ustalenia i preferencje uzytkownika.',
       'MASZ ROZMOWE GLOSOWA: uzytkownik moze mowic zamiast pisac (przycisk z ikona mikrofonu w czacie).',
