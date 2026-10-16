@@ -115,6 +115,25 @@ export class SwarmManager {
       return 'PPTX: ' + String(r || '').slice(0, 300);
     } catch (e: any) { return 'Blad tworzenia pptx: ' + e.message; } finally { try { fs.unlinkSync(tmp); } catch (e) { } }
   }
+  /** Szuka otwartych zlecen z nagroda (bounty) na GitHubie. */
+  private async bountyFinder(args: any): Promise<string> {
+    const kw = String((args && args.keywords) || '').trim();
+    const q = 'is:issue is:open label:bounty' + (kw ? ' ' + kw : '');
+    const url = 'https://api.github.com/search/issues?per_page=10&sort=created&order=desc&q=' + encodeURIComponent(q);
+    try {
+      const r = await fetch(url, { headers: { 'User-Agent': 'omni-agent', 'Accept': 'application/vnd.github+json' } });
+      if (!r.ok) { return 'Blad GitHub API (HTTP ' + r.status + ').'; }
+      const j: any = await r.json();
+      const items = (j && j.items) || [];
+      if (!items.length) { return 'Brak otwartych issues z label "bounty"' + (kw ? ' dla: ' + kw : '') + '.'; }
+      const out = ['ZLECENIA Z NAGRODA (GitHub, label bounty):'];
+      for (const it of items.slice(0, 10)) {
+        const repo = String(it.repository_url || '').replace('https://api.github.com/repos/', '');
+        out.push('- ' + String(it.title || '').slice(0, 100) + ' | ' + repo + ' | ' + String(it.html_url || ''));
+      }
+      return out.join(String.fromCharCode(10));
+    } catch (e: any) { return 'Blad bounty_finder: ' + e.message; }
+  }
   /** Ingest wiedzy na zadanie: newsy dla tematow -> skrot do ~/.omni/memory/daily-YYYY-MM-DD.md. */
   private async runDailyIngest(topicsRaw?: string): Promise<string> {
     const nl = String.fromCharCode(10);
@@ -281,6 +300,7 @@ export class SwarmManager {
       '33. ZAKRES TESTOW: przed testami aktywnymi (skan, wstrzykniecia, brute force) USTAL i ZAPISZ zakres: cel (domena/IP/system), wlasciciel, zgoda. Brak potwierdzenia = tylko inwentarz pasywny. Nigdy nie testuj systemow spoza zakresu.',
       '34. OFENSYWA TYLKO NA POLECENIE WLASCICIELA: aktywne testy ofensywne (skan portow, proba wstrzykniec, brute force, exploit, sniffing) uruchamiam TYLKO gdy wlasciciel WYRAZNIE o to poprosi w zadaniu. Bez jawnego polecenia: wylacznie obrona i inwentarz pasywny. Przy kazdym tescie aktywnym zapisz cel, zakres i zgode.',
       '35. KRYPTO ZARABIANIE: pomagam ZNALESC i zrozumiec legalne okazje (airdrop, bug bounty, learn-to-earn, staking, freelance). NIE buduje automatow do masowego zakladania kont/farmienia (sybil - lamie ToS), NIE prosze o seed/klucz prywatny i ich nie przechowuje, NIE obiecuje zysku. Zawsze ostrzegaj o scamach i podatkach.',
+      '36. ZARABIANIE (legalne kanaly): bounty/OSS (bounty_finder), fabryka mikrotooli, automatyzacje dla firm. NIE lam ToS platform (bez scrapingu gdzie zakaz, bez falszywych kont, bez automatycznych ofert). Zawsze przygotuj DELIVERABLE/RAPORT do wyslania przez wlasciciela. NIE obiecuj zarobku - to praca, nie gwarancja.',
     ].join(nl);
   }
   /** Niezalezna weryfikacja (bez modelu): uruchamia wykryte testy projektu. */
@@ -470,6 +490,10 @@ export class SwarmManager {
     this.tools.register({
       definition: { name: 'make_pptx', description: 'Tworzy prezentacje PowerPoint (.pptx) i zapisuje pod sciezka. Parametry: path (np. /mnt/c/Users/Dell/Desktop/prez.pptx), title, subtitle, slides (JSON: [{"tytul":"...","punkty":["..."]}]).', parameters: { path: 'string', title: 'string', subtitle: 'string', slides: 'string' }, requiresApproval: false, timeoutMs: 40000, maxOutputBytes: 3000 },
       execute: async (args: any) => this.makePptx(args),
+    });
+    this.tools.register({
+      definition: { name: 'bounty_finder', description: 'Szuka otwartych zlecen z nagroda (bounty) na GitHubie (label bounty). Opcjonalnie keywords.', parameters: { keywords: 'string' }, requiresApproval: false, timeoutMs: 25000, maxOutputBytes: 4000 },
+      execute: async (args: any) => this.bountyFinder(args),
     });
     this.tools.register({
       definition: {
@@ -1611,7 +1635,7 @@ export class SwarmManager {
 
         messages.push({ role: 'assistant', content: response.content || null, tool_calls: toolCalls });
         // #4 PARALLEL TOOLS: read-only narzedzia ida rownolegle, zapisy po kolei (bezpiecznie).
-        const safeRead = new Set(['file_read', 'file_list', 'git_status', 'git_diff', 'web_search', 'web_fetch', 'crypto_price', 'news', 'stock_quote', 'code_map', 'proc_inspect', 'net_summary', 'log_tail', 'file_hash', 'memory_search', 'project_read', 'env_read', 'skill_list', 'skill_get', 'reminder_list', 'jira_search', 'jira_get_issue', 'jira_boards', 'jira_sprints', 'jira_report', 'github_api']);
+        const safeRead = new Set(['file_read', 'file_list', 'git_status', 'git_diff', 'web_search', 'web_fetch', 'crypto_price', 'news', 'stock_quote', 'bounty_finder', 'code_map', 'proc_inspect', 'net_summary', 'log_tail', 'file_hash', 'memory_search', 'project_read', 'env_read', 'skill_list', 'skill_get', 'reminder_list', 'jira_search', 'jira_get_issue', 'jira_boards', 'jira_sprints', 'jira_report', 'github_api']);
         const parsed = toolCalls.map((call: any) => {
           const name = call.function && call.function.name;
           let args: any = {};
