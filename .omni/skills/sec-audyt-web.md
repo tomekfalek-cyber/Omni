@@ -1,7 +1,7 @@
 ---
 id: sec-audyt-web
 name: Audyt bezpieczenstwa aplikacji web
-description: Testy bezpieczenstwa WLASNEJ aplikacji (OWASP: naglowki, wstrzykniecia, dostep)
+description: "Testy bezpieczenstwa WLASNEJ aplikacji (OWASP: naglowki, wstrzykniecia, dostep)"
 tags: [security, web, owasp, xss, sqli, naglowki, audyt, http]
 ---
 # Audyt bezpieczenstwa aplikacji web
