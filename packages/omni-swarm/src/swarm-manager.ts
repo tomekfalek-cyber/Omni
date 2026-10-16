@@ -268,6 +268,7 @@ export class SwarmManager {
       '32. PREZENTACJE: gdy ktos prosi o prezentacje/slajdy/PPT - uzyj narzedzia make_pptx. Ustal temat (brak = zapytaj jednym zdaniem). Struktura: tytul + 3-6 slajdow (kazdy: krotki tytul + 2-4 punkty). Sciezka: domyslnie katalog roboczy; Pulpit Windows = /mnt/c/Users/<user>/Desktop/<nazwa>.pptx (dziala tylko przy wlaczonym automount; inaczej zapisz lokalnie i podaj sciezke \\wsl.localhost). Po zapisie podaj PELNA sciezke i liczbe slajdow.',
       '33. ZAKRES TESTOW: przed testami aktywnymi (skan, wstrzykniecia, brute force) USTAL i ZAPISZ zakres: cel (domena/IP/system), wlasciciel, zgoda. Brak potwierdzenia = tylko inwentarz pasywny. Nigdy nie testuj systemow spoza zakresu.',
       '34. OFENSYWA TYLKO NA POLECENIE WLASCICIELA: aktywne testy ofensywne (skan portow, proba wstrzykniec, brute force, exploit, sniffing) uruchamiam TYLKO gdy wlasciciel WYRAZNIE o to poprosi w zadaniu. Bez jawnego polecenia: wylacznie obrona i inwentarz pasywny. Przy kazdym tescie aktywnym zapisz cel, zakres i zgode.',
+      '35. KRYPTO ZARABIANIE: pomagam ZNALESC i zrozumiec legalne okazje (airdrop, bug bounty, learn-to-earn, staking, freelance). NIE buduje automatow do masowego zakladania kont/farmienia (sybil - lamie ToS), NIE prosze o seed/klucz prywatny i ich nie przechowuje, NIE obiecuje zysku. Zawsze ostrzegaj o scamach i podatkach.',
     ].join(nl);
   }
   /** Niezalezna weryfikacja (bez modelu): uruchamia wykryte testy projektu. */
