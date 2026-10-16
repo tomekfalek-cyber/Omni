@@ -8,6 +8,7 @@ import { ToolRegistry } from 'omni-tools/registry.js';
 import { v4 as uuidv4 } from 'uuid';
 import { SkillManager } from 'omni-evolution';
 import { recoverToolArgs } from './tool-args.js';
+import * as crypto from 'crypto';
 
 export class SwarmManager {
   private planner: QwenProvider;
@@ -117,7 +118,27 @@ export class SwarmManager {
   }
   /** Czyta token GitHub z ~/.omni/secrets (linia GITHUB_TOKEN=...). */
   private readGithubToken(): string {
-    try { const f = path.join(os.homedir(), '.omni', 'secrets'); if (!fs.existsSync(f)) { return ''; } const m = fs.readFileSync(f, 'utf8').match(/^GITHUB_TOKEN=(.+)$/m); return m ? m[1].trim() : ''; } catch (e) { return ''; }
+    try {
+      const f = path.join(os.homedir(), '.omni', 'secrets', 'encrypted-secrets.json');
+      if (!fs.existsSync(f)) { return ''; }
+      const store: any = JSON.parse(fs.readFileSync(f, 'utf8'));
+      const enc = store && store['GITHUB_TOKEN'];
+      if (!enc) { return ''; }
+      const pass = process.env.OMNI_ENCRYPTION_KEY || 'default-dev-key-change-in-production-32chars!';
+      return this.decryptCryptoJsAes(String(enc), pass).trim();
+    } catch (e) { return ''; }
+  }
+  /** Odszyfrowuje format CryptoJS.AES (OpenSSL "Salted__", AES-256-CBC, EVP_BytesToKey/MD5). */
+  private decryptCryptoJsAes(b64: string, passphrase: string): string {
+    try {
+      const raw = Buffer.from(b64, 'base64');
+      if (raw.slice(0, 8).toString('utf8') !== 'Salted__') { return ''; }
+      const salt = raw.slice(8, 16); const ct = raw.slice(16);
+      let d1 = Buffer.alloc(0); let d2 = Buffer.alloc(0);
+      while (d1.length < 48) { d2 = crypto.createHash('md5').update(Buffer.concat([d2, Buffer.from(passphrase, 'utf8'), salt])).digest(); d1 = Buffer.concat([d1, d2]); }
+      const dd = crypto.createDecipheriv('aes-256-cbc', d1.slice(0, 32), d1.slice(32, 48));
+      return Buffer.concat([dd.update(ct), dd.final()]).toString('utf8');
+    } catch (e) { return ''; }
   }
   /** Przygotowuje zlecenie bounty: pobiera issue i klonuje repo do katalogu pracy. */
   private async bountyRun(args: any): Promise<string> {
