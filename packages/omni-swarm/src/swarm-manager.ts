@@ -115,6 +115,57 @@ export class SwarmManager {
       return 'PPTX: ' + String(r || '').slice(0, 300);
     } catch (e: any) { return 'Blad tworzenia pptx: ' + e.message; } finally { try { fs.unlinkSync(tmp); } catch (e) { } }
   }
+  /** Czyta token GitHub z ~/.omni/secrets (linia GITHUB_TOKEN=...). */
+  private readGithubToken(): string {
+    try { const f = path.join(os.homedir(), '.omni', 'secrets'); if (!fs.existsSync(f)) { return ''; } const m = fs.readFileSync(f, 'utf8').match(/^GITHUB_TOKEN=(.+)$/m); return m ? m[1].trim() : ''; } catch (e) { return ''; }
+  }
+  /** Przygotowuje zlecenie bounty: pobiera issue i klonuje repo do katalogu pracy. */
+  private async bountyRun(args: any): Promise<string> {
+    const nl = String.fromCharCode(10);
+    const url = String((args && args.url) || '').trim();
+    const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/issues\/([0-9]+)/i);
+    if (!m) { return 'Podaj link do issue: https://github.com/owner/repo/issues/N'; }
+    const owner = m[1], repo = m[2], num = m[3];
+    try {
+      const ir = await fetch('https://api.github.com/repos/' + owner + '/' + repo + '/issues/' + num, { headers: { 'User-Agent': 'omni-agent', 'Accept': 'application/vnd.github+json' } });
+      if (!ir.ok) { return 'Blad pobrania issue (HTTP ' + ir.status + ').'; }
+      const ij: any = await ir.json();
+      const dir = path.join(os.homedir(), '.omni', 'bounties', owner + '-' + repo + '-' + num);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'ISSUE.md'), '# ' + String(ij.title || '') + nl + nl + String(ij.body || '').slice(0, 8000) + nl + nl + 'URL: ' + url + nl, 'utf8');
+      let clone = '';
+      if (!fs.existsSync(path.join(dir, 'repo'))) { clone = String(await this.execToolResilient('shell_exec', { command: 'git clone --depth 1 https://github.com/' + owner + '/' + repo + '.git repo 2>&1 | tail -2' }, dir)); }
+      return 'BOUNTY: ' + String(ij.title || '').slice(0, 120) + nl + 'Katalog: ' + dir + nl + 'Issue: ' + url + nl + (clone ? 'Clone: ' + clone.slice(0, 200) : '(repo juz sklonowane)') + nl + 'Dalej: przeczytaj ISSUE.md, zaplanuj, zaimplementuj + testy (TDD), potem bounty_pr.';
+    } catch (e: any) { return 'Blad bounty_run: ' + e.message; }
+  }
+  /** Tworzy PR dla zlecenia (fork + branch + commit + push + PR). Wymaga GITHUB_TOKEN i zgody. */
+  private async bountyPr(args: any): Promise<string> {
+    const nl = String.fromCharCode(10);
+    const dir = String((args && args.dir) || '').trim();
+    const title = String((args && args.title) || '').trim() || 'Fix';
+    const body = String((args && args.body) || '').trim();
+    const repoDir = path.join(dir, 'repo');
+    if (!dir || !fs.existsSync(repoDir)) { return 'Brak katalogu repo - najpierw bounty_run.'; }
+    const tok = process.env.GITHUB_TOKEN || this.readGithubToken();
+    if (!tok) { return 'Brak GITHUB_TOKEN (dodaj w ~/.omni/secrets: GITHUB_TOKEN=...) - nie wypchne PR.'; }
+    const H: any = { 'User-Agent': 'omni-agent', 'Accept': 'application/vnd.github+json', 'Authorization': 'Bearer ***' };
+    try {
+      const ur = await fetch('https://api.github.com/user', { headers: H }); if (!ur.ok) { return 'Token GitHub odrzucony (HTTP ' + ur.status + ').'; }
+      const uj: any = await ur.json(); const me = String(uj.login || '');
+      const rurl = String(await this.execToolResilient('shell_exec', { command: 'git remote get-url origin' }, repoDir)).trim();
+      const mm = rurl.match(/github\.com[\/:]([^/]+)\/([^/.]+)/i); if (!mm) { return 'Nie odczytam repo z origin (' + rurl.slice(0, 80) + ').'; }
+      const owner = mm[1], repo = mm[2];
+      await this.execToolResilient('shell_exec', { command: 'git -c user.name=' + me + ' -c user.email=' + me + '@users.noreply.github.com checkout -b omni-fix-' + Date.now().toString(36) + ' 2>&1 | tail -1' }, repoDir);
+      const br = String(await this.execToolResilient('shell_exec', { command: 'git rev-parse --abbrev-ref HEAD' }, repoDir)).trim();
+      await this.execToolResilient('shell_exec', { command: 'git add -A && git -c user.name=' + me + ' -c user.email=' + me + '@users.noreply.github.com commit -q -m ' + JSON.stringify(title) + ' 2>&1 | tail -1' }, repoDir);
+      await fetch('https://api.github.com/repos/' + owner + '/' + repo + '/forks', { method: 'POST', headers: H });
+      const iu = 'https://x-access-token:' + tok + '@github.com/' + me + '/' + repo + '.git';
+      const push = String(await this.execToolResilient('shell_exec', { command: 'sleep 4; git push ' + JSON.stringify(iu) + ' HEAD:' + br + ' --force 2>&1 | tail -2' }, repoDir));
+      const pr = await fetch('https://api.github.com/repos/' + owner + '/' + repo + '/pulls', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, H), body: JSON.stringify({ title: title, head: me + ':' + br, base: 'main', body: body || 'Automated fix.' }) });
+      const pj: any = await pr.json();
+      return 'PR: ' + (pj && pj.html_url ? pj.html_url : ('HTTP ' + pr.status + ' ' + String(pj && pj.message || '').slice(0, 120))) + nl + 'Push: ' + push.slice(0, 150);
+    } catch (e: any) { return 'Blad bounty_pr: ' + e.message; }
+  }
   /** Szuka otwartych zlecen z nagroda (bounty) na GitHubie. */
   private async bountyFinder(args: any): Promise<string> {
     const kw = String((args && args.keywords) || '').trim();
@@ -506,6 +557,14 @@ export class SwarmManager {
     this.tools.register({
       definition: { name: 'bounty_finder', description: 'Szuka otwartych zlecen z nagroda (bounty) na GitHubie (label bounty). Opcjonalnie keywords.', parameters: { keywords: 'string' }, requiresApproval: false, timeoutMs: 25000, maxOutputBytes: 4000 },
       execute: async (args: any) => this.bountyFinder(args),
+    });
+    this.tools.register({
+      definition: { name: 'bounty_run', description: 'Przygotowuje zlecenie bounty: pobiera issue z GitHuba i klonuje repo do ~/.omni/bounties. Parametr: url (link do issue).', parameters: { url: 'string' }, requiresApproval: false, timeoutMs: 120000, maxOutputBytes: 3000 },
+      execute: async (args: any) => this.bountyRun(args),
+    });
+    this.tools.register({
+      definition: { name: 'bounty_pr', description: 'Wypycha PR dla zlecenia (fork + branch + commit + push + PR). WYMAGA zgody i GITHUB_TOKEN. Parametry: dir, title, body.', parameters: { dir: 'string', title: 'string', body: 'string' }, requiresApproval: true, timeoutMs: 120000, maxOutputBytes: 2000 },
+      execute: async (args: any) => this.bountyPr(args),
     });
     this.tools.register({
       definition: {
