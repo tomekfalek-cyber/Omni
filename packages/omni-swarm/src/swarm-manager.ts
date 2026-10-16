@@ -215,6 +215,11 @@ export class SwarmManager {
         out.push('- [' + x.stars + ' gw. | ' + x.age + ' dni] ' + String(x.it.title || '').slice(0, 90) + ' | ' + x.rn + ' | ' + String(x.it.html_url || ''));
       }
       if (junk.length) { out.push('ODSiano jako farmy/spam: ' + junk.length + ' (0-2 gwiazdek lub repo mlodsze niz 14 dni).'); }
+      out.push('');
+      out.push('PLATFORMY Z ESCROW (prawdziwe zlecenia, wyplata zablokowana z gory - najbezpieczniejsze):');
+      out.push('- Algora: https://algora.io/explore');
+      out.push('- IssueHunt: https://issuehunt.io/projects');
+      out.push('- Gitcoin: https://gitcoin.co/explorer');
       return out.join(String.fromCharCode(10));
     } catch (e: any) { return 'Blad bounty_finder: ' + e.message; }
   }
