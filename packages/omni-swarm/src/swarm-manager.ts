@@ -707,13 +707,18 @@ export class SwarmManager {
   private async executorTurn(messages: any[], tools: any[], toolChoice?: string): Promise<{ content: string, toolCalls: any[] }> {
     (this as any).modelCalls = ((this as any).modelCalls || 0) + 1;
     let choice = toolChoice;
-    if (choice === 'required' && /thinking|reason|deepseek-v4-pro|deepseek-reasoner/i.test(String(process.env.OMNI_LLM_MODEL || ''))) { choice = 'auto'; }
+    // NAPRAWA (2026-10-16): wykrywaj model REALNIE uzywany (strong/coder), nie tylko env. DeepSeek w trybie myslenia
+    // odrzuca tool_choice='required' (HTTP 400), co zawieszalo zadania (petla 'narzedzia=brak').
+    const modelNow = String(((this as any).modelMap && ((this as any).modelMap.strong || (this as any).modelMap.coder)) || process.env.OMNI_LLM_MODEL_CODER || process.env.OMNI_LLM_MODEL || '');
+    const cantForce = !!(this as any).noForcedTools || /thinking|reason|deepseek/i.test(modelNow);
+    if (choice === 'required' && cantForce) { choice = 'auto'; messages = messages.concat([{ role: 'user', content: 'WYWOŁAJ TERAZ NARZĘDZIE (function calling) i podaj jego wynik. Nie opisuj planu.' }]); }
     const provider: any = this.pickProvider();
     if (typeof provider.getCompletionWithTools === 'function') {
       try {
         return await provider.getCompletionWithTools(messages, tools, choice);
       } catch (error: any) {
         console.log('[Swarm] Proba z tool_choice=' + String(toolChoice) + ' nieudana (' + error.message + ')');
+        if (/tool_choice|thinking mode/i.test(String(error.message || ''))) { (this as any).noForcedTools = true; }
         if (this.onEngineFailure && /429|rate limit|quota|limit token|tokenow|resource_exhausted|exhausted|overload|unavailable|503|401|invalid|authentication|unauthorized/i.test(String(error.message || ''))) { this.logEngine({ event: 'fallback', reason: String(error.message || '').slice(0, 160), engine: (this as any).engineUsed || null }); try { this.onEngineFailure(); } catch (e) { } }
         try {
           if (choice && choice !== 'auto') {
