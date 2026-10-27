@@ -677,7 +677,9 @@ export class SwarmManager {
   }
 
   private toolSchemas(): any[] {
-    return this.tools.getAllDefinitions().map((t: any) => ({
+    // NAPRAWA: web_search w tym srodowisku nie ma providera i blokuje zadania - nie wystawiaj go modelowi.
+    const disabled = new Set(['web_search']);
+    return this.tools.getAllDefinitions().filter((t: any) => !disabled.has(String(t && t.name))).map((t: any) => ({
       type: 'function',
       function: {
         name: t.name,
@@ -1258,7 +1260,14 @@ export class SwarmManager {
     let a: any = args;
     for (let attempt = 0; attempt < attempts; attempt++) {
       try {
-        const output = await this.tools.executeTool(name, a, cwd);
+        // NAPRAWA (2026-10-27): twardy timeout wykonania narzedzia - wiszace narzedzie (np. web_search bez providera)
+        // blokowalo cale zadanie w nieskonczonosc.
+        const timeoutMs = Math.max(5000, Number(process.env.OMNI_TOOL_TIMEOUT_MS || 45000));
+        const output = await new Promise<any>((resolve, reject) => {
+          const t: any = setTimeout(() => reject(new Error('Timeout narzedzia ' + name + ' (' + timeoutMs + ' ms)')), timeoutMs);
+          if (t && typeof t.unref === 'function') { t.unref(); }
+          this.tools.executeTool(name, a, cwd).then((v: any) => { clearTimeout(t); resolve(v); }, (e: any) => { clearTimeout(t); reject(e); });
+        });
         if (attempt > 0) { console.log('[Swarm] Narzedzie ' + name + ' ok po probie ' + (attempt + 1)); }
         const resultText = typeof output === 'string' ? output : JSON.stringify(output);
         if (/(Ran [0-9]+ tests)|pytest|unittest|FAILED|passed/i.test(resultText)) { (this as any).testEvidence = true; }
@@ -2041,7 +2050,7 @@ export class SwarmManager {
   /** Realne mozliwosci bota - wstrzykiwane do promptow, zeby nie zmyslal ograniczen. */
   private capabilities(cwd: string): string {
     const NL = String.fromCharCode(10);
-    const tools = this.tools.getAllDefinitions().map((t: any) => '- ' + t.name + ': ' + t.description).join(NL);
+    const tools = this.tools.getAllDefinitions().filter((t: any) => String(t && t.name) !== 'web_search').map((t: any) => '- ' + t.name + ': ' + t.description).join(NL);
     const now = new Date().toISOString().slice(0, 10);
     return [
       'Jestes Omni - osobisty asystent AI dzialajacy na komputerze uzytkownika. Dzisiejsza data: ' + now + '.',
