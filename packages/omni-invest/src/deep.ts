@@ -303,9 +303,21 @@ export async function runDeep(service: InvestService, edgar?: EdgarProvider, lim
   const picks = rows.filter((r) => r.tier === 'Kupuj' || r.tier === 'Akumuluj');
   const rawW = picks.map((r) => Math.max(0.05, r.score));
   const sumRaw = rawW.reduce((s, x) => s + x, 0) || 1;
-  picks.forEach((r, i) => { r.weight = Math.min(0.08, Math.max(0.02, rawW[i] / sumRaw)); });
+  // Wagi w CZESCI AKCYJNEJ: proporcjonalne do wyniku, max 30% na spolke.
+  // (Poprzedni limit 8% + normalizacja splaszczal wszystkie wagi do 20%.)
+  picks.forEach((r, i) => { r.weight = Math.min(0.30, Math.max(0.02, rawW[i] / sumRaw)); });
   const sumW = picks.reduce((s, r) => s + (r.weight || 0), 0) || 1;
   picks.forEach((r) => { r.weight = (r.weight as number) / sumW; });
+  // Twardy limit 30% rowniez PO normalizacji (nadwyzka wedruje do pozostalych).
+  for (let iter = 0; iter < 5; iter++) {
+    const over = picks.filter((r) => (r.weight as number) > 0.30);
+    if (!over.length) { break; }
+    const excess = over.reduce((s, r) => s + ((r.weight as number) - 0.30), 0);
+    for (const r of over) { r.weight = 0.30; }
+    const rest = picks.filter((r) => (r.weight as number) < 0.30);
+    const restSum = rest.reduce((s, r) => s + (r.weight as number), 0) || 1;
+    for (const r of rest) { r.weight = (r.weight as number) + excess * ((r.weight as number) / restSum); }
+  }
 
   const wavg = (get: (r: DeepRow) => number | null): number | null => {
     let s = 0, w = 0;
@@ -332,7 +344,7 @@ export async function runDeep(service: InvestService, edgar?: EdgarProvider, lim
 
   const assumptions: string[] = [
     'Horyzont: 3-5 lat. Portfel akcyjny; gotówka/obligacje dobierane do tolerancji ryzyka (poza modelem).',
-    'Wagi: proporcjonalne do wyniku, max 8% na spółkę; suma wag pozycji = 100% części akcyjnej.',
+    'Wagi: proporcjonalne do wyniku w części akcyjnej, max 30% na spółkę; suma wag = 100% części akcyjnej (zwykle 60-80% całego portfela; reszta to obligacje i gotówka).',
     'Beta liczona względem S&P 500 (SPY) z 5 lat; Sharpe/Sortino przy stopie wolnej od ryzyka 0%.',
     'Percentyl P/E: gdzie obecna wycena wypada na tle historycznych wycen tej samej spółki (0% = najtaniej kiedykolwiek, 100% = najdrożej).',
     'Scenariusze i oczekiwany zwrot to matematyka na założeniach (EPS × mnożnik), nie prognoza.',
