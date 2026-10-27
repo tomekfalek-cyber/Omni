@@ -1658,6 +1658,10 @@ export class SwarmManager {
       const folded = this.foldPl(lowerPrompt);
       const needToolStems = ['utworz', 'napisz', 'skrypt', 'kod', 'program', 'uruchom', 'commit', 'zainstaluj', 'ile plik', 'plik', 'folder', 'katalog', 'policz', 'sprawdz', 'wypisz', 'pokaz', 'lista', 'znajdz', 'cena', 'kurs', 'walut', 'pogod', 'aktualn', 'pobierz', 'przeczytaj', 'otworz', 'rozmiar', 'dysk', 'wersj', 'stan ', 'zawartosc'];
       for (const st of needToolStems) { if (folded.indexOf(st) !== -1) { isAction = true; break; } }
+      // NAPRAWA (2026-10-27): pytania inwestycyjne NIE moga isc sciezka 'szybkiej odpowiedzi' bez narzedzi.
+      // Bez tego Omni odpowiadal z pamieci ('nie mam dostepu do notowan') zamiast uzyc invest_compare.
+      const investKeys = ['inwest', 'akcj', 'etf', 'indeks', 'nasdaq', 'sp500', 'msci', 'nvidia', 'portfel', 'zlot', 'srebr', 'krypto', 'bitcoin', 'walor', 'wycen', 'dywidend', 'obligacj', 'ishares', 'porownaj', 'spolka', 'spolk', 'gield', 'procent'];
+      for (const ik of investKeys) { if (folded.indexOf(ik) !== -1) { isAction = true; needsSearch = true; break; } }
       const messages: any[] = [
         { role: 'system', content: (this.behaviorRules() + String.fromCharCode(10) + this.capabilities(cwd) + String.fromCharCode(10) + this.readKnowledge()) + String.fromCharCode(10) + 'WAZNE: gdy pytanie dotyczy faktow, kursow, wiadomosci, pogody, przepisow lub czegokolwiek z internetu - NAJPIERW wywolaj odpowiednie narzedzie. Nie odpowiadaj na takie pytania z pamieci.' },
         { role: 'user', content: 'Zadanie: ' + prompt + (rel ? '\n\nTRAFNA WIEDZA Z PAMIECI:\n' + rel : '') + (hist ? '\n\nPOPRZEDNIE WYMIANY (kontekst rozmowy):\n' + hist : '') + (exact ? '\n\nTRYB DOKLADNIE: sprawdzaj kazde twierdzenie narzedziem, nie zgaduj, podaj zrodlo.' : '') + '\nPlan:\n' + plan },
