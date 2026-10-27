@@ -2,6 +2,7 @@ import { InvestService } from './service.js';
 import { STRATEGIES } from './strategies.js';
 import { UNIVERSES } from './universe.js';
 import { runMonthly } from './monthly.js';
+import { pct } from './util.js';
 
 export interface OmniToolDefinition {
   name: string;
@@ -37,6 +38,22 @@ export function buildInvestTools(service: InvestService): OmniTool[] {
       execute: async (args: any) => {
         const { text } = await service.backtest(String(args && args.strategy || 'momentum'), String(args && args.universe || 'us-mega'), Number(args && args.months) || undefined);
         return text;
+      },
+    },
+    {
+      definition: { name: 'invest_compare', description: 'Porownuje 2-8 instrumentow na tym samym okresie: zwrot, zmiennosc, max obsuniecie, Sharpe, beta i korelacja do S&P 500. Parametry: tickers (np. "NVDA,^NDX,GLD"), days (domyslnie 400).', parameters: { tickers: 'string', days: 'number' }, requiresApproval: false, timeoutMs: 120000, maxOutputBytes: 4000 },
+      execute: async (args: any) => {
+        const { runCompare } = await import('./compare.js');
+        const list = String((args && args.tickers) || '').split(',').map((x) => x.trim()).filter(Boolean);
+        const res = await runCompare(service, list, Number(args && args.days) || undefined);
+        const nl = String.fromCharCode(10);
+        const out = ['POROWNANIE (' + res.from + ' - ' + res.asOf + ', ' + res.days + ' dni):'];
+        for (const r of res.rows) {
+          out.push('- ' + r.ticker + ': zwrot ' + (r.ret === null ? '-' : pct(r.ret)) + ' | zmiennosc ' + (r.vol === null ? '-' : pct(r.vol)) + ' | maxDD ' + (r.maxDD === null ? '-' : pct(r.maxDD)) + ' | Sharpe ' + (r.sharpe === null ? '-' : r.sharpe) + ' | beta ' + (r.beta === null ? '-' : r.beta) + ' | korelacja ' + (r.corr === null ? '-' : r.corr));
+        }
+        if (res.notes.length) { out.push(''); for (const n of res.notes) { out.push('UWAGA: ' + n); } }
+        out.push(''); out.push(res.disclaimer);
+        return out.join(nl);
       },
     },
     {

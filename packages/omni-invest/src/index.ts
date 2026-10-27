@@ -13,6 +13,7 @@ export * from './monthly.js';
 export * from './overview.js';
 export * from './deep.js';
 export * from './etfs.js';
+export * from './compare.js';
 export * from './fundamentals.js';
 export * from './providers/yahoo.js';
 export * from './providers/stooq.js';
