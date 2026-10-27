@@ -48,6 +48,8 @@ export interface DeepRow {
   score: number; rank: number;
   undervalued: boolean;
   quality: number | null; growth: number | null; value: number | null;
+  beta: number | null; maxDD: number | null; sharpe: number | null; sortino: number | null;
+  pePercentile: number | null; tier: string; weight: number | null;
   scenarios: Scenario;
   thesis: string[];
   risks: string[];
@@ -56,6 +58,8 @@ export interface DeepRow {
 export interface DeepResult {
   asOf: string;
   glossary: Array<{ term: string; desc: string }>;
+  portfolio: any;
+  assumptions: string[];
   rows: DeepRow[];
   buy: string[];
   undervalued: string[];
@@ -84,11 +88,14 @@ function numS(x: number | null, d = 1): string { return x === null ? 'brak danyc
 
 export async function runDeep(service: InvestService, edgar?: EdgarProvider, limit = 20): Promise<DeepResult> {
   const ed = edgar || new EdgarProvider();
-  const from = daysAgo(420);
+  const from = daysAgo(1900);
   const to = todayIso();
   const list = COMPANIES.slice(0, limit);
   const notes: string[] = [];
 
+  const spyBars = await service.price.getDailyBars('SPY', from, to).catch(() => [] as Bar[]);
+  const spyRet = new Map<string, number>();
+  for (let i = 1; i < spyBars.length; i++) { const a = spyBars[i - 1].close, b = spyBars[i].close; if (a > 0) { spyRet.set(spyBars[i].date, b / a - 1); } }
   const raw = await mapLimit(list, 3, async (c) => {
     let bars: Bar[] = [];
     try { bars = await service.price.getDailyBars(c.ticker, from, to); } catch (e) { bars = []; }
@@ -163,6 +170,20 @@ export async function runDeep(service: InvestService, edgar?: EdgarProvider, lim
     let rev = f.revenue;
     if (!rev.length) { try { const con = await ed.concept(c.ticker, 'RevenueFromContractWithCustomerExcludingAssessedTax'); if (con) { rev = annualSeries(con); f.revenue = rev; } } catch (e) { } }
     const metrics = computeValuation(price, f);
+    // --- metryki profesjonalne ---
+    const closAll = bars.map((b) => b.close);
+    const l3 = closAll.slice(-756);
+    let pk = l3.length ? l3[0] : 0, mdd = 0;
+    for (const cc of l3) { if (cc > pk) { pk = cc; } const dd = pk > 0 ? cc / pk - 1 : 0; if (dd < mdd) { mdd = dd; } }
+    const rs: number[] = []; const bs: number[] = [];
+    for (let i = 1; i < bars.length; i++) { const a = bars[i - 1].close, b2 = bars[i].close; if (!(a > 0)) { continue; } const rr = b2 / a - 1; const mm = spyRet.get(bars[i].date); if (mm === undefined) { continue; } rs.push(rr); bs.push(mm); }
+    let beta: number | null = null;
+    if (rs.length > 60) { const mr = rs.reduce((s, x) => s + x, 0) / rs.length; const mb = bs.reduce((s, x) => s + x, 0) / bs.length; let cov = 0, varb = 0; for (let i = 0; i < rs.length; i++) { cov += (rs[i] - mr) * (bs[i] - mb); varb += (bs[i] - mb) * (bs[i] - mb); } if (varb > 0) { beta = cov / varb; } }
+    let sharpe: number | null = null, sortino: number | null = null;
+    if (rs.length > 60) { const mu = rs.reduce((s, x) => s + x, 0) / rs.length; const sd = stdev(rs); const dn = rs.filter((x) => x < 0).map((x) => x * x); const dsd = Math.sqrt(dn.reduce((s, x) => s + x, 0) / Math.max(1, dn.length)); sharpe = sd > 0 ? (mu * 252) / (sd * Math.sqrt(252)) : null; sortino = dsd > 0 ? (mu * 252) / (dsd * Math.sqrt(252)) : null; }
+    const peHist: number[] = [];
+    for (const p of f.eps) { const idx = bars.findIndex((b3) => b3.date >= p.end); if (idx >= 0 && p.value > 0) { const peH = bars[idx].close / p.value; if (peH > 0 && peH < 200) { peHist.push(peH); } } }
+    const pePercentile = (peHist.length >= 3 && metrics.pe !== null) ? peHist.filter((x) => x < (metrics.pe as number)).length / peHist.length : null;
     // NAPRAWA jakosci: brak EPS -> policz z zysku netto / liczby akcji.
     if ((metrics.pe === null || (metrics.pe as number) > 150) && metrics.netIncome !== null && metrics.netIncome > 0 && metrics.shares !== null && metrics.shares > 0 && price !== null) {
       const epsImplied = metrics.netIncome / metrics.shares;
@@ -176,7 +197,7 @@ export async function runDeep(service: InvestService, edgar?: EdgarProvider, lim
     if (metrics.netMargin !== null && ((metrics.netMargin as number) > 1 || (metrics.netMargin as number) < -1)) { metrics.netMargin = null; }
     // Banki: D/E i FCF nie maja sensu (zobowiazania = depozyty).
     if (c.sector === 'Finanse') { metrics.debtToEquity = null; metrics.fcf = null; metrics.fcfYield = null; }
-    return { def: c, bars, price, vol, trend, metrics };
+    return { def: c, bars, price, vol, trend, metrics, beta, mdd, sharpe, sortino, pePercentile };
   });
 
   const peMed = median(raw.map((r) => r.metrics.pe).filter((x): x is number => x !== null && x > 0));
@@ -260,12 +281,62 @@ export async function runDeep(service: InvestService, edgar?: EdgarProvider, lim
       price: r.price === null ? null : round(r.price, 2), vol: r.vol === null ? null : round(r.vol, 4), trend: r.trend,
       metrics: m, score: round(score, 3), rank: 0, undervalued,
       quality: qz[i] === null ? null : round(qz[i] as number, 2), growth: gz[i] === null ? null : round(gz[i] as number, 2), value: vz[i] === null ? null : round(vz[i] as number, 2),
+      beta: r.beta === null ? null : round(r.beta, 2),
+      maxDD: r.mdd === null ? null : round(r.mdd, 4),
+      sharpe: r.sharpe === null ? null : round(r.sharpe, 2),
+      sortino: r.sortino === null ? null : round(r.sortino, 2),
+      pePercentile: r.pePercentile === null ? null : round(r.pePercentile, 2),
+      tier: '', weight: null,
       scenarios, thesis, risks,
     };
   });
 
   rows.sort((a, b) => b.score - a.score);
   rows.forEach((r, i) => { r.rank = i + 1; });
+
+  // --- Rekomendacje i wagi portfela ---
+  for (const r of rows) {
+    const roe = r.metrics.roe === null ? 0 : (r.metrics.roe as number);
+    const tanio = r.pePercentile === null ? true : (r.pePercentile as number) < 0.85;
+    r.tier = (r.score >= 1.0 && roe > 0.15 && tanio) ? 'Kupuj' : (r.score >= 0.3 ? 'Akumuluj' : (r.score >= -0.4 ? 'Obserwuj' : 'Unikaj'));
+  }
+  const picks = rows.filter((r) => r.tier === 'Kupuj' || r.tier === 'Akumuluj');
+  const rawW = picks.map((r) => Math.max(0.05, r.score));
+  const sumRaw = rawW.reduce((s, x) => s + x, 0) || 1;
+  picks.forEach((r, i) => { r.weight = Math.min(0.08, Math.max(0.02, rawW[i] / sumRaw)); });
+  const sumW = picks.reduce((s, r) => s + (r.weight || 0), 0) || 1;
+  picks.forEach((r) => { r.weight = (r.weight as number) / sumW; });
+
+  const wavg = (get: (r: DeepRow) => number | null): number | null => {
+    let s = 0, w = 0;
+    for (const r of picks) { const v = get(r); if (v !== null && Number.isFinite(v)) { s += v * (r.weight || 0); w += (r.weight || 0); } }
+    return w > 0 ? s / w : null;
+  };
+  const portfolio = {
+    holdings: picks.length,
+    tickers: picks.map((r) => r.ticker),
+    weightedPE: wavg((r) => r.metrics.pe),
+    weightedROE: wavg((r) => r.metrics.roe),
+    weightedBeta: wavg((r) => r.beta),
+    weightedSharpe: wavg((r) => r.sharpe),
+    expected3y: wavg((r) => (r.price && r.scenarios.base ? r.scenarios.base / r.price - 1 : null)),
+    top3Weight: picks.slice(0, 3).reduce((s, r) => s + (r.weight || 0), 0),
+    sectors: Array.from(new Set(picks.map((r) => r.sector))).length,
+  };
+  if (portfolio.weightedPE !== null) { portfolio.weightedPE = round(portfolio.weightedPE, 1); }
+  if (portfolio.weightedROE !== null) { portfolio.weightedROE = round(portfolio.weightedROE, 4); }
+  if (portfolio.weightedBeta !== null) { portfolio.weightedBeta = round(portfolio.weightedBeta, 2); }
+  if (portfolio.weightedSharpe !== null) { portfolio.weightedSharpe = round(portfolio.weightedSharpe, 2); }
+  if (portfolio.expected3y !== null) { portfolio.expected3y = round(portfolio.expected3y, 4); }
+  portfolio.top3Weight = round(portfolio.top3Weight, 4);
+
+  const assumptions: string[] = [
+    'Horyzont: 3-5 lat. Portfel akcyjny; gotówka/obligacje dobierane do tolerancji ryzyka (poza modelem).',
+    'Wagi: proporcjonalne do wyniku, max 8% na spółkę; suma wag pozycji = 100% części akcyjnej.',
+    'Beta liczona względem S&P 500 (SPY) z 5 lat; Sharpe/Sortino przy stopie wolnej od ryzyka 0%.',
+    'Percentyl P/E: gdzie obecna wycena wypada na tle historycznych wycen tej samej spółki (0% = najtaniej kiedykolwiek, 100% = najdrożej).',
+    'Scenariusze i oczekiwany zwrot to matematyka na założeniach (EPS × mnożnik), nie prognoza.',
+  ];
   const buy = rows.slice(0, 5).map((r) => r.ticker);
   const undervalued = rows.filter((r) => r.undervalued).map((r) => r.ticker);
   if (!peMed) { notes.push('Za malo danych o wycenie, by policzyc mediane grupy.'); }
@@ -274,5 +345,5 @@ export async function runDeep(service: InvestService, edgar?: EdgarProvider, lim
   notes.push('Dane fundamentalne: SEC EDGAR (raporty 10-K), ceny: Yahoo/Stooq. Fundamenty odswiezane co 7 dni, ceny co ~10 min.');
   notes.push('Scenariusze to prosta matematyka (EPS x mnoznik), nie prognoza ceny ani obietnica zysku.');
 
-  return { asOf: to, glossary: GLOSSARY, rows, buy, undervalued, notes, disclaimer: 'To analiza edukacyjna, nie personalna rekomendacja inwestycyjna. Nie jestem licencjonowanym doradca.' };
+  return { asOf: to, glossary: GLOSSARY, portfolio, assumptions, rows, buy, undervalued, notes, disclaimer: 'To analiza edukacyjna, nie personalna rekomendacja inwestycyjna. Nie jestem licencjonowanym doradca.' };
 }
