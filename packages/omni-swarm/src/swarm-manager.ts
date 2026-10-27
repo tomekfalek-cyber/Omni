@@ -9,6 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { SkillManager } from 'omni-evolution';
 import { recoverToolArgs } from './tool-args.js';
 import * as crypto from 'crypto';
+import { InvestService } from 'omni-invest/service.js';
+import { registerInvestTools } from 'omni-invest/omni-tools.js';
 
 export class SwarmManager {
   private planner: QwenProvider;
@@ -592,6 +594,11 @@ export class SwarmManager {
       definition: { name: 'bounty_pr', description: 'Wypycha PR dla zlecenia (fork + branch + commit + push + PR). WYMAGA zgody i GITHUB_TOKEN. Parametry: dir, title, body.', parameters: { dir: 'string', title: 'string', body: 'string' }, requiresApproval: true, timeoutMs: 120000, maxOutputBytes: 2000 },
       execute: async (args: any) => this.bountyPr(args),
     });
+    try {
+      const invest = new InvestService();
+      registerInvestTools((t: any) => this.tools.register(t), invest);
+      console.log('[Swarm] Narzedzia inwestycyjne (omni-invest) zarejestrowane.');
+    } catch (e: any) { console.log('[Swarm] omni-invest niedostepny: ' + String(e && e.message)); }
     this.tools.register({
       definition: {
         name: 'project_remember',

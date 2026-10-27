@@ -33,6 +33,9 @@
     },
     {
       "path": "packages/omni-gateway"
+    },
+    {
+      "path": "packages/omni-invest"
     }
   ],
   "exclude": [
