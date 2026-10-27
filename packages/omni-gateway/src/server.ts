@@ -638,6 +638,19 @@ export class OmniGateway {
       } catch (e) { }
       res.json({ entries: lines.reverse() });
     });
+    // Moj portfel - deterministyczna analiza (bez modelu).
+    this.app.post('/api/invest/portfolio', async (req, res) => {
+      try {
+        const mod = await import('omni-invest/portfolio.js');
+        const body: any = req.body || {};
+        const holdings = mod.parseHoldings(String(body.holdings || ''));
+        const monthly = Number(body.monthly) || 0;
+        const data = mod.runPortfolio(holdings, monthly);
+        res.json({ ok: true, ...data });
+      } catch (e: any) {
+        res.status(500).json({ ok: false, error: String(e && e.message || e) });
+      }
+    });
     // Indeksy i ETF iShares (właściciel inwestuje przez iShares).
     this.app.get('/api/invest/etfs', async (_req, res) => {
       try {

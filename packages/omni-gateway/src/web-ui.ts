@@ -446,6 +446,17 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
       </div>
       <div class="row"><button class="btn" onclick="loadInvest(true)">Odśwież dane</button></div>
       <div class="card" style="margin-top:14px">
+        <h2>Mój portfel (analiza bez modelu)</h2>
+        <div class="mut">Wpisz instrumenty w formacie Nazwa=wartość, oddzielone średnikiem.</div>
+        <textarea id="pfHoldings" rows="3" style="width:100%;margin-top:8px;background:#0d1520;color:#cfe0f5;border:1px solid #24334a;border-radius:8px;padding:8px;font-size:12.5px">S&P 500=4917.37; MSCI World=3643.34; NASDAQ 100=1400.90; Złoto=1672.43; BTC=943.80; SOL=752.69; obligacje=2496.02</textarea>
+        <div class="row" style="margin-top:8px;align-items:center;gap:10px">
+          <span class="mut">Wpłata miesięczna:</span>
+          <input id="pfMonthly" type="number" value="600" style="width:110px;background:#0d1520;color:#cfe0f5;border:1px solid #24334a;border-radius:8px;padding:6px" />
+          <button class="btn" onclick="loadPortfolio()">Przeanalizuj portfel</button>
+        </div>
+        <div id="pfBody" style="margin-top:12px"></div>
+      </div>
+      <div class="card" style="margin-top:14px">
         <h2>Indeksy i ETF iShares</h2>
         <div class="mut" id="etfAsOf">Ładowanie...</div>
         <div id="etfBody" style="margin-top:12px"></div>
@@ -597,6 +608,30 @@ function loadInvest(force){
     h += '<div style="margin-top:12px;color:#f0b35b;font-size:12px">' + esc(d.disclaimer || '') + '</div>';
     box.innerHTML = h;
   }).catch(function(e){ box.innerHTML = '<div class="mut">Błąd połączenia: ' + esc(String(e && e.message || e)) + '</div>'; });
+}
+function loadPortfolio(){
+  var box = el('pfBody'); if(!box){ return; }
+  var hEl = el('pfHoldings'), mEl = el('pfMonthly');
+  var payload = { holdings: hEl ? hEl.value : '', monthly: mEl ? Number(mEl.value)||0 : 0 };
+  box.innerHTML = '<div class="mut">Licze...</div>';
+  api('/api/invest/portfolio', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(function(d){
+    if(!d || d.ok === false){ box.innerHTML = '<div class="mut">Blad: ' + esc((d && d.error) || 'brak danych') + '</div>'; return; }
+    var pct = function(x){ return (x*100).toFixed(1) + '%'; };
+    var h = '<div style="font-size:13px"><b>Suma: ' + d.total.toFixed(2) + ' PLN</b></div>';
+    h += '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px">';
+    h += '<tr style="text-align:left;color:#8aa0bb"><th>Instrument</th><th>Wartosc</th><th>Udzial</th><th>Cel</th><th>Roznica</th><th>Z wplaty</th></tr>';
+    for(var i=0;i<d.rows.length;i++){ var r=d.rows[i];
+      h += '<tr><td>' + esc(r.label) + '</td><td>' + r.value.toFixed(2) + '</td><td>' + pct(r.weight) + '</td><td>' + pct(r.target) + '</td>';
+      h += '<td style="color:' + (r.delta>=0?'#7fdba0':'#f08a8a') + '">' + ((r.delta*100)>=0?'+':'') + (r.delta*100).toFixed(1) + ' pp</td>';
+      h += '<td>' + (r.monthly>0 ? r.monthly.toFixed(0) + ' zl' : '—') + '</td></tr>';
+    }
+    h += '</table>';
+    h += '<div style="margin-top:10px;font-size:13px">Akcje ' + pct(d.buckets.equity) + ' · zloto ' + pct(d.buckets.gold) + ' · krypto ' + pct(d.buckets.crypto) + ' · obligacje ' + pct(d.buckets.bonds) + '</div>';
+    h += '<div style="margin-top:4px;font-size:13px">Koncentracja: USA ' + pct(d.usShare) + ' · tech ' + pct(d.techShare) + ' · USD ' + pct(d.usdShare) + '</div>';
+    if((d.notes||[]).length){ h += '<ul style="margin:8px 0 0 16px;color:#8aa0bb;font-size:12px">'; for(var n=0;n<d.notes.length;n++){ h += '<li>' + esc(d.notes[n]) + '</li>'; } h += '</ul>'; }
+    h += '<div style="margin-top:10px;color:#f0b35b;font-size:12px">' + esc(d.disclaimer || '') + '</div>';
+    box.innerHTML = h;
+  }).catch(function(e){ box.innerHTML = '<div class="mut">Blad polaczenia: ' + esc(String(e && e.message || e)) + '</div>'; });
 }
 function loadEtfs(force){
   var box = el("etfBody"); if(!box){ return; }
