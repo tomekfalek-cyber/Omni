@@ -147,6 +147,19 @@ export async function runDeep(service: InvestService, edgar?: EdgarProvider, lim
       const niLast = f.netIncome[f.netIncome.length - 1].value;
       if (epsLast > 0 && niLast > 0) { f.shares = [{ end: f.eps[f.eps.length - 1].end, year: f.eps[f.eps.length - 1].year, value: niLast / epsLast }]; }
     }
+    // NAPRAWA: jesli najswiezsze przychody sa starsze niz 2 lata, sprobuj innych tagow (SEC bywa nieaktualne pod 'Revenues').
+    const rokBiezacy = new Date().getUTCFullYear();
+    if (f.revenue.length && f.revenue[f.revenue.length - 1].year < rokBiezacy - 2) {
+      for (const alt of ['RevenueFromContractWithCustomerExcludingAssessedTax', 'SalesRevenueNet']) {
+        try {
+          const con = await ed.concept(c.ticker, alt);
+          if (con) {
+            const s = annualSeries(con);
+            if (s.length && s[s.length - 1].year > f.revenue[f.revenue.length - 1].year) { f.revenue = s; break; }
+          }
+        } catch (e) { }
+      }
+    }
     let rev = f.revenue;
     if (!rev.length) { try { const con = await ed.concept(c.ticker, 'RevenueFromContractWithCustomerExcludingAssessedTax'); if (con) { rev = annualSeries(con); f.revenue = rev; } } catch (e) { } }
     const metrics = computeValuation(price, f);
@@ -159,6 +172,8 @@ export async function runDeep(service: InvestService, edgar?: EdgarProvider, lim
     if (metrics.pe !== null && ((metrics.pe as number) < 2 || (metrics.pe as number) > 150)) { metrics.pe = null; }
     if (metrics.pb !== null && ((metrics.pb as number) < 0.1 || (metrics.pb as number) > 100)) { metrics.pb = null; }
     if (metrics.roe !== null) { metrics.roe = Math.max(-1, Math.min(3, metrics.roe as number)); }
+    // Marza netto >100% oznacza blad danych (zazwyczaj nieaktualne przychody) - nie pokazuj smieci.
+    if (metrics.netMargin !== null && ((metrics.netMargin as number) > 1 || (metrics.netMargin as number) < -1)) { metrics.netMargin = null; }
     // Banki: D/E i FCF nie maja sensu (zobowiazania = depozyty).
     if (c.sector === 'Finanse') { metrics.debtToEquity = null; metrics.fcf = null; metrics.fcfYield = null; }
     return { def: c, bars, price, vol, trend, metrics };
@@ -224,7 +239,10 @@ export async function runDeep(service: InvestService, edgar?: EdgarProvider, lim
     thesis.push('Jakość biznesu: ROE ' + pctS(m.roe) + ', marża netto ' + pctS(m.netMargin) + ', zadłużenie ' + numS(m.debtToEquity) + '× kapitału. ' +
       ((m.roe !== null && m.roe > 0.2) ? 'ROE powyżej 20% oznacza, że firma bardzo efektywnie pomnaża kapitał. ' : '') +
       ((m.debtToEquity !== null && m.debtToEquity > 2) ? 'Zadłużenie jest podwyższone — to zwiększa ryzyko w trudnym otoczeniu.' : ''));
-    thesis.push('Perspektywy wzrostu: przychody rosły średnio ' + pctS(m.revCagr3) + ' rocznie, a zysk na akcję ' + pctS(m.epsCagr3) + ' rocznie (dane z 3 lat). ' +
+    const wzrostTxt = (m.revCagr3 === null && m.epsCagr3 === null)
+      ? 'Perspektywy wzrostu: za mało danych w raportach 10-K, by policzyć 3-letnie tempo wzrostu.'
+      : 'Perspektywy wzrostu: przychody rosły średnio ' + (m.revCagr3 === null ? '—' : pctS(m.revCagr3)) + ' rocznie, a zysk na akcję ' + (m.epsCagr3 === null ? '—' : pctS(m.epsCagr3)) + ' rocznie (dane z 3 lat). ';
+    thesis.push(wzrostTxt +
       ((m.epsCagr3 !== null && m.epsCagr3 > 0.1) ? 'To tempo powyżej inflacji — biznes realnie się rozwija.' : 'Wzrost jest umiarkowany, więc liczy się głównie stabilność.'));
     thesis.push('Scenariusze na 3 lata: pesymistyczny ' + numS(scenarios.bear, 2) + ' / bazowy ' + numS(scenarios.base, 2) + ' / optymistyczny ' + numS(scenarios.bull, 2) + '. To wyliczenie (zysk na akcję × mnożnik), a nie prognoza ceny.');
     if (undervalued) { thesis.push('Flaga: spółka wygląda na NIEDOSZACOWANĄ — jest tania względem grupy, a fundamenty ma dobre.'); }
