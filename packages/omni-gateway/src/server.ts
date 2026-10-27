@@ -638,6 +638,18 @@ export class OmniGateway {
       } catch (e) { }
       res.json({ entries: lines.reverse() });
     });
+    // Indeksy i ETF iShares (właściciel inwestuje przez iShares).
+    this.app.get('/api/invest/etfs', async (_req, res) => {
+      try {
+        const mod = await import('omni-invest/service.js');
+        const ep = await import('omni-invest/etfs.js');
+        const svc = new mod.InvestService({ cacheTtlHours: 0.17 });
+        const data = await ep.runEtfs(svc);
+        res.json({ ok: true, ...data });
+      } catch (e: any) {
+        res.status(500).json({ ok: false, error: String(e && e.message || e) });
+      }
+    });
     // Pelna analiza dlugoterminowa (SEC EDGAR + ceny).
     this.app.get('/api/invest/deep', async (req, res) => {
       try {

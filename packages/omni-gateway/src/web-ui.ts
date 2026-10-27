@@ -446,6 +446,12 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
       </div>
       <div class="row"><button class="btn" onclick="loadInvest(true)">Odswiez dane</button></div>
       <div class="card" style="margin-top:14px">
+        <h2>Indeksy i ETF iShares</h2>
+        <div class="mut" id="etfAsOf">Ladowanie...</div>
+        <div id="etfBody" style="margin-top:12px"></div>
+      </div>
+      <div class="row"><button class="btn" onclick="loadEtfs(true)">Odswiez ETF</button></div>
+      <div class="card" style="margin-top:14px">
         <h2>Pelna analiza dlugoterminowa (SEC EDGAR)</h2>
         <div class="mut" id="deepAsOf">Ladowanie analizy fundamentalnej...</div>
         <div id="deepBody" style="margin-top:12px"></div>
@@ -592,6 +598,35 @@ function loadInvest(force){
     box.innerHTML = h;
   }).catch(function(e){ box.innerHTML = '<div class="mut">Blad polaczenia: ' + esc(String(e && e.message || e)) + '</div>'; });
 }
+function loadEtfs(force){
+  var box = el("etfBody"); if(!box){ return; }
+  var asof = el("etfAsOf"); if(asof){ asof.textContent = "Pobieram notowania ETF..."; }
+  box.innerHTML = '<div class="mut">Laduje indeksy i ETF iShares...</div>';
+  api("/api/invest/etfs" + (force ? "?refresh=1" : "")).then(function(d){
+    if(!d || d.ok === false){ box.innerHTML = '<div class="mut">Blad: ' + esc((d && d.error) || 'brak danych') + '</div>'; return; }
+    if(asof){ asof.textContent = "Stan na " + d.asOf + " · zrodlo: Yahoo/Stooq"; }
+    var h = '';
+    (d.groups || []).forEach(function(g){
+      h += '<div style="margin-bottom:16px"><div style="font-weight:600;margin-bottom:2px">' + esc(g.name) + '</div>';
+      h += '<div class="mut" style="font-size:12px;margin-bottom:6px">' + esc(g.description || '') + '</div>';
+      h += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+      h += '<tr style="text-align:left;color:#8aa0bb"><th>ETF</th><th>Ticker</th><th>Cena</th><th>1M</th><th>3M</th><th>12M</th><th>Zm.</th><th>Trend</th></tr>';
+      (g.rows || []).forEach(function(r){
+        var m = r.metrics || {};
+        h += '<tr><td>' + esc(r.name) + (r.note ? '<div class="mut" style="font-size:11px">' + esc(r.note) + '</div>' : '') + '</td>';
+        h += '<td>' + esc(r.ticker) + '</td>';
+        h += '<td>' + (m.price==null?'—':m.price) + '</td>';
+        h += '<td>' + pctf(m.r1m) + '</td><td>' + pctf(m.r3m) + '</td><td>' + pctf(m.r12m) + '</td>';
+        h += '<td>' + (m.vol==null?'—':(m.vol*100).toFixed(1)+'%') + '</td>';
+        h += '<td>' + (m.trend === 'up' ? '↑' : (m.trend === 'down' ? '↓' : '—')) + '</td></tr>';
+      });
+      h += '</table></div>';
+    });
+    if((d.notes||[]).length){ h += '<ul style="margin:6px 0 0 16px;color:#8aa0bb;font-size:12px">'; for(var n=0;n<d.notes.length;n++){ h += '<li>' + esc(d.notes[n]) + '</li>'; } h += '</ul>'; }
+    h += '<div style="margin-top:10px;color:#f0b35b;font-size:12px">' + esc(d.disclaimer || '') + '</div>';
+    box.innerHTML = h;
+  }).catch(function(e){ box.innerHTML = '<div class="mut">Blad polaczenia: ' + esc(String(e && e.message || e)) + '</div>'; });
+}
 function loadDeep(force){
   var box = el("deepBody"); if(!box){ return; }
   var asof = el("deepAsOf"); if(asof){ asof.textContent = "Pobieram dane fundamentalne (SEC) i licze analize... pierwszy przebieg moze potrwac 1-3 min"; }
@@ -640,7 +675,7 @@ function show(page){
   el("pageTitle").textContent = TITLES[page] || page;
   if(page === "engines"){ renderEngines(); }
   if(page === "automations"){ loadAutomations(); }
-  if(page === "invest"){ loadInvest(true); loadDeep(); }
+  if(page === "invest"){ loadInvest(true); loadEtfs(); loadDeep(); }
   if(page === "integrations"){ loadIntegrations(); }
   if(page === "costs"){ loadCosts(); }
 
