@@ -445,6 +445,12 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
         <div id="investBody" style="margin-top:12px"></div>
       </div>
       <div class="row"><button class="btn" onclick="loadInvest(true)">Odswiez dane</button></div>
+      <div class="card" style="margin-top:14px">
+        <h2>Pelna analiza dlugoterminowa (SEC EDGAR)</h2>
+        <div class="mut" id="deepAsOf">Ladowanie analizy fundamentalnej...</div>
+        <div id="deepBody" style="margin-top:12px"></div>
+      </div>
+      <div class="row"><button class="btn" onclick="loadDeep(true)">Odswiez pelna analize</button></div>
       <div class="mut" style="margin-top:10px">Dane moga byc opoznione. To analiza edukacyjna, nie personalna rekomendacja inwestycyjna.</div>
     </section>
     <section class="page hidden" id="page-memory">
@@ -586,6 +592,44 @@ function loadInvest(force){
     box.innerHTML = h;
   }).catch(function(e){ box.innerHTML = '<div class="mut">Blad polaczenia: ' + esc(String(e && e.message || e)) + '</div>'; });
 }
+function loadDeep(force){
+  var box = el("deepBody"); if(!box){ return; }
+  var asof = el("deepAsOf"); if(asof){ asof.textContent = "Pobieram dane fundamentalne (SEC) i licze analize... pierwszy przebieg moze potrwac 1-3 min"; }
+  box.innerHTML = '<div class="mut">Analizuje 20 spolek: wycena, jakosc, wzrost, scenariusze 3Y...</div>';
+  api("/api/invest/deep" + (force ? "?refresh=1" : "")).then(function(d){
+    if(!d || d.ok === false){ box.innerHTML = '<div class="mut">Blad analizy: ' + esc((d && d.error) || "brak danych") + '</div>'; return; }
+    if(asof){ asof.textContent = "Stan na " + d.asOf + " · fundamenty: SEC EDGAR (10-K), ceny: Yahoo/Stooq"; }
+    var rows = d.rows || [];
+    var h = '';
+    if((d.buy||[]).length){
+      h += '<div style="margin-bottom:10px"><b>Rekomendowane do rozwazenia (dlugoterminowo):</b> ' + esc((d.buy||[]).join(', ')) + '</div>';
+    }
+    if((d.undervalued||[]).length){
+      h += '<div style="margin-bottom:14px;color:#7fdba0"><b>Ewidentnie niedoszacowane:</b> ' + esc((d.undervalued||[]).join(', ')) + '</div>';
+    } else {
+      h += '<div style="margin-bottom:14px;color:#8aa0bb">Brak spolek spelniajacych wszystkie kryteria niedoszacowania.</div>';
+    }
+    for(var i=0;i<Math.min(rows.length, 8);i++){
+      var r = rows[i]; var m = r.metrics || {};
+      h += '<div style="border:1px solid #1e2a3a;border-radius:12px;padding:12px;margin-bottom:12px">';
+      h += '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">';
+      h += '<div><b>#' + r.rank + ' ' + esc(r.name) + '</b> <span class="mut">(' + esc(r.ticker) + ' · ' + esc(r.sector) + ')</span></div>';
+      h += '<div class="mut">wynik ' + r.score + (r.undervalued ? ' · <b style="color:#7fdba0">niedoszacowana</b>' : '') + '</div></div>';
+      h += '<div style="margin-top:8px;font-size:13px">Cena: <b>' + (r.price==null?'—':r.price) + '</b> · P/E: ' + (m.pe==null?'—':m.pe.toFixed(1)) + ' · P/B: ' + (m.pb==null?'—':m.pb.toFixed(1)) + ' · ROE: ' + (m.roe==null?'—':(m.roe*100).toFixed(1)+'%') + ' · FCF yield: ' + (m.fcfYield==null?'—':(m.fcfYield*100).toFixed(1)+'%') + '</div>';
+      h += '<div style="margin-top:4px;font-size:13px">Wzrost 3Y: przychody ' + (m.revCagr3==null?'—':(m.revCagr3*100).toFixed(1)+'%') + ' · EPS ' + (m.epsCagr3==null?'—':(m.epsCagr3*100).toFixed(1)+'%') + ' · zadluzenie ' + (m.debtToEquity==null?'—':m.debtToEquity.toFixed(1)+'x') + '</div>';
+      var s = r.scenarios || {};
+      h += '<div style="margin-top:8px;font-size:13px;color:#cfe0f5">Scenariusze 3Y (bear / base / bull): ' + (s.bear==null?'—':s.bear) + ' / ' + (s.base==null?'—':s.base) + ' / ' + (s.bull==null?'—':s.bull) + ' <span class="mut">(EPS x mnoznik, nie prognoza)</span></div>';
+      h += '<div style="margin-top:10px;font-size:12.5px;line-height:1.55">';
+      for(var t=0;t<(r.thesis||[]).length;t++){ h += '<div>• ' + esc(r.thesis[t]) + '</div>'; }
+      h += '</div>';
+      if((r.risks||[]).length){ h += '<div style="margin-top:8px;font-size:12px;color:#f0b35b">Ryzyka:'; for(var k=0;k<r.risks.length;k++){ h += '<div>• ' + esc(r.risks[k]) + '</div>'; } h += '</div>'; }
+      h += '</div>';
+    }
+    if((d.notes||[]).length){ h += '<ul style="margin:6px 0 0 16px;color:#8aa0bb;font-size:12px">'; for(var n=0;n<d.notes.length;n++){ h += '<li>' + esc(d.notes[n]) + '</li>'; } h += '</ul>'; }
+    h += '<div style="margin-top:10px;color:#f0b35b;font-size:12px">' + esc(d.disclaimer || '') + '</div>';
+    box.innerHTML = h;
+  }).catch(function(e){ box.innerHTML = '<div class="mut">Blad polaczenia: ' + esc(String(e && e.message || e)) + '</div>'; });
+}
 function show(page){
   var pages = document.querySelectorAll(".page");
   for(var i=0;i<pages.length;i++){ pages[i].className = "page hidden"; }
@@ -596,7 +640,7 @@ function show(page){
   el("pageTitle").textContent = TITLES[page] || page;
   if(page === "engines"){ renderEngines(); }
   if(page === "automations"){ loadAutomations(); }
-  if(page === "invest"){ loadInvest(true); }
+  if(page === "invest"){ loadInvest(true); loadDeep(); }
   if(page === "integrations"){ loadIntegrations(); }
   if(page === "costs"){ loadCosts(); }
 

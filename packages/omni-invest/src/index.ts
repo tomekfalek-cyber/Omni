@@ -11,6 +11,8 @@ export * from './service.js';
 export * from './omni-tools.js';
 export * from './monthly.js';
 export * from './overview.js';
+export * from './deep.js';
+export * from './fundamentals.js';
 export * from './providers/yahoo.js';
 export * from './providers/stooq.js';
 export * from './providers/fmp.js';

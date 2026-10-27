@@ -638,6 +638,18 @@ export class OmniGateway {
       } catch (e) { }
       res.json({ entries: lines.reverse() });
     });
+    // Pelna analiza dlugoterminowa (SEC EDGAR + ceny).
+    this.app.get('/api/invest/deep', async (req, res) => {
+      try {
+        const mod = await import('omni-invest/service.js');
+        const dp = await import('omni-invest/deep.js');
+        const svc = new mod.InvestService({ cacheTtlHours: 0.17 });
+        const data = await dp.runDeep(svc, undefined, 20);
+        res.json({ ok: true, ...data });
+      } catch (e: any) {
+        res.status(500).json({ ok: false, error: String(e && e.message || e) });
+      }
+    });
     // Zakladka 'Inwestycje': zawsze swieze dane + analiza (cache 10 min).
     this.app.get('/api/invest/overview', async (req, res) => {
       try {

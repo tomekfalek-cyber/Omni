@@ -79,3 +79,17 @@ export interface BacktestResult {
 }
 
 export interface Snapshot { id: string; at: string; strategy: string; universe: string; picks: ScoredTicker[] }
+
+export interface AnnualPoint { end: string; year: number; value: number }
+
+export interface EquityFundamentals {
+  ticker: string;
+  eps: AnnualPoint[];
+  revenue: AnnualPoint[];
+  equity: AnnualPoint[];
+  liabilities: AnnualPoint[];
+  netIncome: AnnualPoint[];
+  ocf: AnnualPoint[];
+  capex: AnnualPoint[];
+  shares: AnnualPoint[];
+}
