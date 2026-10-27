@@ -41,6 +41,28 @@ export function buildInvestTools(service: InvestService): OmniTool[] {
       },
     },
     {
+      definition: { name: 'invest_portfolio', description: 'Deterministyczna analiza portfela: sumy, udzialy, koncentracja (USA/tech/waluta), alokacja docelowa, podzial miesiecznej wplaty i rebalans. Parametry: holdings (np. "S&P 500=4917.37; MSCI World=3643.34; ..."), monthly (kwota), targets (opcjonalnie).', parameters: { holdings: 'string', monthly: 'number', targets: 'string' }, requiresApproval: false, timeoutMs: 15000, maxOutputBytes: 7000 },
+      execute: async (args: any) => {
+        const { runPortfolio, parseHoldings } = await import('./portfolio.js');
+        const holdings = parseHoldings(args && args.holdings);
+        let targets: Record<string, number> = {};
+        if (args && args.targets) { for (const p of String(args.targets).split(';')) { const [k, v] = p.split('='); if (k && v) { targets[k.trim()] = Number(v); } } }
+        const r = runPortfolio(holdings, args && args.monthly, targets);
+        const nl = String.fromCharCode(10);
+        const pct = (x: number) => (x * 100).toFixed(1) + '%';
+        const out: string[] = [];
+        out.push('PORTFEL: ' + r.total.toFixed(2) + ' PLN');
+        out.push('');
+        for (const x of r.rows) { out.push('- ' + x.label + ': ' + x.value.toFixed(2) + ' PLN | ' + pct(x.weight) + ' | cel ' + pct(x.target) + ' | roznica ' + ((x.delta * 100) >= 0 ? '+' : '') + (x.delta * 100).toFixed(1) + ' pp' + (x.monthly > 0 ? ' | z 600 zł: ' + x.monthly.toFixed(0) : '')); }
+        out.push('');
+        out.push('Koszyki: akcje ' + pct(r.buckets.equity) + ' | zloto ' + pct(r.buckets.gold) + ' | krypto ' + pct(r.buckets.crypto) + ' | obligacje ' + pct(r.buckets.bonds));
+        out.push('Koncentracja: USA ' + pct(r.usShare) + ' | tech ' + pct(r.techShare) + ' | waluta USD ' + pct(r.usdShare));
+        if (r.notes.length) { out.push(''); for (const n of r.notes) { out.push('UWAGA: ' + n); } }
+        out.push(''); out.push(r.disclaimer);
+        return out.join(nl);
+      },
+    },
+    {
       definition: { name: 'invest_rebalance', description: 'Liczy rebalans portfela: co dokupic i co sprzedac, by wrocic do wag docelowych. Parametry: holdings (np. "CSPX.L=6000,NVDA=4000"), targets (np. "CSPX.L=0.8,NVDA=0.2").', parameters: { holdings: 'string', targets: 'string' }, requiresApproval: false, timeoutMs: 10000, maxOutputBytes: 3000 },
       execute: async (args: any) => {
         const { runRebalance } = await import('./rebalance.js');

@@ -15,6 +15,7 @@ export * from './deep.js';
 export * from './etfs.js';
 export * from './compare.js';
 export * from './rebalance.js';
+export * from './portfolio.js';
 export * from './fundamentals.js';
 export * from './providers/yahoo.js';
 export * from './providers/stooq.js';
