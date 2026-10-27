@@ -30,6 +30,15 @@ export const COMPANIES: CompanyDef[] = [
   { ticker: 'LLY', name: 'Eli Lilly', sector: 'Zdrowie', description: 'Farmaceutyka, m.in. leki z grupy GLP-1 (cukrzyca/otylosc).' },
 ];
 
+export const GLOSSARY: Array<{ term: string; desc: string }> = [
+  { term: 'P/E', desc: 'Cena podzielona przez zysk na akcję. Mówi, ile płacisz za 1 zł zysku spółki. Niżej = taniej.' },
+  { term: 'P/B', desc: 'Cena podzielona przez wartość księgową. Ile płacisz za 1 zł majątku netto firmy.' },
+  { term: 'ROE', desc: 'Zysk podzielony przez kapitał własny. Pokazuje, jak efektywnie firma pomnaża kapitał. Wyżej = lepszy biznes.' },
+  { term: 'FCF yield', desc: 'Wolna gotówka (po inwestycjach) w relacji do wyceny. Ile realnej gotówki generuje biznes. Wyżej = lepiej.' },
+  { term: 'D/E', desc: 'Zobowiązania podzielone przez kapitał własny. Poziom zadłużenia. Niżej = bezpieczniej.' },
+  { term: 'CAGR', desc: 'Średnioroczne tempo wzrostu w procentach (np. przychodów lub zysku na akcję).' },
+  { term: 'Bear / Base / Bull', desc: 'Scenariusz pesymistyczny / bazowy / optymistyczny. To wyliczenie matematyczne, nie prognoza ceny.' },
+];
 export interface Scenario { bear: number | null; base: number | null; bull: number | null; growth: number | null; multiple: number | null }
 
 export interface DeepRow {
@@ -46,6 +55,7 @@ export interface DeepRow {
 
 export interface DeepResult {
   asOf: string;
+  glossary: Array<{ term: string; desc: string }>;
   rows: DeepRow[];
   buy: string[];
   undervalued: string[];
@@ -204,19 +214,28 @@ export async function runDeep(service: InvestService, edgar?: EdgarProvider, lim
     const undervalued = m.pe !== null && m.pe > 0 && peMed !== null && m.pe < peMed * 0.8 && (m.roe === null ? false : m.roe > 0.12) && m.fcf !== null && m.fcf > 0 && (m.debtToEquity === null ? true : m.debtToEquity < 2);
 
     const thesis: string[] = [];
-    thesis.push(r.def.description);
-    thesis.push('Wycena: P/E ' + numS(m.pe) + ' (mediana grupy ' + numS(peMed) + '), P/B ' + numS(m.pb) + ', FCF yield ' + pctS(m.fcfYield) + '.');
-    thesis.push('Jakosc: ROE ' + pctS(m.roe) + ', marza netto ' + pctS(m.netMargin) + ', zadluzenie (zobowiazania/kapital) ' + numS(m.debtToEquity) + 'x.');
-    thesis.push('Wzrost: przychody 3Y ' + pctS(m.revCagr3) + ' rocznie, EPS 3Y ' + pctS(m.epsCagr3) + ' rocznie.');
-    if (undervalued) { thesis.push('Flaga: spolka wyglada na NIEDOSZACOWANA na tle grupy przy dobrych fundamentach.'); }
+    thesis.push('Czym zajmuje się spółka: ' + r.def.description);
+    const taniej = m.pe !== null && peMed !== null && m.pe < peMed * 0.9;
+    const drozej = m.pe !== null && peMed !== null && m.pe > peMed * 1.2;
+    thesis.push('Wycena: P/E ' + numS(m.pe) + ' (mediana grupy ' + numS(peMed) + '), P/B ' + numS(m.pb) + ', FCF yield ' + pctS(m.fcfYield) + '. ' +
+      (taniej ? 'Spółka jest tańsza niż przeciętna w grupie — płacisz mniej za każdą złotówkę zysku.' :
+        drozej ? 'Spółka jest droższa od przeciętnej — rynek wycenia jej przyszły wzrost ponad standard, więc rozczarowanie może mocno uderzyć w cenę.' :
+        'Wycena jest zbliżona do przeciętnej w grupie.'));
+    thesis.push('Jakość biznesu: ROE ' + pctS(m.roe) + ', marża netto ' + pctS(m.netMargin) + ', zadłużenie ' + numS(m.debtToEquity) + '× kapitału. ' +
+      ((m.roe !== null && m.roe > 0.2) ? 'ROE powyżej 20% oznacza, że firma bardzo efektywnie pomnaża kapitał. ' : '') +
+      ((m.debtToEquity !== null && m.debtToEquity > 2) ? 'Zadłużenie jest podwyższone — to zwiększa ryzyko w trudnym otoczeniu.' : ''));
+    thesis.push('Perspektywy wzrostu: przychody rosły średnio ' + pctS(m.revCagr3) + ' rocznie, a zysk na akcję ' + pctS(m.epsCagr3) + ' rocznie (dane z 3 lat). ' +
+      ((m.epsCagr3 !== null && m.epsCagr3 > 0.1) ? 'To tempo powyżej inflacji — biznes realnie się rozwija.' : 'Wzrost jest umiarkowany, więc liczy się głównie stabilność.'));
+    thesis.push('Scenariusze na 3 lata: pesymistyczny ' + numS(scenarios.bear, 2) + ' / bazowy ' + numS(scenarios.base, 2) + ' / optymistyczny ' + numS(scenarios.bull, 2) + '. To wyliczenie (zysk na akcję × mnożnik), a nie prognoza ceny.');
+    if (undervalued) { thesis.push('Flaga: spółka wygląda na NIEDOSZACOWANĄ — jest tania względem grupy, a fundamenty ma dobre.'); }
 
     const risks: string[] = [];
-    if (m.pe !== null && peMed !== null && m.pe > peMed * 1.4) { risks.push('Wysoka wycena (P/E wyraznie powyzej mediany grupy) - wrazliwosc na spadek oczekiwan wzrostu.'); }
-    if (m.debtToEquity !== null && m.debtToEquity > 2) { risks.push('Podwyzszone zadluzenie - ryzyko przy wzroscie stop procentowych.'); }
-    if (m.fcf !== null && m.fcf <= 0) { risks.push('Ujemny wolny przeplyw pieniezny (FCF) - model wymaga finansowania.'); }
-    if (r.vol !== null && r.vol > 0.4) { risks.push('Wysoka zmiennosc (powyzej 40% rocznie) - mozliwe glebokie obsuniecia.'); }
-    if (r.trend === 'down') { risks.push('Cena ponizej sredniej 50-dniowej - krotkoterminowy trend spadkowy.'); }
-    if (!risks.length) { risks.push('Brak sygnalow ostrzegawczych w danych - ale to nie eliminuje ryzyka rynkowego.'); }
+    if (m.pe !== null && peMed !== null && m.pe > peMed * 1.4) { risks.push('Wysoka wycena: P/E wyraźnie powyżej mediany grupy — cena może mocno spaść, jeśli oczekiwania co do wzrostu osłabną.'); }
+    if (m.debtToEquity !== null && m.debtToEquity > 2) { risks.push('Podwyższone zadłużenie: przy wzroście stóp procentowych koszty finansowania rosną, a zysk maleje.'); }
+    if (m.fcf !== null && m.fcf <= 0) { risks.push('Ujemny wolny przepływ pieniężny (FCF): firma wydaje więcej, niż zarabia operacyjnie — może potrzebować finansowania zewnętrznego.'); }
+    if (r.vol !== null && r.vol > 0.4) { risks.push('Wysoka zmienność (ponad 40% rocznie): możliwe głębokie, chwilowe obsunięcia kapitału.'); }
+    if (r.trend === 'down') { risks.push('Cena poniżej średniej 50-dniowej: krótkoterminowy trend jest spadkowy — dla inwestora długoterminowego to nie wyrok, ale warto obserwować.'); }
+    if (!risks.length) { risks.push('W danych nie ma sygnałów ostrzegawczych — ale to nie oznacza braku ryzyka rynkowego.'); }
 
     return {
       ticker: r.def.ticker, name: r.def.name, sector: r.def.sector, description: r.def.description,
@@ -237,5 +256,5 @@ export async function runDeep(service: InvestService, edgar?: EdgarProvider, lim
   notes.push('Dane fundamentalne: SEC EDGAR (raporty 10-K), ceny: Yahoo/Stooq. Fundamenty odswiezane co 7 dni, ceny co ~10 min.');
   notes.push('Scenariusze to prosta matematyka (EPS x mnoznik), nie prognoza ceny ani obietnica zysku.');
 
-  return { asOf: to, rows, buy, undervalued, notes, disclaimer: 'To analiza edukacyjna, nie personalna rekomendacja inwestycyjna. Nie jestem licencjonowanym doradca.' };
+  return { asOf: to, glossary: GLOSSARY, rows, buy, undervalued, notes, disclaimer: 'To analiza edukacyjna, nie personalna rekomendacja inwestycyjna. Nie jestem licencjonowanym doradca.' };
 }

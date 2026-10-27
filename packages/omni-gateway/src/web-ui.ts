@@ -444,19 +444,19 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
         <div class="mut" id="investAsOf">Ladowanie...</div>
         <div id="investBody" style="margin-top:12px"></div>
       </div>
-      <div class="row"><button class="btn" onclick="loadInvest(true)">Odswiez dane</button></div>
+      <div class="row"><button class="btn" onclick="loadInvest(true)">Odśwież dane</button></div>
       <div class="card" style="margin-top:14px">
         <h2>Indeksy i ETF iShares</h2>
-        <div class="mut" id="etfAsOf">Ladowanie...</div>
+        <div class="mut" id="etfAsOf">Ładowanie...</div>
         <div id="etfBody" style="margin-top:12px"></div>
       </div>
-      <div class="row"><button class="btn" onclick="loadEtfs(true)">Odswiez ETF</button></div>
+      <div class="row"><button class="btn" onclick="loadEtfs(true)">Odśwież ETF</button></div>
       <div class="card" style="margin-top:14px">
-        <h2>Pelna analiza dlugoterminowa (SEC EDGAR)</h2>
-        <div class="mut" id="deepAsOf">Ladowanie analizy fundamentalnej...</div>
+        <h2>Pełna analiza długoterminowa (SEC EDGAR)</h2>
+        <div class="mut" id="deepAsOf">Ładowanie analizy fundamentalnej...</div>
         <div id="deepBody" style="margin-top:12px"></div>
       </div>
-      <div class="row"><button class="btn" onclick="loadDeep(true)">Odswiez pelna analize</button></div>
+      <div class="row"><button class="btn" onclick="loadDeep(true)">Odśwież pełną analizę</button></div>
       <div class="mut" style="margin-top:10px">Dane moga byc opoznione. To analiza edukacyjna, nie personalna rekomendacja inwestycyjna.</div>
     </section>
     <section class="page hidden" id="page-memory">
@@ -539,7 +539,7 @@ function toggleNav(){
   } catch(e){}
 })();
 window.addEventListener('error', function(ev){
-  try { toast('Blad strony: ' + (ev && ev.message ? ev.message : 'nieznany'), 'err'); } catch(e){}
+  try { toast('Błąd strony: ' + (ev && ev.message ? ev.message : 'nieznany'), 'err'); } catch(e){}
 });
 document.addEventListener('click', function(ev){
   var t = ev.target;
@@ -569,12 +569,12 @@ function toggleTheme(){
 function pctf(x){ if(x===null||x===undefined) return "—"; var v=x*100; return (v>0?"+":"")+v.toFixed(1)+"%"; }
 function loadInvest(force){
   var box = el("investBody"); if(!box){ return; }
-  var asof = el("investAsOf"); if(asof){ asof.textContent = "Pobieram swieze dane i licze analize... (10-30 s)"; }
-  box.innerHTML = '<div class="mut">Analizuje zloto, srebro, 5 kryptowalut i akcje...</div>';
+  var asof = el("investAsOf"); if(asof){ asof.textContent = "Pobieram świeże dane i liczę analizę... (10-30 s)"; }
+  box.innerHTML = '<div class="mut">Analizuję złoto, srebro, 5 kryptowalut i akcje...</div>';
   var url = "/api/invest/overview" + (force ? "?refresh=1" : "");
   api(url).then(function(d){
-    if(!d || d.ok === false){ box.innerHTML = '<div class="mut">Blad: ' + esc((d && d.error) || "brak danych") + '</div>'; return; }
-    if(asof){ asof.textContent = "Stan na " + d.asOf + " · zrodlo: Yahoo/Stooq (odswiezane co ~10 min)"; }
+    if(!d || d.ok === false){ box.innerHTML = '<div class="mut">Błąd: ' + esc((d && d.error) || "brak danych") + '</div>'; return; }
+    if(asof){ asof.textContent = "Stan na " + d.asOf + " · źródło: Yahoo/Stooq (odświeżane co ~10 min)"; }
     var rows = (d.rows || []).slice();
     rows.sort(function(a,b){ if(a.score==null) return 1; if(b.score==null) return -1; return b.score - a.score; });
     var h = '<table style="width:100%;border-collapse:collapse;font-size:13px">';
@@ -592,18 +592,18 @@ function loadInvest(force){
     }
     h += '</table>';
     var top = (d.top || []).map(function(id){ for(var j=0;j<rows.length;j++){ if(rows[j].id===id){ return rows[j].name; } } return id; });
-    if(top.length){ h += '<div style="margin-top:12px"><b>Najlepsze wedlug modelu:</b> ' + esc(top.join(' · ')) + '</div>'; }
+    if(top.length){ h += '<div style="margin-top:12px"><b>Najlepsze według modelu:</b> ' + esc(top.join(' · ')) + '</div>'; }
     if((d.notes||[]).length){ h += '<ul style="margin:10px 0 0 16px;color:#8aa0bb;font-size:12px">'; for(var n=0;n<d.notes.length;n++){ h += '<li>' + esc(d.notes[n]) + '</li>'; } h += '</ul>'; }
     h += '<div style="margin-top:12px;color:#f0b35b;font-size:12px">' + esc(d.disclaimer || '') + '</div>';
     box.innerHTML = h;
-  }).catch(function(e){ box.innerHTML = '<div class="mut">Blad polaczenia: ' + esc(String(e && e.message || e)) + '</div>'; });
+  }).catch(function(e){ box.innerHTML = '<div class="mut">Błąd połączenia: ' + esc(String(e && e.message || e)) + '</div>'; });
 }
 function loadEtfs(force){
   var box = el("etfBody"); if(!box){ return; }
   var asof = el("etfAsOf"); if(asof){ asof.textContent = "Pobieram notowania ETF..."; }
-  box.innerHTML = '<div class="mut">Laduje indeksy i ETF iShares...</div>';
+  box.innerHTML = '<div class="mut">Ładuję indeksy i ETF iShares...</div>';
   api("/api/invest/etfs" + (force ? "?refresh=1" : "")).then(function(d){
-    if(!d || d.ok === false){ box.innerHTML = '<div class="mut">Blad: ' + esc((d && d.error) || 'brak danych') + '</div>'; return; }
+    if(!d || d.ok === false){ box.innerHTML = '<div class="mut">Błąd: ' + esc((d && d.error) || 'brak danych') + '</div>'; return; }
     if(asof){ asof.textContent = "Stan na " + d.asOf + " · zrodlo: Yahoo/Stooq"; }
     var h = '';
     (d.groups || []).forEach(function(g){
@@ -625,17 +625,23 @@ function loadEtfs(force){
     if((d.notes||[]).length){ h += '<ul style="margin:6px 0 0 16px;color:#8aa0bb;font-size:12px">'; for(var n=0;n<d.notes.length;n++){ h += '<li>' + esc(d.notes[n]) + '</li>'; } h += '</ul>'; }
     h += '<div style="margin-top:10px;color:#f0b35b;font-size:12px">' + esc(d.disclaimer || '') + '</div>';
     box.innerHTML = h;
-  }).catch(function(e){ box.innerHTML = '<div class="mut">Blad polaczenia: ' + esc(String(e && e.message || e)) + '</div>'; });
+  }).catch(function(e){ box.innerHTML = '<div class="mut">Błąd połączenia: ' + esc(String(e && e.message || e)) + '</div>'; });
 }
 function loadDeep(force){
   var box = el("deepBody"); if(!box){ return; }
-  var asof = el("deepAsOf"); if(asof){ asof.textContent = "Pobieram dane fundamentalne (SEC) i licze analize... pierwszy przebieg moze potrwac 1-3 min"; }
-  box.innerHTML = '<div class="mut">Analizuje 20 spolek: wycena, jakosc, wzrost, scenariusze 3Y...</div>';
+  var asof = el("deepAsOf"); if(asof){ asof.textContent = "Pobieram dane fundamentalne (SEC) i liczę analizę... pierwszy przebieg może potrwać 1-3 min"; }
+  box.innerHTML = '<div class="mut">Analizuję 20 spółek: wycena, jakość, wzrost, scenariusze 3-letnie...</div>';
   api("/api/invest/deep" + (force ? "?refresh=1" : "")).then(function(d){
-    if(!d || d.ok === false){ box.innerHTML = '<div class="mut">Blad analizy: ' + esc((d && d.error) || "brak danych") + '</div>'; return; }
+    if(!d || d.ok === false){ box.innerHTML = '<div class="mut">Błąd analizy: ' + esc((d && d.error) || "brak danych") + '</div>'; return; }
     if(asof){ asof.textContent = "Stan na " + d.asOf + " · fundamenty: SEC EDGAR (10-K), ceny: Yahoo/Stooq"; }
     var rows = d.rows || [];
     var h = '';
+    if((d.glossary||[]).length){
+      h += '<div style="margin:6px 0 14px;padding:10px 12px;border:1px solid #1e2a3a;border-radius:10px;font-size:12px;color:#9fb2c9">';
+      h += '<div style="color:#cfe0f5;font-weight:600;margin-bottom:4px">Co znaczą wskaźniki</div>';
+      for(var gi=0;gi<d.glossary.length;gi++){ var gx=d.glossary[gi]; h += '<div style="margin-top:3px"><b>' + esc(gx.term) + '</b> — ' + esc(gx.desc) + '</div>'; }
+      h += '</div>';
+    }
     if((d.buy||[]).length){
       h += '<div style="margin-bottom:10px"><b>Rekomendowane do rozwazenia (dlugoterminowo):</b> ' + esc((d.buy||[]).join(', ')) + '</div>';
     }
@@ -655,7 +661,12 @@ function loadDeep(force){
       var s = r.scenarios || {};
       h += '<div style="margin-top:8px;font-size:13px;color:#cfe0f5">Scenariusze 3Y (bear / base / bull): ' + (s.bear==null?'—':s.bear) + ' / ' + (s.base==null?'—':s.base) + ' / ' + (s.bull==null?'—':s.bull) + ' <span class="mut">(EPS x mnoznik, nie prognoza)</span></div>';
       h += '<div style="margin-top:10px;font-size:12.5px;line-height:1.55">';
-      for(var t=0;t<(r.thesis||[]).length;t++){ h += '<div>• ' + esc(r.thesis[t]) + '</div>'; }
+      for(var t=0;t<(r.thesis||[]).length;t++){
+        var tx = String(r.thesis[t] || '');
+        var ci = tx.indexOf(':');
+        if(ci > 0 && ci < 42){ h += '<div>• <b>' + esc(tx.slice(0, ci)) + ':</b>' + esc(tx.slice(ci + 1)) + '</div>'; }
+        else { h += '<div>• ' + esc(tx) + '</div>'; }
+      }
       h += '</div>';
       if((r.risks||[]).length){ h += '<div style="margin-top:8px;font-size:12px;color:#f0b35b">Ryzyka:'; for(var k=0;k<r.risks.length;k++){ h += '<div>• ' + esc(r.risks[k]) + '</div>'; } h += '</div>'; }
       h += '</div>';
@@ -663,7 +674,7 @@ function loadDeep(force){
     if((d.notes||[]).length){ h += '<ul style="margin:6px 0 0 16px;color:#8aa0bb;font-size:12px">'; for(var n=0;n<d.notes.length;n++){ h += '<li>' + esc(d.notes[n]) + '</li>'; } h += '</ul>'; }
     h += '<div style="margin-top:10px;color:#f0b35b;font-size:12px">' + esc(d.disclaimer || '') + '</div>';
     box.innerHTML = h;
-  }).catch(function(e){ box.innerHTML = '<div class="mut">Blad polaczenia: ' + esc(String(e && e.message || e)) + '</div>'; });
+  }).catch(function(e){ box.innerHTML = '<div class="mut">Błąd połączenia: ' + esc(String(e && e.message || e)) + '</div>'; });
 }
 function show(page){
   var pages = document.querySelectorAll(".page");
@@ -770,7 +781,7 @@ function renderVoices(){
 function speakText(text){
   api("/api/voice/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text, voice: (state.config && state.config.voice) || "pl-PL-MarekNeural" }) })
     .then(function(d){ var pl = el("voicePlayer"); if(pl){ pl.src = d.url; pl.play(); } })
-    .catch(function(e){ toast("Blad glosu: " + e.message, "err"); });
+    .catch(function(e){ toast("Błąd głosu: " + e.message, "err"); });
 }
 function saveVoice(){
   var body = { voice: el("voiceSelect").value, voiceRate: el("voiceRate").value, voiceAutoRead: !!el("voiceAuto").checked, voiceHandsFree: !!el("voiceHandsFree").checked };
@@ -832,14 +843,14 @@ function transcribeBlob(blob){
   return fetch('/api/voice/transcribe', { method: 'POST', headers: { 'Content-Type': 'audio/webm' }, body: blob })
     .then(function(r){ return r.json(); })
     .then(function(d){
-      if(d && d.error){ toast('Blad: ' + d.error, 'err'); return; }
+      if(d && d.error){ toast('Błąd: ' + d.error, 'err'); return; }
       var txt = (d && d.text) || '';
       if(!txt){ toast('Nie rozpoznalem mowy', 'err'); return; }
       var box = document.getElementById('chatInput');
       if(box){ box.value = (box.value ? box.value + ' ' : '') + txt; box.focus(); }
       toast('Rozpoznano: ' + txt, 'ok');
     })
-    .catch(function(e){ toast('Blad: ' + e.message, 'err'); });
+    .catch(function(e){ toast('Błąd: ' + e.message, 'err'); });
 }
 function toggleRec(){
   var btn = document.getElementById('micRecBtn');
@@ -880,7 +891,7 @@ function docUpload(){
       fetch('/api/docs/extract', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: reader.result })
         .then(function(r){ return r.json(); })
         .then(function(d){
-          if(!d || !d.ok){ toast('Blad: ' + ((d && d.error) || 'nieznany'), 'err'); return; }
+          if(!d || !d.ok){ toast('Błąd: ' + ((d && d.error) || 'nieznany'), 'err'); return; }
           var txt = String(d.text || '').slice(0, 6000);
           toast('Wyciagnalem ' + d.chars + ' znakow (' + d.kind + ')', 'ok');
           if(box){
@@ -888,7 +899,7 @@ function docUpload(){
             box.focus();
           }
         })
-        .catch(function(e){ toast('Blad: ' + e.message, 'err'); });
+        .catch(function(e){ toast('Błąd: ' + e.message, 'err'); });
     };
     reader.onerror = function(){ toast('Nie udalo sie wczytac pliku', 'err'); };
     reader.readAsArrayBuffer(f);
@@ -1016,7 +1027,7 @@ function saveEngine(){
     var b = document.getElementById('engResult');
     if(b){ b.innerHTML = 'Aktywny silnik: <b>' + esc(cfg.provider || '?') + '</b> / ' + esc(cfg.model || '?') + (cfg.provider && cfg.provider !== prov.value ? ' <i>(dostawca bez klucza - zostalem lokalnie)</i>' : ''); }
     loadCosts();
-  }).catch(function(e){ var b2 = document.getElementById('engResult'); if(b2){ b2.textContent = 'Blad: ' + e.message; } });
+  }).catch(function(e){ var b2 = document.getElementById('engResult'); if(b2){ b2.textContent = 'Błąd: ' + e.message; } });
 }function renderNotifications(d){
   var b = document.getElementById('notifBox');
   if(!b){ return; }
@@ -1053,7 +1064,7 @@ function loadNotifications(){
 function checkNow(){
   var b = document.getElementById('notifBox');
   if(b){ b.textContent = 'Sprawdzam w tle...'; }
-  return api('/api/notifications/check', { method: 'POST' }).then(renderNotifications).catch(function(e){ var b2 = document.getElementById('notifBox'); if(b2){ b2.textContent = 'Blad: ' + e.message; } });
+  return api('/api/notifications/check', { method: 'POST' }).then(renderNotifications).catch(function(e){ var b2 = document.getElementById('notifBox'); if(b2){ b2.textContent = 'Błąd: ' + e.message; } });
 }
 function markAllRead(){
   return api('/api/notifications/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }).then(loadNotifications).catch(function(){});
@@ -1100,7 +1111,7 @@ function searchHistory(){
       }
     }
     if(st){ st.textContent = 'Znaleziono: ' + ((d && d.count) || 0); }
-  }).catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+  }).catch(function(e){ if(st){ st.textContent = 'Błąd: ' + e.message; } });
 }
 function renderReminders(list){
   var box = document.getElementById('remList');
@@ -1132,8 +1143,8 @@ function addReminder(){
   var when = w.value ? new Date(w.value).getTime() : 0;
   if(st){ st.textContent = 'Zapisuje...'; }
   return api('/api/reminders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t.value, at: when }) })
-    .then(function(d){ if(st){ st.textContent = (d && d.ok) ? 'Dodane.' : ('Blad: ' + ((d && d.error) || 'nieznany')); } if(t){ t.value = ''; } renderReminders((d && d.reminders) || []); })
-    .catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+    .then(function(d){ if(st){ st.textContent = (d && d.ok) ? 'Dodane.' : ('Błąd: ' + ((d && d.error) || 'nieznany')); } if(t){ t.value = ''; } renderReminders((d && d.reminders) || []); })
+    .catch(function(e){ if(st){ st.textContent = 'Błąd: ' + e.message; } });
 }
 function quickReminder(minutes){
   var w = document.getElementById('remWhen');
@@ -1161,13 +1172,13 @@ function loadActivity(){
     }
     var st = document.getElementById('actState');
     if(st){ st.textContent = 'Wpisow: ' + es.length; }
-  }).catch(function(e){ var s2 = document.getElementById('actState'); if(s2){ s2.textContent = 'Blad: ' + e.message; } });
+  }).catch(function(e){ var s2 = document.getElementById('actState'); if(s2){ s2.textContent = 'Błąd: ' + e.message; } });
 }
 function genSummary(){
   var st = document.getElementById('sumState');
   if(st){ st.textContent = 'Tworze podsumowanie...'; }
   return api('/api/summary').then(function(d){ if(st){ st.textContent = 'Gotowe.'; } showSummary(d); })
-    .catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+    .catch(function(e){ if(st){ st.textContent = 'Błąd: ' + e.message; } });
 }
 function loadSummary(){
   return api('/api/summary/last').then(function(d){
@@ -1194,7 +1205,7 @@ function loadFiles(){
     for(var j=0;j<els.length;j++){ els[j].addEventListener('click', function(ev){ fileOpen(ev.currentTarget); }); }
     var s2 = document.getElementById('filesState');
     if(s2){ s2.textContent = 'Katalog: ' + ((d && d.dir) || '.') + ' (' + es.length + ' pozycji)'; }
-  }).catch(function(e){ var s3 = document.getElementById('filesState'); if(s3){ s3.textContent = 'Blad: ' + e.message; } });
+  }).catch(function(e){ var s3 = document.getElementById('filesState'); if(s3){ s3.textContent = 'Błąd: ' + e.message; } });
 }
 function fileOpen(el){
   var name = el.getAttribute('data-open');
@@ -1211,7 +1222,7 @@ function fileOpen(el){
   return api('/api/files/read?path=' + encodeURIComponent(join)).then(function(d){
     var b = document.getElementById('fileBox');
     if(b){ b.value = (d && d.content) || ''; }
-  }).catch(function(e){ var st2 = document.getElementById('fileState'); if(st2){ st2.textContent = 'Blad: ' + e.message; } });
+  }).catch(function(e){ var st2 = document.getElementById('fileState'); if(st2){ st2.textContent = 'Błąd: ' + e.message; } });
 }
 function saveFile(){
   var b = document.getElementById('fileBox');
@@ -1220,7 +1231,7 @@ function saveFile(){
   if(st){ st.textContent = 'Zapisuje...'; }
   return api('/api/files/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: oFileCur, content: b.value }) })
     .then(function(d){ if(st){ st.textContent = (d && d.ok) ? 'Zapisane (' + d.chars + ' znakow).' : 'Nie udalo sie.'; } })
-    .catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+    .catch(function(e){ if(st){ st.textContent = 'Błąd: ' + e.message; } });
 }
 function filesUp(){
   var p = document.getElementById('filesPath');
@@ -1240,7 +1251,7 @@ function downloadBackup(){
     a.download = 'omni-kopia-' + new Date().toISOString().slice(0,10) + '.json';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     if(st){ st.textContent = 'Gotowe - plik pobrany.'; }
-  }).catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+  }).catch(function(e){ if(st){ st.textContent = 'Błąd: ' + e.message; } });
 }
 function restoreBackup(){
   var inp = document.createElement('input');
@@ -1256,8 +1267,8 @@ function restoreBackup(){
       var pack = null;
       try { pack = JSON.parse(rd.result); } catch(e){ if(st){ st.textContent = 'To nie jest poprawny plik.'; } return; }
       api('/api/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pack: pack }) })
-        .then(function(r){ if(st){ st.textContent = (r && r.ok) ? 'Przywrocono. Odswiez strone (F5).' : ('Blad: ' + ((r && r.error) || 'nieznany')); } })
-        .catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+        .then(function(r){ if(st){ st.textContent = (r && r.ok) ? 'Przywrocono. Odswiez strone (F5).' : ('Błąd: ' + ((r && r.error) || 'nieznany')); } })
+        .catch(function(e){ if(st){ st.textContent = 'Błąd: ' + e.message; } });
     };
     rd.readAsText(f);
   };
@@ -1326,7 +1337,7 @@ function saveRules(){
   if(st){ st.textContent = 'Zapisuje...'; }
   return api('/api/memory/rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: r.value }) })
     .then(function(d){ if(st){ st.textContent = (d && d.ok) ? 'Zapisane - bot uzywa tego od razu.' : 'Nie udalo sie zapisac.'; } })
-    .catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+    .catch(function(e){ if(st){ st.textContent = 'Błąd: ' + e.message; } });
 }
 function delSkill(file){
   return api('/api/skills/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file: file }) }).then(loadMemory).catch(function(){});
@@ -1343,7 +1354,7 @@ function loadApiKeys(){
     for(var j=0;j<btns.length;j++){
       btns[j].addEventListener('click', function(ev){ akSave(ev.target.getAttribute('data-save')); });
     }
-  }).catch(function(e){ var b = document.getElementById('apikeysBox'); if(b){ b.textContent = 'Blad: ' + e.message; } });
+  }).catch(function(e){ var b = document.getElementById('apikeysBox'); if(b){ b.textContent = 'Błąd: ' + e.message; } });
 }
 function akSave(name){
   var inp = document.getElementById('akin_' + name);
@@ -1353,8 +1364,8 @@ function akSave(name){
   if(!val){ if(st){ st.textContent = 'Wpisz klucz.'; } return; }
   if(st){ st.textContent = 'Zapisuje...'; }
   return api('/api/secrets/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name, value: val }) })
-    .then(function(r){ if(st){ st.textContent = r && r.ok ? 'Zapisano. Klucz dziala od razu.' : ('Blad: ' + ((r && r.error) || 'nieznany')); } inp.value = ''; loadApiKeys(); })
-    .catch(function(e){ if(st){ st.textContent = 'Blad: ' + e.message; } });
+    .then(function(r){ if(st){ st.textContent = r && r.ok ? 'Zapisano. Klucz dziala od razu.' : ('Błąd: ' + ((r && r.error) || 'nieznany')); } inp.value = ''; loadApiKeys(); })
+    .catch(function(e){ if(st){ st.textContent = 'Błąd: ' + e.message; } });
 }
 function akVerify(){
   var b = document.getElementById('akVerifyBox');
@@ -1622,7 +1633,7 @@ function loadAutomations(){
     }
     el("autoList").innerHTML = html;
     bindAutoButtons();
-  }).catch(function(e){ el("autoList").innerHTML = "<div class=mut>Blad: " + esc(e.message) + "</div>"; });
+  }).catch(function(e){ el("autoList").innerHTML = "<div class=mut>Błąd: " + esc(e.message) + "</div>"; });
 }
 function bindAutoButtons(){
   var runs = el("autoList").querySelectorAll("[data-run]");
@@ -1670,14 +1681,14 @@ function loadSessions(){
     el("sessionsList").innerHTML = (d.sessions || []).length ? d.sessions.map(function(s){
       return "<div class=item><b>" + esc(s.id) + "</b><div class=mut>" + esc(s.status || "") + " &middot; " + esc(new Date(s.updatedAt || Date.now()).toLocaleString()) + "</div></div>";
     }).join("") : "<div class=mut>Brak sesji.</div>";
-  }).catch(function(e){ el("sessionsList").innerHTML = "<div class=mut>Blad: " + esc(e.message) + "</div>"; });
+  }).catch(function(e){ el("sessionsList").innerHTML = "<div class=mut>Błąd: " + esc(e.message) + "</div>"; });
 }
 function loadTasks(){
   api("/api/tasks").then(function(d){
     el("tasksList").innerHTML = (d.tasks || []).length ? d.tasks.map(function(t){
       return "<div class=item><b>" + esc(t.status) + "</b> <span class=mut>" + esc(new Date(t.createdAt || Date.now()).toLocaleString()) + "</span><div class=mut>" + esc((t.prompt || "").slice(0, 180)) + "</div>" + (t.engine ? "<div class=mut>silnik: " + esc(t.engine) + "</div>" : "") + "</div>";
     }).join("") : "<div class=mut>Brak zadan.</div>";
-  }).catch(function(e){ el("tasksList").innerHTML = "<div class=mut>Blad: " + esc(e.message) + "</div>"; });
+  }).catch(function(e){ el("tasksList").innerHTML = "<div class=mut>Błąd: " + esc(e.message) + "</div>"; });
 }
 function collect(){
   var r = document.querySelector("input[name=provider]:checked");
