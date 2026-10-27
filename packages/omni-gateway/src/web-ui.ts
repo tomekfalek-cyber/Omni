@@ -151,6 +151,7 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
       <button class="nav-item" data-page="sessions"><span class="ico">S</span>Sesje</button>
       <button class="nav-item" data-page="tasks"><span class="ico">Z</span>Zadania</button>
       <button class="nav-item" data-page="automations"><span class="ico">A</span>Automatyzacje</button>
+      <button class="nav-item" data-page="invest"><span class="ico">I</span>Inwestycje</button>
       <div class="nav-group">System</div>
       <button class="nav-item" data-page="status"><span class="ico">D</span>Status i diagnostyka</button>
     </nav>
@@ -437,6 +438,15 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
       <div class="card"><h2>Aktywność (ostatnie 7 dni)</h2><div id="statsChart"></div></div>
       <div class="row"><button class="btn" onclick="loadStats()">Odśwież</button></div>
     </section>
+    <section class="page hidden" id="page-invest">
+      <div class="card">
+        <h2>Aktualna analiza rynkowa</h2>
+        <div class="mut" id="investAsOf">Ladowanie...</div>
+        <div id="investBody" style="margin-top:12px"></div>
+      </div>
+      <div class="row"><button class="btn" onclick="loadInvest(true)">Odswiez dane</button></div>
+      <div class="mut" style="margin-top:10px">Dane moga byc opoznione. To analiza edukacyjna, nie personalna rekomendacja inwestycyjna.</div>
+    </section>
     <section class="page hidden" id="page-memory">
       <div class="card">
         <h2>Pamięć długoterminowa (zasady)</h2>
@@ -501,7 +511,7 @@ function api(path, opts){
   });
 }
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>]/g, function(c){ return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; }); }
-var TITLES = { chat:"Czat", keys:"Modele i klucze API", engines:"Silniki", voice:"Glos", integrations:"Integracje", costs:"Koszty", sessions:"Sesje", tasks:"Zadania", automations:"Automatyzacje", settings:"Ustawienia", status:"Status i diagnostyka" };
+var TITLES = { chat:"Czat", keys:"Modele i klucze API", engines:"Silniki", voice:"Glos", integrations:"Integracje", costs:"Koszty", sessions:"Sesje", tasks:"Zadania", automations:"Automatyzacje", invest:"Inwestycje", settings:"Ustawienia", status:"Status i diagnostyka" };
 function toggleNav(){
   var sb = document.getElementById('sidebar');
   if(!sb){ return; }
@@ -544,6 +554,38 @@ function toggleTheme(){
 (function(){
   try { var m = localStorage.getItem('omniTheme'); if(m){ setTheme(m); } } catch(e){}
 })();
+function pctf(x){ if(x===null||x===undefined) return "—"; var v=x*100; return (v>0?"+":"")+v.toFixed(1)+"%"; }
+function loadInvest(force){
+  var box = el("investBody"); if(!box){ return; }
+  var asof = el("investAsOf"); if(asof){ asof.textContent = "Pobieram swieze dane i licze analize... (10-30 s)"; }
+  box.innerHTML = '<div class="mut">Analizuje zloto, srebro, 5 kryptowalut i akcje...</div>';
+  var url = "/api/invest/overview" + (force ? "?refresh=1" : "");
+  api(url).then(function(d){
+    if(!d || d.ok === false){ box.innerHTML = '<div class="mut">Blad: ' + esc((d && d.error) || "brak danych") + '</div>'; return; }
+    if(asof){ asof.textContent = "Stan na " + d.asOf + " · zrodlo: Yahoo/Stooq (odswiezane co ~10 min)"; }
+    var rows = (d.rows || []).slice();
+    rows.sort(function(a,b){ if(a.score==null) return 1; if(b.score==null) return -1; return b.score - a.score; });
+    var h = '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+    h += '<tr style="text-align:left;color:#8aa0bb"><th>Instrument</th><th>Cena</th><th>1M</th><th>3M</th><th>12M</th><th>Zm.</th><th>Trend</th><th>Wynik</th></tr>';
+    for(var i=0;i<rows.length;i++){
+      var r = rows[i]; var top3 = (r.rank && r.rank <= 3);
+      h += '<tr' + (top3 ? ' style="background:#12301f"' : '') + '>';
+      h += '<td>' + esc(r.name) + (top3 ? ' <b>#' + r.rank + '</b>' : '') + '</td>';
+      h += '<td>' + (r.price==null ? '—' : r.price) + '</td>';
+      h += '<td>' + pctf(r.r1m) + '</td><td>' + pctf(r.r3m) + '</td><td>' + pctf(r.r12m) + '</td>';
+      h += '<td>' + (r.vol==null ? '—' : (r.vol*100).toFixed(1)+'%') + '</td>';
+      h += '<td>' + (r.trend === 'up' ? '↑' : (r.trend === 'down' ? '↓' : '—')) + '</td>';
+      h += '<td>' + (r.score==null ? '—' : r.score) + '</td></tr>';
+      if(r.note){ h += '<tr><td colspan="8" class="mut" style="font-size:11px;padding:0 0 6px">' + esc(r.note) + '</td></tr>'; }
+    }
+    h += '</table>';
+    var top = (d.top || []).map(function(id){ for(var j=0;j<rows.length;j++){ if(rows[j].id===id){ return rows[j].name; } } return id; });
+    if(top.length){ h += '<div style="margin-top:12px"><b>Najlepsze wedlug modelu:</b> ' + esc(top.join(' · ')) + '</div>'; }
+    if((d.notes||[]).length){ h += '<ul style="margin:10px 0 0 16px;color:#8aa0bb;font-size:12px">'; for(var n=0;n<d.notes.length;n++){ h += '<li>' + esc(d.notes[n]) + '</li>'; } h += '</ul>'; }
+    h += '<div style="margin-top:12px;color:#f0b35b;font-size:12px">' + esc(d.disclaimer || '') + '</div>';
+    box.innerHTML = h;
+  }).catch(function(e){ box.innerHTML = '<div class="mut">Blad polaczenia: ' + esc(String(e && e.message || e)) + '</div>'; });
+}
 function show(page){
   var pages = document.querySelectorAll(".page");
   for(var i=0;i<pages.length;i++){ pages[i].className = "page hidden"; }
@@ -554,6 +596,7 @@ function show(page){
   el("pageTitle").textContent = TITLES[page] || page;
   if(page === "engines"){ renderEngines(); }
   if(page === "automations"){ loadAutomations(); }
+  if(page === "invest"){ loadInvest(true); }
   if(page === "integrations"){ loadIntegrations(); }
   if(page === "costs"){ loadCosts(); }
 

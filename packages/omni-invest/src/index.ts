@@ -10,6 +10,7 @@ export * from './universe.js';
 export * from './service.js';
 export * from './omni-tools.js';
 export * from './monthly.js';
+export * from './overview.js';
 export * from './providers/yahoo.js';
 export * from './providers/stooq.js';
 export * from './providers/fmp.js';

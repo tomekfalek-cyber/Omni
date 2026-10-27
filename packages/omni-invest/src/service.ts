@@ -32,6 +32,7 @@ export interface InvestServiceOptions {
   price?: PriceProvider;
   fundamentals?: FundamentalsProvider | null;
   store?: SnapshotStore;
+  cacheTtlHours?: number;
 }
 
 export class InvestService {
@@ -39,7 +40,7 @@ export class InvestService {
   public fundamentals: FundamentalsProvider | null;
   public store: SnapshotStore;
   constructor(opts: InvestServiceOptions = {}) {
-    this.price = opts.price || new CachedPriceProvider(new FallbackPriceProvider([new YahooPriceProvider(), new StooqPriceProvider()]));
+    this.price = opts.price || new CachedPriceProvider(new FallbackPriceProvider([new YahooPriceProvider(), new StooqPriceProvider()]), undefined, opts.cacheTtlHours ?? 20);
     // FMP domyslnie: bez klucza zwraca null (strategie fundamentalne same sie wylacza), z kluczem - dziala.
     this.fundamentals = opts.fundamentals === undefined ? new FmpFundamentalsProvider() : opts.fundamentals;
     this.store = opts.store || new SnapshotStore();

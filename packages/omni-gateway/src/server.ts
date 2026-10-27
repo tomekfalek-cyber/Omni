@@ -638,6 +638,19 @@ export class OmniGateway {
       } catch (e) { }
       res.json({ entries: lines.reverse() });
     });
+    // Zakladka 'Inwestycje': zawsze swieze dane + analiza (cache 10 min).
+    this.app.get('/api/invest/overview', async (req, res) => {
+      try {
+        const force = String((req.query && (req.query as any).refresh) || '') === '1';
+        const mod = await import('omni-invest/service.js');
+        const ov = await import('omni-invest/overview.js');
+        const svc = new mod.InvestService({ cacheTtlHours: force ? 0.01 : 0.17 });
+        const data = await ov.runOverview(svc);
+        res.json({ ok: true, ...data });
+      } catch (e: any) {
+        res.status(500).json({ ok: false, error: String(e && e.message || e) });
+      }
+    });
     this.app.get('/api/threads', (_req, res) => {
       const home = process.env.HOME || '/home/openclaw';
       const map: any = {};
