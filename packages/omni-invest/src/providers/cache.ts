@@ -23,7 +23,11 @@ export class CachedPriceProvider implements PriceProvider {
     const f = this.fileFor(ticker);
     try {
       const j: any = JSON.parse(fs.readFileSync(f, 'utf8'));
-      if (j && j.at && (Date.now() - j.at) < this.ttlMs && Array.isArray(j.bars) && j.bars.length) {
+      // NAPRAWA: jesli cache nie pokrywa ZADANEGO zakresu (np. prosza o 5 lat, a jest 400 dni) - pobierz ponownie.
+      const cached: Bar[] = (j && Array.isArray(j.bars)) ? j.bars : [];
+      const coversFrom = cached.length > 0 && cached[0].date <= from;
+      const coversTo = cached.length > 0 && cached[cached.length - 1].date >= daysAgo(7);
+      if (j && j.at && (Date.now() - j.at) < this.ttlMs && cached.length && coversFrom && coversTo) {
         return (j.bars as Bar[]).filter((b) => b.date >= from && b.date <= to);
       }
     } catch (e) { }

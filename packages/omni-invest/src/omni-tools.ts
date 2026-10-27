@@ -41,6 +41,20 @@ export function buildInvestTools(service: InvestService): OmniTool[] {
       },
     },
     {
+      definition: { name: 'invest_rebalance', description: 'Liczy rebalans portfela: co dokupic i co sprzedac, by wrocic do wag docelowych. Parametry: holdings (np. "CSPX.L=6000,NVDA=4000"), targets (np. "CSPX.L=0.8,NVDA=0.2").', parameters: { holdings: 'string', targets: 'string' }, requiresApproval: false, timeoutMs: 10000, maxOutputBytes: 3000 },
+      execute: async (args: any) => {
+        const { runRebalance } = await import('./rebalance.js');
+        const parse = (s: string) => { const o: Record<string, number> = {}; for (const part of String(s || '').split(',')) { const [k, v] = part.split('='); if (k && v) { o[k.trim()] = Number(v); } } return o; };
+        const r = runRebalance(parse(args && args.holdings), parse(args && args.targets));
+        const nl = String.fromCharCode(10);
+        const out = ['REBALANS (portfel ' + r.total + '):'];
+        for (const x of r.rows) { out.push('- ' + x.ticker + ': obecnie ' + (x.currentWeight * 100).toFixed(1) + '% -> cel ' + (x.targetWeight * 100).toFixed(1) + '% | ' + x.action + ' ' + Math.abs(x.amount).toFixed(2)); }
+        for (const n of r.notes) { out.push('UWAGA: ' + n); }
+        out.push(''); out.push(r.disclaimer);
+        return out.join(nl);
+      },
+    },
+    {
       definition: { name: 'invest_compare', description: 'Porownuje 2-8 instrumentow na tym samym okresie: zwrot, zmiennosc, max obsuniecie, Sharpe, beta i korelacja do S&P 500. Parametry: tickers (np. "NVDA,^NDX,GLD"), days (domyslnie 400).', parameters: { tickers: 'string', days: 'number' }, requiresApproval: false, timeoutMs: 120000, maxOutputBytes: 4000 },
       execute: async (args: any) => {
         const { runCompare } = await import('./compare.js');
