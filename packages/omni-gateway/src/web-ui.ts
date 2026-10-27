@@ -152,6 +152,7 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
       <button class="nav-item" data-page="tasks"><span class="ico">Z</span>Zadania</button>
       <button class="nav-item" data-page="automations"><span class="ico">A</span>Automatyzacje</button>
       <button class="nav-item" data-page="invest"><span class="ico">I</span>Inwestycje</button>
+      <button class="nav-item" data-page="portfolio"><span class="ico">P</span>Mój portfel</button>
       <div class="nav-group">System</div>
       <button class="nav-item" data-page="status"><span class="ico">D</span>Status i diagnostyka</button>
     </nav>
@@ -445,7 +446,7 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
         <div id="investBody" style="margin-top:12px"></div>
       </div>
       <div class="row"><button class="btn" onclick="loadInvest(true)">Odśwież dane</button></div>
-      <div class="card" style="margin-top:14px">
+      <div class="card" id="pfCard" style="margin-top:14px">
         <h2>Mój portfel (analiza bez modelu)</h2>
         <div class="mut">Wpisz instrumenty w formacie Nazwa=wartość, oddzielone średnikiem.</div>
         <textarea id="pfHoldings" rows="3" style="width:100%;margin-top:8px;background:#0d1520;color:#cfe0f5;border:1px solid #24334a;border-radius:8px;padding:8px;font-size:12.5px">S&P 500=4917.37; MSCI World=3643.34; NASDAQ 100=1400.90; Złoto=1672.43; BTC=943.80; SOL=752.69; obligacje=2496.02</textarea>
@@ -453,6 +454,7 @@ body.light .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
           <span class="mut">Wpłata miesięczna:</span>
           <input id="pfMonthly" type="number" value="600" style="width:110px;background:#0d1520;color:#cfe0f5;border:1px solid #24334a;border-radius:8px;padding:6px" />
           <button class="btn" onclick="loadPortfolio()">Przeanalizuj portfel</button>
+          <button class="btn" onclick="savePortfolio()">Zapisz portfel</button>
         </div>
         <div id="pfBody" style="margin-top:12px"></div>
       </div>
@@ -534,7 +536,7 @@ function api(path, opts){
   });
 }
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>]/g, function(c){ return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; }); }
-var TITLES = { chat:"Czat", keys:"Modele i klucze API", engines:"Silniki", voice:"Glos", integrations:"Integracje", costs:"Koszty", sessions:"Sesje", tasks:"Zadania", automations:"Automatyzacje", invest:"Inwestycje", settings:"Ustawienia", status:"Status i diagnostyka" };
+var TITLES = { chat:"Czat", keys:"Modele i klucze API", engines:"Silniki", voice:"Glos", integrations:"Integracje", costs:"Koszty", sessions:"Sesje", tasks:"Zadania", automations:"Automatyzacje", invest:"Inwestycje", portfolio:"Mój portfel", settings:"Ustawienia", status:"Status i diagnostyka" };
 function toggleNav(){
   var sb = document.getElementById('sidebar');
   if(!sb){ return; }
@@ -608,6 +610,17 @@ function loadInvest(force){
     h += '<div style="margin-top:12px;color:#f0b35b;font-size:12px">' + esc(d.disclaimer || '') + '</div>';
     box.innerHTML = h;
   }).catch(function(e){ box.innerHTML = '<div class="mut">Błąd połączenia: ' + esc(String(e && e.message || e)) + '</div>'; });
+}
+function loadSavedPortfolio(){
+  api('/api/invest/portfolio/saved').then(function(d){
+    if(d && d.saved && d.saved.holdings){ var h=el('pfHoldings'); if(h){ h.value=d.saved.holdings; } var m=el('pfMonthly'); if(m && d.saved.monthly){ m.value=d.saved.monthly; } }
+  }).catch(function(){});
+}
+function savePortfolio(){
+  var h=el('pfHoldings'), m=el('pfMonthly');
+  api('/api/invest/portfolio/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ holdings: h?h.value:'', monthly: m?Number(m.value)||0:0 }) })
+    .then(function(d){ toast(d && d.ok ? 'Portfel zapisany' : 'Nie udalo sie zapisac', d && d.ok ? 'ok' : 'err'); })
+    .catch(function(){ toast('Blad zapisu', 'err'); });
 }
 function loadPortfolio(){
   var box = el('pfBody'); if(!box){ return; }
@@ -738,6 +751,16 @@ function show(page){
   if(page === "engines"){ renderEngines(); }
   if(page === "automations"){ loadAutomations(); }
   if(page === "invest"){ loadInvest(true); loadEtfs(); loadDeep(); }
+  if(page === "portfolio"){
+    var inv = el("page-invest"); if(inv){ inv.className = "page"; }
+    el("pageTitle").textContent = TITLES["portfolio"] || "Mój portfel";
+    var items2 = document.querySelectorAll(".nav-item");
+    for(var q=0;q<items2.length;q++){ items2[q].className = "nav-item" + (items2[q].getAttribute("data-page") === "portfolio" ? " active" : ""); }
+    loadSavedPortfolio();
+    var card = el("pfCard"); if(card){ card.scrollIntoView({ behavior: "smooth", block: "start" }); }
+    if(location.hash !== "#portfolio"){ location.hash = "portfolio"; }
+    return;
+  }
   if(page === "integrations"){ loadIntegrations(); }
   if(page === "costs"){ loadCosts(); }
 

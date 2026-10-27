@@ -638,6 +638,23 @@ export class OmniGateway {
       } catch (e) { }
       res.json({ entries: lines.reverse() });
     });
+    // Zapis portfela (holdings + miesieczna wplata).
+    this.app.post('/api/invest/portfolio/save', async (req, res) => {
+      try {
+        const body: any = req.body || {};
+        const dir = path.join(os.homedir(), '.omni', 'invest');
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'portfolio.json'), JSON.stringify({ holdings: String(body.holdings || ''), monthly: Number(body.monthly) || 0, updatedAt: new Date().toISOString() }, null, 2), 'utf8');
+        res.json({ ok: true });
+      } catch (e: any) { res.status(500).json({ ok: false, error: String(e && e.message || e) }); }
+    });
+    this.app.get('/api/invest/portfolio/saved', (_req, res) => {
+      try {
+        const f = path.join(os.homedir(), '.omni', 'invest', 'portfolio.json');
+        if (!fs.existsSync(f)) { return res.json({ ok: true, saved: null }); }
+        return res.json({ ok: true, saved: JSON.parse(fs.readFileSync(f, 'utf8')) });
+      } catch (e: any) { return res.json({ ok: false, error: String(e && e.message || e) }); }
+    });
     // Moj portfel - deterministyczna analiza (bez modelu).
     this.app.post('/api/invest/portfolio', async (req, res) => {
       try {
