@@ -1,6 +1,7 @@
 import { InvestService } from './service.js';
 import { STRATEGIES } from './strategies.js';
 import { UNIVERSES } from './universe.js';
+import { runMonthly } from './monthly.js';
 
 export interface OmniToolDefinition {
   name: string;
@@ -41,6 +42,10 @@ export function buildInvestTools(service: InvestService): OmniTool[] {
     {
       definition: { name: 'invest_quote', description: 'Notowanie (ostatnie zamkniecie) dla tickera, np. AAPL lub PKN.WA.', parameters: { ticker: 'string' }, requiresApproval: false, timeoutMs: 30000, maxOutputBytes: 1000 },
       execute: async (args: any) => service.quote(String(args && args.ticker || '')),
+    },
+    {
+      definition: { name: 'invest_monthly_run', description: 'Miesieczny przeglad: uruchamia plan (domyslnie core@mwig40 + momentum@sp500), zapisuje migawki i raport do ~/.omni/invest/reports.', parameters: {}, requiresApproval: false, timeoutMs: 900000, maxOutputBytes: 9000 },
+      execute: async () => runMonthly(service),
     },
     {
       definition: { name: 'invest_last_snapshot', description: 'Ostatnia zapisana migawka screeningu (kto byl w portfelu).', parameters: {}, requiresApproval: false, timeoutMs: 5000, maxOutputBytes: 2000 },

@@ -1,6 +1,8 @@
 import { FundamentalsProvider, PriceProvider, Quote } from './types.js';
 import { YahooPriceProvider } from './providers/yahoo.js';
 import { StooqPriceProvider } from './providers/stooq.js';
+import { CachedPriceProvider } from './providers/cache.js';
+import { FmpFundamentalsProvider } from './providers/fmp.js';
 import { runScreen } from './screener.js';
 import { runBacktest } from './backtest.js';
 import { getStrategy } from './strategies.js';
@@ -37,8 +39,9 @@ export class InvestService {
   public fundamentals: FundamentalsProvider | null;
   public store: SnapshotStore;
   constructor(opts: InvestServiceOptions = {}) {
-    this.price = opts.price || new FallbackPriceProvider([new YahooPriceProvider(), new StooqPriceProvider()]);
-    this.fundamentals = opts.fundamentals ?? null;
+    this.price = opts.price || new CachedPriceProvider(new FallbackPriceProvider([new YahooPriceProvider(), new StooqPriceProvider()]));
+    // FMP domyslnie: bez klucza zwraca null (strategie fundamentalne same sie wylacza), z kluczem - dziala.
+    this.fundamentals = opts.fundamentals === undefined ? new FmpFundamentalsProvider() : opts.fundamentals;
     this.store = opts.store || new SnapshotStore();
   }
 

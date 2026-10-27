@@ -8,6 +8,7 @@ export interface Automation {
   kind: string;
   minutes: number;
   time: string;
+  day?: number;
   enabled: boolean;
   createdAt: number;
   lastRunAt: number;
@@ -55,6 +56,20 @@ export class AutomationScheduler {
     if (job.kind === 'interval') {
       const ms = Math.max(1, Number(job.minutes) || 60) * 60000;
       return from + ms;
+    }
+    // NAPRAWA (2026-10-27): obsluga 'monthly' - raz w miesiacu, w dniu job.day (1-28).
+    if (job.kind === 'monthly') {
+      const mp = String(job.time || '09:00').split(':');
+      const mh = Math.max(0, Math.min(23, Number(mp[0]) || 9));
+      const mmn = Math.max(0, Math.min(59, Number(mp[1]) || 0));
+      const day = Math.max(1, Math.min(28, Number(job.day) || 1));
+      const d = new Date(from);
+      d.setDate(1);
+      d.setHours(mh, mmn, 0, 0);
+      d.setDate(day);
+      let ts = d.getTime();
+      if (ts <= from) { const nx = new Date(d); nx.setMonth(nx.getMonth() + 1, 1); nx.setDate(day); ts = nx.getTime(); }
+      return ts;
     }
     const parts = String(job.time || '09:00').split(':');
     const hh = Math.max(0, Math.min(23, Number(parts[0]) || 9));
